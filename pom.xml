@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <artifactId>data-engine-service</artifactId>
+        <groupId>com.twilio.raas</groupId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>data-engine-sql</artifactId>
+    <name>SQL parsing, optimization and execution</name>
+    <version>1.0.0-SNAPSHOT</version>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>twilio.nexus</id>
+            <url>http://nexus.corp.twilio.com/content/groups/public</url>
+            <releases>
+            </releases>
+            <snapshots>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+
+    <dependencies>
+	<dependency>
+            <artifactId>freemarker</artifactId>
+            <groupId>org.freemarker</groupId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.kudu</groupId>
+            <artifactId>kudu-client</artifactId>
+        </dependency>
+	<!-- it is unclear to me how drill includes calcite version 1.17.0-drill-r2 -->
+	<dependency>
+	    <groupId>org.apache.calcite</groupId>
+	    <artifactId>calcite-core</artifactId>
+	</dependency>
+
+	<dependency>
+            <groupId>org.jctools</groupId>
+            <artifactId>jctools-core</artifactId>
+        </dependency>
+	<dependency>
+	    <groupId>io.dropwizard.metrics</groupId>
+	    <artifactId>metrics-core</artifactId>
+	</dependency>
+
+        <!-- Testing dependencies -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.kudu</groupId>
+            <artifactId>kudu-test-utils</artifactId>
+            <version>${kudu-client-version}</version>
+            <scope>test</scope>
+        </dependency>
+
+	<dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+	<dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+	</dependency>
+    </dependencies>
+</project>
