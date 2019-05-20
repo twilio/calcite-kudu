@@ -212,10 +212,10 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         final Queue<Object[]> rowResults;
 
         if (numScanners == 1) {
-            rowResults = new SpscChunkedArrayQueue<Object[]>(500);
+            rowResults = new SpscChunkedArrayQueue<Object[]>(3000);
         }
         else {
-            rowResults = new MpscChunkedArrayQueue<Object[]>(500);
+            rowResults = new MpscChunkedArrayQueue<Object[]>(3000);
         }
         final Enumerable<Object[]> enumeration = new CalciteKuduEnumerable(rowResults,
                                                                            numScanners,
