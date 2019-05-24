@@ -25,7 +25,7 @@ import com.codahale.metrics.MetricRegistry;
 public final class JDBCQueryRunner implements AutoCloseable {
     public static String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s'}}]};caseSensitive=false";
     private static int POOL_COUNTER = 0;
-  
+
     private HikariDataSource dbPool;
     private ExecutorService threadPool;
     private String jdbcUrl;
@@ -76,13 +76,13 @@ public final class JDBCQueryRunner implements AutoCloseable {
     }
 
     /**
-     * Executes the SQL string against the database in a Thread. Returns a 
+     * Executes the SQL string against the database in a Thread. Returns a
      * future that will be complete with either a list of T or with an exception
      *
      * @param <T>                   A user supplied type that a {@link ResultSet} will be transformed into
      * @param sql                   Raw sql to execute against dataset
      * @param resultSetTransformer  function to transform a {@link ResultSet} into a T
-     * 
+     *
      * @return Future that will contain a {@link List} of T
      */
     public <T> CompletionStage<List<T>> executeSql(final String sql, final Function<ResultSet, T> resultSetTransformer) {
@@ -97,7 +97,7 @@ public final class JDBCQueryRunner implements AutoCloseable {
                     }
                     pendingResult.complete(allRows);
                 }
-                catch (Exception failure) {
+                catch (Exception | Error failure) {
                     pendingResult.completeExceptionally(failure);
                 }
             });
