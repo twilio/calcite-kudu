@@ -10,10 +10,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Queue;
 import org.apache.calcite.linq4j.Enumerator;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Calcite implementation layer that represents a result set of a scan.
  */
 public final class CalciteKuduEnumerable extends DefaultEnumerable<Object[]> {
+    private static final Logger logger = LoggerFactory.getLogger(CalciteKuduEnumerable.class);
+
     private int totalMoves = 0;
     private Object[] next = null;
     private AtomicInteger finishedScans;
@@ -61,6 +66,7 @@ public final class CalciteKuduEnumerable extends DefaultEnumerable<Object[]> {
                 } while (next == null && finishedScans.get() < numScanners);
 
                 if (next == null) {
+                    logger.info("No more results in queue, exiting");
                     return false;
                 }
 
@@ -69,6 +75,7 @@ public final class CalciteKuduEnumerable extends DefaultEnumerable<Object[]> {
                     // Over the limit signal to the scanners
                     // to shut themselves down.
                     if (totalMoves >= limit) {
+                        logger.info("Informing Scanners to stop after next scan");
                         shouldStop.set(true);
                     }
                 }
@@ -91,7 +98,7 @@ public final class CalciteKuduEnumerable extends DefaultEnumerable<Object[]> {
             }
         };
     }
-  
+
     @Override
     public Iterator<Object[]> iterator() {
         final Enumerator<Object[]> resultsEnumerator = enumerator();

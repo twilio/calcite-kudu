@@ -46,10 +46,7 @@ import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.schema.impl.AbstractTableQueryable;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.jctools.queues.BaseMpscLinkedArrayQueue;
 import java.util.Queue;
-import org.jctools.queues.SpscChunkedArrayQueue;
-import org.jctools.queues.MpscChunkedArrayQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.nio.ByteBuffer;
@@ -79,10 +76,10 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         this.client = client;
     }
 
-    /** 
+    /**
      * Builds a mapping from Kudu Schema into relational schema names
      */
-    @Override  
+    @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
         final RelDataTypeFactory.Builder builder = new RelDataTypeFactory.Builder(typeFactory);
         final Schema kuduSchema = this.openedTable.getSchema();
@@ -156,10 +153,10 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      * Run the query against the kudu table {@link openedTable}. {@link KuduPredicate} are the
      * filters to apply to the query, {@link kuduFields} are the columns to return in the
      * response and finally {@link limit} is used to limit the results that come back.
-     * 
-     * @param predicates    each member in the first list represents a single scan. 
+     *
+     * @param predicates    each member in the first list represents a single scan.
      * @param columnIndices the fields ordinals to select out of Kudu
-     * @param limit         process the results until limit is reached. If less then 0, 
+     * @param limit         process the results until limit is reached. If less then 0,
      *                       no limit is enforced
      *
      * @return Enumeration on the objects, Fields conform to {@link CalciteKuduTable#getRowType}.
@@ -169,12 +166,12 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         // by the Enumerable.enumerator() that this method returns.
         // Set when the enumerator is told to close().
         final AtomicBoolean scansShouldStop = new AtomicBoolean(false);
-    
+
         // This  builds a List AsyncKuduScanners.
         // Each member of this list represents an OR query and can be
-        // executed in parallel. 
+        // executed in parallel.
         // @TODO: Evaluate using token api to further break down an
-        // AsyncKududScanner into indiviual tokens for more 
+        // AsyncKududScanner into indiviual tokens for more
         // parallelization.
         List<AsyncKuduScanner> scanners = predicates
             .stream()
@@ -200,7 +197,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
             }
             scanners = Collections.singletonList(allBuilder.build());
         }
-    
+
         // Shared integers between the scanners and the consumer of the rowResults
         // queue. The consumer of the rowResults will attempt to poll from
         // rowResults, and if the poll returns null -- indicating no items
@@ -209,14 +206,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         // rows have been completed.
         final int numScanners = scanners.size();
         final AtomicInteger finishedScans = new AtomicInteger(0);
-        final Queue<Object[]> rowResults;
-
-        if (numScanners == 1) {
-            rowResults = new SpscChunkedArrayQueue<Object[]>(3000);
-        }
-        else {
-            rowResults = new MpscChunkedArrayQueue<Object[]>(3000);
-        }
+        final Queue<Object[]> rowResults = new LinkedBlockingQueue<Object[]>(3000);
         final Enumerable<Object[]> enumeration = new CalciteKuduEnumerable(rowResults,
                                                                            numScanners,
                                                                            limit,
@@ -232,7 +222,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                 while (nextBatch != null && nextBatch.hasNext()) {
                                     final RowResult row = nextBatch.next();
                                     final Object[] rawRow = new Object[row.getColumnProjection().getColumns().size()];
-		  
+
                                     int columnIndex = 0;
                                     for (ColumnSchema columnType: row.getColumnProjection().getColumns()) {
                                         if (row.isNull(columnIndex)) {
@@ -282,10 +272,6 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                         }
                                         columnIndex++;
                                     }
-                                    // @TODO: there is a relaxOffer api for these queues that 
-                                    // could be faster. It is hard to figure what the interface to
-                                    // use. MessagePassingQueue<E> is the interface that defines
-                                    // relaxedOffer.
                                     if (rowResults.offer(rawRow) == false) {
                                         // failed to add to the results queue, time to stop doing work.
                                         logger.error("failed to insert a new row into pending results. Triggering early exit");
@@ -294,7 +280,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                     }
                                 }
                             }
-                            catch (Exception failure) {
+                            catch (Exception | Error failure) {
                                 // Something failed, like row.getDecimal() or something of that nature.
                                 // this means we have to abort this scan.
                                 logger.error("Failed to parse out row. Setting early exit", failure);
