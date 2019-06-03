@@ -19,7 +19,6 @@ import org.apache.calcite.rel.RelNode;
 import java.util.concurrent.CountDownLatch;
 import org.apache.kudu.client.RowResultIterator;
 import org.apache.kudu.client.RowResult;
-import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.calcite.linq4j.AbstractEnumerable2;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,9 +46,12 @@ import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.schema.impl.AbstractTableQueryable;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Queue;
+import org.jctools.queues.SpscChunkedArrayQueue;
+import org.jctools.queues.MpscChunkedArrayQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.nio.ByteBuffer;
+import java.util.Optional;
 
 /**
  * A {@code CalciteKuduTable} is responsible for returning rows of Objects back.
@@ -61,6 +63,8 @@ import java.nio.ByteBuffer;
 public final class CalciteKuduTable extends AbstractQueryableTable
     implements TranslatableTable {
     private static final Logger logger = LoggerFactory.getLogger(CalciteKuduTable.class);
+    private static final CalciteScannerMessage<Object[]> CLOSE_MESSAGE = CalciteScannerMessage.<Object[]>createEndMessage();
+
 
     private final KuduTable openedTable;
     private final AsyncKuduClient client;
@@ -200,18 +204,22 @@ public final class CalciteKuduTable extends AbstractQueryableTable
 
         // Shared integers between the scanners and the consumer of the rowResults
         // queue. The consumer of the rowResults will attempt to poll from
-        // rowResults, and if the poll returns null -- indicating no items
-        // in the queue, the consumer will check to see if numScanners == finishedScans
-        // if it does, this indicates all the scans are complete and all
-        // rows have been completed.
+        // rowResults, and process different message types.
         final int numScanners = scanners.size();
-        final AtomicInteger finishedScans = new AtomicInteger(0);
-        final Queue<Object[]> rowResults = new LinkedBlockingQueue<Object[]>(3000);
-        final Enumerable<Object[]> enumeration = new CalciteKuduEnumerable(rowResults,
-                                                                           numScanners,
-                                                                           limit,
-                                                                           finishedScans,
-                                                                           scansShouldStop);
+
+        final Queue<CalciteScannerMessage<Object[]>> rowResults;
+        if (numScanners == 1) {
+            rowResults = new SpscChunkedArrayQueue<CalciteScannerMessage<Object[]>>(3000);
+        }
+        else {
+            rowResults = new MpscChunkedArrayQueue<CalciteScannerMessage<Object[]>>(3000);
+        }
+
+        final Enumerable<Object[]> enumeration = new CalciteKuduEnumerable(
+            rowResults,
+            numScanners,
+            limit,
+            scansShouldStop);
         for (AsyncKuduScanner scanner: scanners) {
             scanner.nextRows()
                 .addBothDeferring(new Callback<Deferred<Void>, RowResultIterator>() {
@@ -272,10 +280,15 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                         }
                                         columnIndex++;
                                     }
-                                    if (rowResults.offer(rawRow) == false) {
+                                    final CalciteScannerMessage<Object[]> wrappedRow = new CalciteScannerMessage<>(
+                                        rawRow);
+                                    if (rowResults.offer(wrappedRow) == false) {
                                         // failed to add to the results queue, time to stop doing work.
                                         logger.error("failed to insert a new row into pending results. Triggering early exit");
                                         earlyExit = true;
+                                        final boolean failedMessage = rowResults.offer(
+                                            new CalciteScannerMessage<Object[]>(
+                                                new RuntimeException("Queue was full, could not insert row")));
                                         break;
                                     }
                                 }
@@ -285,14 +298,22 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                 // this means we have to abort this scan.
                                 logger.error("Failed to parse out row. Setting early exit", failure);
                                 earlyExit = true;
+                                final boolean failedMessage = rowResults.offer(
+                                    new CalciteScannerMessage<Object[]>(
+                                        new RuntimeException("Failed to parse results.", failure)));
                             }
 
                             // If the scanner can continue and we are not stopping
                             if (scanner.hasMoreRows() && !earlyExit && !scansShouldStop.get()) {
                                 return scanner.nextRows().addCallbackDeferring(this);
                             }
+
                             // Else -> scanner has completed, notify the consumer of rowResults
-                            finishedScans.getAndIncrement();
+                            final boolean closeResult = rowResults.offer(
+                                CLOSE_MESSAGE);
+                            if (!closeResult) {
+                                logger.error("Failed to put close result message into row results queue");
+                            }
                             scanner.close();
                             return null;
                         }
