@@ -23,7 +23,7 @@ import com.codahale.metrics.MetricRegistry;
  * issue sql queries over those connections.
  */
 public final class JDBCQueryRunner implements AutoCloseable {
-    public static String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s'}}]};caseSensitive=false";
+    public static String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s'}}]};caseSensitive=false;timeZone=UTC";
     private static int POOL_COUNTER = 0;
 
     private HikariDataSource dbPool;
