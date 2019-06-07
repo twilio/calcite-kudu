@@ -46,8 +46,8 @@ import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.schema.impl.AbstractTableQueryable;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Queue;
-import org.jctools.queues.SpscChunkedArrayQueue;
-import org.jctools.queues.MpscChunkedArrayQueue;
+import org.jctools.queues.SpscUnboundedArrayQueue;
+import org.jctools.queues.MpscUnboundedArrayQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.nio.ByteBuffer;
@@ -208,11 +208,21 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         final int numScanners = scanners.size();
 
         final Queue<CalciteScannerMessage<Object[]>> rowResults;
+        // Using Unbounded Queues here which is not awesome.
+        // Attempted to come up with a few ways in which the producer could
+        // block when the queue was full didn't really like anything I had
+        // written. The point of using these queues is to avoid blocking
+        // all together. Further, because the Queue is used as the message
+        // passing for producer errors, it seemed like we needed another signal
+        // to send to the Enumerable. When this gets a refactor for the Default
+        // Sort order, lets address the "unbounded-ness" of this and add a
+        // failure signal to the consumer so it doesn't rely on a single Message
+        // Passing Channel.
         if (numScanners == 1) {
-            rowResults = new SpscChunkedArrayQueue<CalciteScannerMessage<Object[]>>(3000);
+            rowResults = new SpscUnboundedArrayQueue<CalciteScannerMessage<Object[]>>(3000);
         }
         else {
-            rowResults = new MpscChunkedArrayQueue<CalciteScannerMessage<Object[]>>(3000);
+            rowResults = new MpscUnboundedArrayQueue<CalciteScannerMessage<Object[]>>(3000);
         }
 
         final Enumerable<Object[]> enumeration = new CalciteKuduEnumerable(
