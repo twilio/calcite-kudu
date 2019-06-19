@@ -13,6 +13,11 @@ import java.util.Objects;
  *
  * When an ERROR message is received, the producer needs to produce a CLOSE
  * message just after. ERROR message is not terminal, only CLOSE is terminal
+ *
+ * We use this in a Queue as the only synchronization and shared state between a
+ * {@link ScannerCallback} and {@link CalciteKuduEnumerable}. A Queue with
+ * heterogeneous messages is the only solution we were able to make work. Using
+ * a queue and another synchronization object did not work.
  */
 public final class CalciteScannerMessage<T> {
     public enum MessageType {
