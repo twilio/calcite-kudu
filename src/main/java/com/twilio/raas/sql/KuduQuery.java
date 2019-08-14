@@ -16,15 +16,15 @@ import java.util.List;
  * Relational expression representing a scan of a KuduTable
  */
 public final class KuduQuery extends TableScan implements KuduRel {
-    final KuduTable openedTable;
-    final RelDataType projectRowType;
+    final public KuduTable openedTable;
+    final public RelDataType projectRowType;
 
     /**
-     * 
+     *
      * @param cluster        Cluster
      * @param traitSet       Traits
      * @param table          Table
-     * @param openedTable Cassandra table
+     * @param openedTable    Kudu table
      * @param projectRowType Fields and types to project; null to project raw row
      */
     public KuduQuery(RelOptCluster cluster, RelTraitSet traitSet,

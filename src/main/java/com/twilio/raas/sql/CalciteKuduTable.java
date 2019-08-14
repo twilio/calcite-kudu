@@ -52,6 +52,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.nio.ByteBuffer;
 import java.util.Optional;
+import java.util.Arrays;
+import java.util.stream.IntStream;
+import org.apache.calcite.rel.RelCollations;
+import org.apache.calcite.rel.RelFieldCollation;
+import org.apache.calcite.schema.Statistic;
+import org.apache.calcite.schema.Statistics;
+
+// This class resides in this project under the org.apache namespace
+import org.apache.kudu.client.KuduScannerUtil;
 
 /**
  * A {@code CalciteKuduTable} is responsible for returning rows of Objects back.
@@ -63,8 +72,6 @@ import java.util.Optional;
 public final class CalciteKuduTable extends AbstractQueryableTable
     implements TranslatableTable {
     private static final Logger logger = LoggerFactory.getLogger(CalciteKuduTable.class);
-    private static final CalciteScannerMessage<Object[]> CLOSE_MESSAGE = CalciteScannerMessage.<Object[]>createEndMessage();
-
 
     private final KuduTable openedTable;
     private final AsyncKuduClient client;
@@ -162,34 +169,45 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      * @param columnIndices the fields ordinals to select out of Kudu
      * @param limit         process the results until limit is reached. If less then 0,
      *                       no limit is enforced
+     * @param sort          Whether or not to sort the results by primary key.
      *
      * @return Enumeration on the objects, Fields conform to {@link CalciteKuduTable#getRowType}.
      */
-    public Enumerable<Object[]> executeQuery(final List<List<KuduPredicate>> predicates, List<Integer> columnIndices, final int limit) {
+    public Enumerable<Object[]> executeQuery(final List<List<KuduPredicate>> predicates, List<Integer> columnIndices, final int limit, final boolean sort) {
         // Here all the results from all the scans are collected. This is consumed
         // by the Enumerable.enumerator() that this method returns.
         // Set when the enumerator is told to close().
         final AtomicBoolean scansShouldStop = new AtomicBoolean(false);
 
         // This  builds a List AsyncKuduScanners.
-        // Each member of this list represents an OR query and can be
-        // executed in parallel.
-        // @TODO: Evaluate using token api to further break down an
-        // AsyncKududScanner into indiviual tokens for more
-        // parallelization.
+        // Each member of this list represents an OR query on a given partition
+        // in Kudu Table
         List<AsyncKuduScanner> scanners = predicates
             .stream()
             .map(subScan -> {
-                    AsyncKuduScanner.AsyncKuduScannerBuilder scannerBuilder = this.client.newScannerBuilder(openedTable);
+                    KuduScanToken.KuduScanTokenBuilder tokenBuilder = this.client.syncClient().newScanTokenBuilder(openedTable);
+
                     if (!columnIndices.isEmpty()) {
-                        scannerBuilder.setProjectedColumnIndexes(columnIndices);
+                        tokenBuilder.setProjectedColumnIndexes(columnIndices);
                     }
                     subScan
                         .stream()
                         .forEach(predicate -> {
-                                scannerBuilder.addPredicate(predicate);
+                                tokenBuilder.addPredicate(predicate);
                             });
-                    return scannerBuilder.build();
+                    return tokenBuilder.build();
+                })
+            .flatMap(tokens -> {
+                    return tokens
+                        .stream()
+                        .map(token -> {
+                                try {
+                                    return KuduScannerUtil.deserializeIntoAsyncScanner(token.serialize(), client, openedTable);
+                                }
+                                catch (java.io.IOException ioe) {
+                                    throw new RuntimeException("Failed to setup scanner from token.", ioe);
+                                }
+                            });
                 })
             .collect(Collectors.toList());
 
@@ -207,129 +225,15 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         // rowResults, and process different message types.
         final int numScanners = scanners.size();
 
-        final Queue<CalciteScannerMessage<Object[]>> rowResults;
-        // Using Unbounded Queues here which is not awesome.
-        // Attempted to come up with a few ways in which the producer could
-        // block when the queue was full didn't really like anything I had
-        // written. The point of using these queues is to avoid blocking
-        // all together. Further, because the Queue is used as the message
-        // passing for producer errors, it seemed like we needed another signal
-        // to send to the Enumerable. When this gets a refactor for the Default
-        // Sort order, lets address the "unbounded-ness" of this and add a
-        // failure signal to the consumer so it doesn't rely on a single Message
-        // Passing Channel.
-        if (numScanners == 1) {
-            rowResults = new SpscUnboundedArrayQueue<CalciteScannerMessage<Object[]>>(3000);
+        final Schema projectedSchema;
+        if (scanners.size() > 0) {
+            projectedSchema = scanners.get(0).getProjectionSchema();
         }
         else {
-            rowResults = new MpscUnboundedArrayQueue<CalciteScannerMessage<Object[]>>(3000);
+            projectedSchema = openedTable.getSchema();
         }
 
-        final Enumerable<Object[]> enumeration = new CalciteKuduEnumerable(
-            rowResults,
-            numScanners,
-            limit,
-            scansShouldStop);
-        for (AsyncKuduScanner scanner: scanners) {
-            scanner.nextRows()
-                .addBothDeferring(new Callback<Deferred<Void>, RowResultIterator>() {
-                        @Override
-                        public Deferred<Void> call(final RowResultIterator nextBatch) {
-                            boolean earlyExit = false;
-                            try {
-                                while (nextBatch != null && nextBatch.hasNext()) {
-                                    final RowResult row = nextBatch.next();
-                                    final Object[] rawRow = new Object[row.getColumnProjection().getColumns().size()];
-
-                                    int columnIndex = 0;
-                                    for (ColumnSchema columnType: row.getColumnProjection().getColumns()) {
-                                        if (row.isNull(columnIndex)) {
-                                            rawRow[columnIndex] = null;
-                                        }
-                                        else {
-                                            switch(columnType.getType()) {
-                                            case INT8:
-                                                rawRow[columnIndex] = row.getByte(columnIndex);
-                                                break;
-                                            case INT16:
-                                                rawRow[columnIndex] = row.getShort(columnIndex);
-                                                break;
-                                            case INT32:
-                                                rawRow[columnIndex] = row.getInt(columnIndex);
-                                                break;
-                                            case INT64:
-                                                rawRow[columnIndex] = row.getLong(columnIndex);
-                                                break;
-                                            case STRING:
-                                                rawRow[columnIndex] = row.getString(columnIndex);
-                                                break;
-                                            case BOOL:
-                                                rawRow[columnIndex] = row.getBoolean(columnIndex);
-                                                break;
-                                            case FLOAT:
-                                                rawRow[columnIndex] = row.getFloat(columnIndex);
-                                                break;
-                                            case DOUBLE:
-                                                rawRow[columnIndex] = row.getDouble(columnIndex);
-                                                break;
-                                            case UNIXTIME_MICROS:
-                                                // @TODO: is this the right response type?
-                                                rawRow[columnIndex] = row.getTimestamp(columnIndex).toInstant().toEpochMilli();
-                                                break;
-                                            case DECIMAL:
-                                                rawRow[columnIndex] = row.getDecimal(columnIndex);
-                                                break;
-                                            default:
-                                                final ByteBuffer byteBuffer = row.getBinary(columnIndex);
-                                                byteBuffer.rewind();
-                                                byte[] returnedValue = new byte[byteBuffer.remaining()];
-                                                byteBuffer.get(returnedValue);
-                                                rawRow[columnIndex] = returnedValue;
-                                                break;
-                                            }
-                                        }
-                                        columnIndex++;
-                                    }
-                                    final CalciteScannerMessage<Object[]> wrappedRow = new CalciteScannerMessage<>(
-                                        rawRow);
-                                    if (rowResults.offer(wrappedRow) == false) {
-                                        // failed to add to the results queue, time to stop doing work.
-                                        logger.error("failed to insert a new row into pending results. Triggering early exit");
-                                        earlyExit = true;
-                                        final boolean failedMessage = rowResults.offer(
-                                            new CalciteScannerMessage<Object[]>(
-                                                new RuntimeException("Queue was full, could not insert row")));
-                                        break;
-                                    }
-                                }
-                            }
-                            catch (Exception | Error failure) {
-                                // Something failed, like row.getDecimal() or something of that nature.
-                                // this means we have to abort this scan.
-                                logger.error("Failed to parse out row. Setting early exit", failure);
-                                earlyExit = true;
-                                final boolean failedMessage = rowResults.offer(
-                                    new CalciteScannerMessage<Object[]>(
-                                        new RuntimeException("Failed to parse results.", failure)));
-                            }
-
-                            // If the scanner can continue and we are not stopping
-                            if (scanner.hasMoreRows() && !earlyExit && !scansShouldStop.get()) {
-                                return scanner.nextRows().addCallbackDeferring(this);
-                            }
-
-                            // Else -> scanner has completed, notify the consumer of rowResults
-                            final boolean closeResult = rowResults.offer(
-                                CLOSE_MESSAGE);
-                            if (!closeResult) {
-                                logger.error("Failed to put close result message into row results queue");
-                            }
-                            scanner.close();
-                            return null;
-                        }
-                    });
-        }
-        return enumeration;
+        return new SortableEnumerable(scanners, scansShouldStop, projectedSchema, openedTable.getSchema());
     }
 
     @Override
@@ -351,7 +255,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         public Enumerator<T> enumerator() {
             //noinspection unchecked
             final Enumerable<T> enumerable =
-                (Enumerable<T>) getTable().executeQuery(Collections.emptyList(), Collections.emptyList(), -1);
+                (Enumerable<T>) getTable().executeQuery(Collections.emptyList(), Collections.emptyList(), -1, false);
             return enumerable.enumerator();
         }
 
@@ -374,7 +278,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                                        .map(p ->  p.toPredicate(getTable().openedTable.getSchema()))
                                                        .collect(Collectors.toList());
                                                })
-                                           .collect(Collectors.toList()), fieldsIndices, -1);
+                .collect(Collectors.toList()), fieldsIndices, -1, false);
         }
     }
 }

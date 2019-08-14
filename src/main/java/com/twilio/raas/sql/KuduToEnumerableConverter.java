@@ -39,9 +39,9 @@ import com.google.common.base.Predicates;
 /**
  * Rule to convert a relational expression from
  * {@link KuduRel#CONVENTION} to {@link EnumerableConvention}.
- * 
- * Bulk of the work is in the implement method which takes an 
- * {@link EnumeralbeRelImplementor} and creates 
+ *
+ * Bulk of the work is in the implement method which takes an
+ * {@link EnumeralbeRelImplementor} and creates
  * {@link org.apache.calcite.linq4j.tree.BlockStatement}.
  */
 public class KuduToEnumerableConverter extends ConverterRule {
@@ -72,7 +72,7 @@ public class KuduToEnumerableConverter extends ConverterRule {
         public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
             return new KuduToEnumerableRel(getCluster(), traitSet, sole(inputs));
         }
-    
+
         @Override
         public RelOptCost computeSelfCost(RelOptPlanner planner,
                                           RelMetadataQuery mq) {
@@ -131,7 +131,7 @@ public class KuduToEnumerableConverter extends ConverterRule {
             return Expressions.call(BuiltInMethod.ARRAYS_AS_LIST.method,
                                     Expressions.newArrayInit(clazz, constantList(values)));
         }
-    
+
         /** E.g. {@code constantList("x", "y")} returns
          * {@code {ConstantExpression("x"), ConstantExpression("y")}}.
          * @param values list of elements
@@ -143,9 +143,9 @@ public class KuduToEnumerableConverter extends ConverterRule {
         }
 
         /**
-         * These next three methods are responsible for creating an ArrayList of 
-         * {@link CalciteKuduPredicate} that are inputs into 
-         * {@link KuduMethod.KUDU_QUERY_METHOD}. 
+         * These next three methods are responsible for creating an ArrayList of
+         * {@link CalciteKuduPredicate} that are inputs into
+         * {@link KuduMethod.KUDU_QUERY_METHOD}.
          */
         private static Expression createAllScans(List<List<CalciteKuduPredicate>> allScans) {
             return Expressions

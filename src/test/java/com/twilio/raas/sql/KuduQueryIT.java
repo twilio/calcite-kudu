@@ -27,6 +27,7 @@ import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.client.KuduPredicate;
 import java.util.ArrayList;
 import java.util.LinkedList;
+import org.apache.calcite.linq4j.Enumerator;
 
 @RunWith(JUnit4.class)
 public class KuduQueryIT {
@@ -46,14 +47,14 @@ public class KuduQueryIT {
   @BeforeClass
   public static void setup() throws Exception {
     final List<ColumnSchema> columns = Arrays.asList(
-						     new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).key(true).build(),
-						     new ColumnSchema.ColumnSchemaBuilder("date_created", Type.UNIXTIME_MICROS).key(true).build(),
-						     new ColumnSchema.ColumnSchemaBuilder("sid", Type.STRING).key(true).build());
-    
+        new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("date_created", Type.UNIXTIME_MICROS).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("sid", Type.STRING).key(true).build());
+
     testHarness.getClient().createTable(BASE_TABLE_NAME, new Schema(columns),
 					new org.apache.kudu.client.CreateTableOptions()
 					.addHashPartitions(Arrays.asList("account_sid"), 5)
-					
+
 					.setNumReplicas(1));
     final AsyncKuduSession insertSession = testHarness.getAsyncClient().newSession();
     TABLE = testHarness.getClient().openTable(BASE_TABLE_NAME);
@@ -86,7 +87,7 @@ public class KuduQueryIT {
     // @TODO: we have the columnSchema in the setup, we don't need to grab the table.
     final KuduPredicate filterToSid = KuduPredicate
       .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn("sid"), KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
-    final Enumerable<Object[]> results = relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1);
+    final Enumerable<Object[]> results = relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, false);
     Iterator<Object[]> resultIter = results.iterator();
     Assert.assertTrue("Should have something to iterate over",
 		      resultIter.hasNext());
@@ -105,7 +106,7 @@ public class KuduQueryIT {
     final KuduPredicate filterToAccountSid = KuduPredicate
       .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn("account_sid"), KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.ACCOUNT_SID);
     final Enumerable<Object[]> results = relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToAccountSid)),
-							       Arrays.asList(2, 0), -1);
+        Arrays.asList(2, 0), -1, false);
     Iterator<Object[]> resultIter = results.iterator();
     Assert.assertTrue("Should have something to iterate over",
 		      resultIter.hasNext());
@@ -142,20 +143,20 @@ public class KuduQueryIT {
     predicateQuery.add(Arrays.asList(firstSid));
     predicateQuery.add(Arrays.asList(secondSid));
     final Enumerable<Object[]> results = relTable.executeQuery(predicateQuery,
-							       Collections.singletonList(2), -1);
-    Iterator<Object[]> resultIter = results.iterator();
+        Collections.singletonList(2), -1, false);
+    Enumerator<Object[]> resultIter = results.enumerator();
     Assert.assertTrue("Should have something to iterate over",
-		      resultIter.hasNext());
+        resultIter.moveNext());
     final List<String> resultCollection = new LinkedList<String>();
 
-    while(resultIter.hasNext()) {
-        resultCollection.add(resultIter.next()[0].toString());
-    }
-    Assert.assertEquals("Should return two rows from the Kudu Table",
-                        2, resultCollection.size());
+    do {
+        resultCollection.add(resultIter.current()[0].toString());
+    } while(resultIter.moveNext());
+    Assert.assertEquals(String.format("Should return two rows from the Kudu Table: %s", resultCollection),
+        2, resultCollection.size());
     Assert.assertTrue("First sid should be in the result set",
-                      resultCollection.contains(KuduQueryIT.FIRST_SID));
+        resultCollection.contains(KuduQueryIT.FIRST_SID));
     Assert.assertTrue("Second sid should be in the result set",
-                      resultCollection.contains(KuduQueryIT.SECOND_SID));
+        resultCollection.contains(KuduQueryIT.SECOND_SID));
   }
 }
