@@ -54,7 +54,7 @@ public class KuduPushDownRule implements RexBiVisitor<List<List<CalciteKuduPredi
     }
 
     public boolean areAllFiltersApplied() {
-        return allExpressionsConverted || true;
+        return allExpressionsConverted;
     }
 
     private List<List<CalciteKuduPredicate>> mergeBoolean(SqlKind booleanOp,
