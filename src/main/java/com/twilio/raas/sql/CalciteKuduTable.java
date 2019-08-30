@@ -1,13 +1,12 @@
 package com.twilio.raas.sql;
 
+import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.DataContext;
+
 import java.util.List;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.schema.impl.AbstractTable;
+
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
-import java.util.Map;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.Schema;
@@ -16,48 +15,23 @@ import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
-import java.util.concurrent.CountDownLatch;
-import org.apache.kudu.client.RowResultIterator;
-import org.apache.kudu.client.RowResult;
 import org.apache.kudu.client.AsyncKuduClient;
-import org.apache.calcite.linq4j.AbstractEnumerable2;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.AsyncKuduScanner;
-import com.stumbleupon.async.Callback;
 import org.apache.calcite.linq4j.Enumerator;
-import com.stumbleupon.async.Deferred;
-import java.util.concurrent.TimeUnit;
 import org.apache.kudu.client.KuduPredicate;
-import java.util.Iterator;
 import org.apache.kudu.client.KuduScanToken;
-import java.util.Collection;
+
 import java.util.stream.Collectors;
-import org.apache.kudu.shaded.com.google.protobuf.CodedInputStream;
-import org.apache.kudu.client.Client.ScanTokenPB;
-import org.apache.kudu.client.AbstractKuduScannerBuilder;
-import java.util.ArrayList;
-import org.apache.kudu.Common;
-import org.apache.kudu.client.ReplicaSelection;
 import java.util.Collections;
 import org.apache.calcite.adapter.java.AbstractQueryableTable;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.schema.impl.AbstractTableQueryable;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.Queue;
-import org.jctools.queues.SpscUnboundedArrayQueue;
-import org.jctools.queues.MpscUnboundedArrayQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.nio.ByteBuffer;
-import java.util.Optional;
-import java.util.Arrays;
-import java.util.stream.IntStream;
-import org.apache.calcite.rel.RelCollations;
-import org.apache.calcite.rel.RelFieldCollation;
-import org.apache.calcite.schema.Statistic;
-import org.apache.calcite.schema.Statistics;
 
 // This class resides in this project under the org.apache namespace
 import org.apache.kudu.client.KuduScannerUtil;
@@ -169,11 +143,14 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      * @param columnIndices the fields ordinals to select out of Kudu
      * @param limit         process the results until limit is reached. If less then 0,
      *                       no limit is enforced
-     * @param sort          Whether or not to sort the results by primary key.
+     * @param offset        skip offset number of rows before returning results
+     * @paran sorted        whether to return rows in sorted order
      *
      * @return Enumeration on the objects, Fields conform to {@link CalciteKuduTable#getRowType}.
      */
-    public Enumerable<Object[]> executeQuery(final List<List<KuduPredicate>> predicates, List<Integer> columnIndices, final int limit, final boolean sort) {
+    public Enumerable<Object[]> executeQuery(final List<List<KuduPredicate>> predicates,
+                                             List<Integer> columnIndices, final long limit,
+                                             final long offset, final boolean sorted) {
         // Here all the results from all the scans are collected. This is consumed
         // by the Enumerable.enumerator() that this method returns.
         // Set when the enumerator is told to close().
@@ -186,9 +163,13 @@ public final class CalciteKuduTable extends AbstractQueryableTable
             .stream()
             .map(subScan -> {
                     KuduScanToken.KuduScanTokenBuilder tokenBuilder = this.client.syncClient().newScanTokenBuilder(openedTable);
-
                     if (!columnIndices.isEmpty()) {
                         tokenBuilder.setProjectedColumnIndexes(columnIndices);
+                    }
+                    // we can only push down the limit if  we are ordering by the pk columns
+                    // and if there is no offset
+                    if (sorted && offset==-1 && limit!=-1) {
+                        tokenBuilder.limit(limit);
                     }
                     subScan
                         .stream()
@@ -224,7 +205,6 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         // queue. The consumer of the rowResults will attempt to poll from
         // rowResults, and process different message types.
         final int numScanners = scanners.size();
-
         final Schema projectedSchema;
         if (scanners.size() > 0) {
             projectedSchema = scanners.get(0).getProjectionSchema();
@@ -233,7 +213,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
             projectedSchema = openedTable.getSchema();
         }
 
-        return new SortableEnumerable(scanners, scansShouldStop, projectedSchema, openedTable.getSchema());
+        return new SortableEnumerable(scanners, scansShouldStop, projectedSchema,
+                openedTable.getSchema(), limit, offset, sorted);
     }
 
     @Override
@@ -255,7 +236,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         public Enumerator<T> enumerator() {
             //noinspection unchecked
             final Enumerable<T> enumerable =
-                (Enumerable<T>) getTable().executeQuery(Collections.emptyList(), Collections.emptyList(), -1, false);
+                (Enumerable<T>) getTable().executeQuery(Collections.emptyList(),
+                        Collections.emptyList(), -1, -1, false);
             return enumerable.enumerator();
         }
 
@@ -269,7 +251,9 @@ public final class CalciteKuduTable extends AbstractQueryableTable
          * This is the method that is called by Code generation to run the query.
          * Code generation happens in {@link KuduToEnumerableConverter}
          */
-        public Enumerable<Object[]> query(List<List<CalciteKuduPredicate>> predicates, List<Integer> fieldsIndices) {
+        public Enumerable<Object[]> query(List<List<CalciteKuduPredicate>> predicates,
+                                          List<Integer> fieldsIndices,
+                                          long limit, long offset, boolean sorted) {
             return getTable().executeQuery(predicates
                                            .stream()
                                            .map(subList -> {
@@ -278,7 +262,9 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                                        .map(p ->  p.toPredicate(getTable().openedTable.getSchema()))
                                                        .collect(Collectors.toList());
                                                })
-                .collect(Collectors.toList()), fieldsIndices, -1, false);
+                .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted);
         }
     }
+
+
 }

@@ -1,12 +1,13 @@
 package com.twilio.raas.sql;
 
+import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.AbstractRelNode;
+
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.kudu.client.KuduPredicate;
+
 import org.apache.calcite.linq4j.tree.Blocks;
 import org.apache.kudu.client.KuduTable;
 
@@ -43,7 +44,9 @@ public interface KuduRel extends RelNode {
         public final List<Integer> kuduProjectedColumns  = new ArrayList<>();
         public KuduTable openedTable;
         public RelOptTable table;
-        public int limit = -1;
+        public long limit = -1;
+        public long offset = -1;
+        public boolean sorted = false;
 
         public void visitChild(int ordinal, RelNode input) {
             assert ordinal == 0;

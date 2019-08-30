@@ -1,6 +1,7 @@
 package com.twilio.raas.sql;
 
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.kudu.client.AsyncKuduScanner;
 import org.junit.runners.JUnit4;
 import org.junit.ClassRule;
 import org.junit.runner.RunWith;
@@ -87,7 +88,8 @@ public class KuduQueryIT {
     // @TODO: we have the columnSchema in the setup, we don't need to grab the table.
     final KuduPredicate filterToSid = KuduPredicate
       .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn("sid"), KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
-    final Enumerable<Object[]> results = relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, false);
+    final Enumerable<Object[]> results =
+            relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, -1, false);
     Iterator<Object[]> resultIter = results.iterator();
     Assert.assertTrue("Should have something to iterate over",
 		      resultIter.hasNext());
@@ -106,7 +108,7 @@ public class KuduQueryIT {
     final KuduPredicate filterToAccountSid = KuduPredicate
       .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn("account_sid"), KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.ACCOUNT_SID);
     final Enumerable<Object[]> results = relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToAccountSid)),
-        Arrays.asList(2, 0), -1, false);
+        Arrays.asList(2, 0), -1, -1, false);
     Iterator<Object[]> resultIter = results.iterator();
     Assert.assertTrue("Should have something to iterate over",
 		      resultIter.hasNext());
@@ -143,7 +145,7 @@ public class KuduQueryIT {
     predicateQuery.add(Arrays.asList(firstSid));
     predicateQuery.add(Arrays.asList(secondSid));
     final Enumerable<Object[]> results = relTable.executeQuery(predicateQuery,
-        Collections.singletonList(2), -1, false);
+        Collections.singletonList(2), -1, -1, false);
     Enumerator<Object[]> resultIter = results.enumerator();
     Assert.assertTrue("Should have something to iterate over",
         resultIter.moveNext());
@@ -159,4 +161,40 @@ public class KuduQueryIT {
     Assert.assertTrue("Second sid should be in the result set",
         resultCollection.contains(KuduQueryIT.SECOND_SID));
   }
+
+    @Test
+    public void testKuduScannerLimitPushdown() throws Exception {
+        final CalciteKuduTable relTable = new CalciteKuduTable(KuduQueryIT.TABLE,
+                testHarness.getAsyncClient());
+
+        final KuduPredicate filterToSid = KuduPredicate
+                .newComparisonPredicate(KuduQueryIT.TABLE.getSchema()
+                        .getColumn("sid"), KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
+
+        // since we are not sorting assert that the limit is not pushed down into the kudu scanner
+        SortableEnumerable sortableEnumerable =
+                (SortableEnumerable)relTable.executeQuery(
+                        Collections.singletonList(Collections.singletonList(filterToSid)),
+                        Collections.singletonList(2), 3, -4, false);
+        for (AsyncKuduScanner scanner : sortableEnumerable.getScanners()) {
+            Assert.assertEquals( Long.MAX_VALUE, scanner.getLimit());
+        }
+
+        // even though we are sorting we cannot push down the limit since there is an offset
+        sortableEnumerable = (SortableEnumerable)relTable.executeQuery(
+                Collections.singletonList(Collections.singletonList(filterToSid)),
+                Collections.singletonList(2), 3, 4, true);
+        for (AsyncKuduScanner scanner : sortableEnumerable.getScanners()) {
+            Assert.assertEquals( Long.MAX_VALUE, scanner.getLimit());
+        }
+
+        // since we are not sorting assert that the limit is not pushed down into the kudu scanner
+        sortableEnumerable = (SortableEnumerable)relTable.executeQuery(
+                Collections.singletonList(Collections.singletonList(filterToSid)),
+                Collections.singletonList(2), 3, -1, true);
+        for (AsyncKuduScanner scanner : sortableEnumerable.getScanners()) {
+            Assert.assertEquals( 3, scanner.getLimit());
+        }
+    }
+
 }

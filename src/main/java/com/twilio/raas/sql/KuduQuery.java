@@ -1,5 +1,7 @@
 package com.twilio.raas.sql;
 
+import com.twilio.raas.sql.rules.KuduRules;
+import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;

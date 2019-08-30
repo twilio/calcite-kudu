@@ -1,5 +1,6 @@
 package com.twilio.raas.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.calcite.linq4j.Enumerable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,8 +8,7 @@ import java.util.List;
 import org.apache.calcite.linq4j.Enumerator;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.Collections;
+
 import org.apache.calcite.linq4j.AbstractEnumerable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Queue;
@@ -39,34 +39,40 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     private final Schema projectedSchema;
     private final Schema tableSchema;
 
-    public boolean sort = false;
-
-    public long limit = 0L;
-    public long offset = 0L;
+    public final boolean sort;
+    public final long limit;
+    public final long offset;
 
     public SortableEnumerable(
         List<AsyncKuduScanner> scanners,
         final AtomicBoolean scansShouldStop,
         final Schema projectedSchema,
-        final Schema tableSchema) {
-
+        final Schema tableSchema,
+        final long limit,
+        final long offset,
+        final boolean sort) {
         this.scanners = scanners;
         this.scansShouldStop = scansShouldStop;
         this.projectedSchema = projectedSchema;
         this.tableSchema = tableSchema;
-    }
-
-    public SortableEnumerable setSorted() {
-        this.sort = true;
-        return this;
-    }
-
-    public void setLimit(long limit) {
         this.limit = limit;
+        this.offset = offset;
+        this.sort = sort;
     }
 
-    public void setOffset(long offset) {
-        this.offset = offset;
+    @VisibleForTesting
+    List<AsyncKuduScanner> getScanners() {
+        return scanners;
+    }
+
+    private boolean checkLimitReached(int totalMoves) {
+        if (limit > 0 ) {
+            long moveOffset = offset > 0 ? offset : 0;
+            if (totalMoves - moveOffset > limit) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Enumerator<Object[]> unsortedEnumerator(final int numScanners,
@@ -75,11 +81,23 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
             private int finishedScanners = 0;
             private Object[] next = null;
             private boolean finished = false;
+            private int totalMoves = 0;
+            private boolean movedToOffset = false;
+
+            private void moveToOffset() {
+                movedToOffset = true;
+                if (offset > 0) {
+                    while(totalMoves < offset && moveNext());
+                }
+            }
 
             @Override
             public boolean moveNext() {
                 if (finished) {
                     return false;
+                }
+                if (!movedToOffset) {
+                    moveToOffset();
                 }
                 CalciteScannerMessage<CalciteRow> fetched;
                 do {
@@ -99,7 +117,12 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                 } while(fetched == null ||
                     fetched.type != CalciteScannerMessage.MessageType.ROW);
                 next = fetched.row.get().rowData;
-                return true;
+                totalMoves++;
+                boolean limitReached = checkLimitReached(totalMoves);
+                if (limitReached) {
+                    scansShouldStop.set(true);
+                }
+                return !limitReached;
             }
 
             @Override
@@ -181,12 +204,11 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                 enumerablesWithRows.set(chosenEnumerable,
                     subEnumerables.get(chosenEnumerable).moveNext());
                 totalMoves++;
-                if (limit > 0) {
-                    if (totalMoves - offset >= limit) {
-                        scansShouldStop.set(true);
-                    }
+                boolean limitReached = checkLimitReached(totalMoves);
+                if (limitReached) {
+                    scansShouldStop.set(true);
                 }
-                return limit <= 0 || totalMoves - offset <= limit;
+                return !limitReached;
             }
 
             @Override

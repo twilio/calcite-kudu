@@ -4,6 +4,7 @@ import org.apache.kudu.Schema;
 import org.apache.kudu.client.RowResult;
 import org.apache.kudu.ColumnSchema;
 import java.nio.ByteBuffer;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.ArrayList;
 import java.math.BigDecimal;
@@ -135,78 +136,83 @@ public final class CalciteRow implements Comparable<CalciteRow> {
     public int compareTo(CalciteRow o) {
         if (!this.primaryKeyColumnsInProjection.equals(
                 o.primaryKeyColumnsInProjection)) {
-            throw new RuntimeException("Comparing to Calcite rows that do not have the same primary keys");
+            throw new RuntimeException("Comparing two Calcite rows that do not have the same " +
+                    "primary keys");
         }
         for (Integer positionInProjection: this.primaryKeyColumnsInProjection) {
             final ColumnSchema primaryColumnSchema = this.rowSchema.getColumns().get(positionInProjection);
+            int cmp = 0;
             switch(primaryColumnSchema.getType()) {
             case INT8:
-                if (((Byte)this.rowData[positionInProjection]).compareTo(
-                        ((Byte)o.rowData[positionInProjection])) > 0) {
-                    return 1;
+                cmp = ((Byte) this.rowData[positionInProjection]).compareTo(
+                        ((Byte) o.rowData[positionInProjection]));
+                if (cmp != 0) {
+                    return cmp;
                 }
                 break;
             case INT16:
-                if (((Short)this.rowData[positionInProjection]).compareTo(
-                        ((Short)o.rowData[positionInProjection])) > 0) {
-                    return 1;
+                cmp = ((Short) this.rowData[positionInProjection]).compareTo(
+                        ((Short) o.rowData[positionInProjection]));
+                if (cmp != 0) {
+                    return cmp;
                 }
                 break;
             case INT32:
-                if (((Integer)this.rowData[positionInProjection]).compareTo(
-                        ((Integer)o.rowData[positionInProjection])) > 0) {
-                    return 1;
+                cmp = ((Integer) this.rowData[positionInProjection]).compareTo(
+                        ((Integer) o.rowData[positionInProjection]));
+                if (cmp != 0) {
+                    return cmp;
                 }
                 break;
+            // @TODO: is this the right response type?
+            case UNIXTIME_MICROS:
             case INT64:
-                if (((Long)this.rowData[positionInProjection]).compareTo(
-                        ((Long)o.rowData[positionInProjection])) > 0) {
-                    return 1;
+                cmp = ((Long) this.rowData[positionInProjection]).compareTo(
+                        ((Long) o.rowData[positionInProjection]));
+                if (cmp != 0) {
+                    return cmp;
                 }
                 break;
             case STRING:
-                if (((String)this.rowData[positionInProjection]).compareTo(
-                        ((String)o.rowData[positionInProjection])) > 0) {
-                    return 1;
+                cmp = ((String) this.rowData[positionInProjection]).compareTo(
+                        ((String) o.rowData[positionInProjection]));
+                if (cmp != 0) {
+                    return cmp;
                 }
                 break;
             case BOOL:
                 if (((Boolean)this.rowData[positionInProjection]).compareTo(
-                        ((Boolean)o.rowData[positionInProjection])) > 0) {
+                        ((Boolean)o.rowData[positionInProjection])) != 0) {
                     return 1;
                 }
                 break;
             case FLOAT:
-                if (((Float)this.rowData[positionInProjection]).compareTo(
-                        ((Float)o.rowData[positionInProjection])) > 0) {
-                    return 1;
+                cmp = ((Float) this.rowData[positionInProjection]).compareTo(
+                        ((Float) o.rowData[positionInProjection]));
+                if (cmp != 0) {
+                    return cmp;
                 }
                 break;
             case DOUBLE:
-                if (((Double)this.rowData[positionInProjection]).compareTo(
-                        ((Double)o.rowData[positionInProjection])) > 0) {
-                    return 1;
-                }
-                break;
-            case UNIXTIME_MICROS:
-                // @TODO: is this the right response type?
-                if (((Long)this.rowData[positionInProjection]).compareTo(
-                        ((Long)o.rowData[positionInProjection])) > 0) {
-                    return 1;
+                cmp = ((Double) this.rowData[positionInProjection]).compareTo(
+                        ((Double) o.rowData[positionInProjection]));
+                if (cmp > 0) {
+                    return cmp;
                 }
                 break;
             case DECIMAL:
-                if (((BigDecimal)this.rowData[positionInProjection]).compareTo(
-                        ((BigDecimal)o.rowData[positionInProjection])) > 0) {
-                    return 1;
+                cmp = ((BigDecimal) this.rowData[positionInProjection]).compareTo(
+                        ((BigDecimal) o.rowData[positionInProjection]));
+                if (cmp != 0) {
+                    return cmp;
                 }
                 break;
             default:
                 // Can't compare the others.
-                // Should just be Binary.
-                break;
+                throw new RuntimeException("Cannot compare column " + primaryColumnSchema.getName()
+                        + " of type "+ primaryColumnSchema.getType());
             }
         }
-        return -1;
+        return 0;
     }
 }

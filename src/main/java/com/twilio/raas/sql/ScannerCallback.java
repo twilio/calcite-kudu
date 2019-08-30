@@ -44,6 +44,7 @@ final public class ScannerCallback
         this.rowResults = rowResults;
         this.scansShouldStop = scansShouldStop;
         this.primaryKeyColumnsInProjection = CalciteRow.findPrimaryKeyColumnsInProjection(projectedSchema, tableSchema);
+        logger.debug("ScannerCallback created for scanner" + scanner);
     }
 
     @Override

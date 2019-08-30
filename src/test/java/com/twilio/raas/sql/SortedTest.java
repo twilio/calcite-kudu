@@ -1,20 +1,23 @@
 package com.twilio.raas.sql;
 
-import org.apache.calcite.linq4j.DefaultEnumerable;
-import java.util.Arrays;
-import org.apache.kudu.Schema;
-import org.apache.kudu.ColumnSchema;
-import java.util.List;
 import org.apache.calcite.linq4j.AbstractEnumerable2;
-import java.util.Iterator;
-import java.util.stream.Collectors;
 import org.apache.calcite.linq4j.Enumerator;
+import org.apache.kudu.ColumnSchema;
+import org.apache.kudu.Schema;
 import org.apache.kudu.Type;
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.junit.Test;
-import static org.junit.Assert.*;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public final class SortedTest {
 
@@ -55,7 +58,10 @@ public final class SortedTest {
            Collections.emptyList(),
            new AtomicBoolean(),
            rowSchema,
-           rowSchema)
+           rowSchema,
+           -1,
+           -1,
+            false)
            .sortedEnumerator(subEnumerables);
 
         assertTrue("Should have at least one result",

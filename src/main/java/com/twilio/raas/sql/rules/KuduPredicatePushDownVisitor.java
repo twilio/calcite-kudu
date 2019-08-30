@@ -1,8 +1,10 @@
-package com.twilio.raas.sql;
+package com.twilio.raas.sql.rules;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import com.twilio.raas.sql.CalciteKuduPredicate;
 import org.apache.calcite.rex.RexBiVisitor;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.rex.RexCall;
@@ -19,40 +21,39 @@ import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexDynamicParam;
 import java.util.Optional;
-import org.apache.calcite.rex.RexBiVisitor;
+
 import org.apache.calcite.rex.RexNode;
 import java.math.BigDecimal;
-import java.sql.Timestamp;
 import java.nio.ByteBuffer;
 
 import org.apache.kudu.Schema;
-import org.apache.kudu.Type;
 import org.apache.kudu.client.KuduPredicate;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * KuduPushDownRule returns a List of a List of CalciteKuduPredicates. The inner list represents
+ * KuduPredicatePushDownVisitor returns a List of a List of CalciteKuduPredicates. The inner list represents
  * a {@link org.apache.kudu.client.AsyncKuduScanner} that can be executed independently of each other. The outer 
  * list therefore represents a List of {@code AsyncKuduScanner}s that will satifisy the 
  * provided filters.
  *
  * It is expected that it is called with {@link RexNode} that represent the filters
  */
-public class KuduPushDownRule implements RexBiVisitor<List<List<CalciteKuduPredicate>>, RexCall> {
+public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<CalciteKuduPredicate>>, RexCall> {
     static final Logger logger = LoggerFactory
-        .getLogger(KuduPushDownRule.class);
+        .getLogger(KuduPredicatePushDownVisitor.class);
 
     private boolean allExpressionsConverted = true;
-    private List<List<CalciteKuduPredicate>> startingScan;
     private Schema kuduTableSchema;
 
-    public KuduPushDownRule(List<List<CalciteKuduPredicate>> startingScan, Schema kuduTableSchema) {
-        this.startingScan = startingScan;
+    public KuduPredicatePushDownVisitor(Schema kuduTableSchema) {
         this.kuduTableSchema = kuduTableSchema;
     }
 
+    /**
+     * @return true if we can push down all filters to kudu 
+     */
     public boolean areAllFiltersApplied() {
         return allExpressionsConverted;
     }

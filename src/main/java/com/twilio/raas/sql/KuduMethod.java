@@ -10,7 +10,8 @@ import java.util.List;
  * Builtin methods in the KuduDB adapter.
  */
 public enum KuduMethod {
-    KUDU_QUERY_METHOD(CalciteKuduTable.KuduQueryable.class, "query", List.class, List.class);
+    KUDU_QUERY_METHOD(CalciteKuduTable.KuduQueryable.class, "query", List.class,
+            List.class, int.class, int.class, boolean.class);
 
     public final Method method;
 
