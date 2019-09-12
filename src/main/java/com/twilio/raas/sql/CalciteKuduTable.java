@@ -155,6 +155,9 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         // by the Enumerable.enumerator() that this method returns.
         // Set when the enumerator is told to close().
         final AtomicBoolean scansShouldStop = new AtomicBoolean(false);
+        // if we have an offset always sort by the primary key to ensure the rows are returned
+        // in a predictible order
+        final boolean sortByPK = offset>0 || sorted;
 
         // This  builds a List AsyncKuduScanners.
         // Each member of this list represents an OR query on a given partition
@@ -168,7 +171,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                     }
                     // we can only push down the limit if  we are ordering by the pk columns
                     // and if there is no offset
-                    if (sorted && offset==-1 && limit!=-1) {
+                    if (sortByPK && offset==-1 && limit!=-1) {
                         tokenBuilder.limit(limit);
                     }
                     subScan

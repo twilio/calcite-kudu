@@ -8,6 +8,7 @@ import com.twilio.raas.sql.rel.KuduToEnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.plan.RelOptRuleOperand;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -32,10 +33,14 @@ import org.apache.kudu.client.KuduTable;
  * key, the enumerable can return the results in sorted order.
  */
 public class KuduSortWithFilterRule extends RelOptRule {
+
+    public static final RelOptRuleOperand OPERAND =
+            operand(KuduToEnumerableRel.class, some(
+                    operand(KuduFilterRel.class, some(operand(KuduQuery.class, none())))));
+
     public KuduSortWithFilterRule(RelBuilderFactory relBuilderFactory) {
-        super(operand(Sort.class, operand(KuduToEnumerableRel.class, some(
-                        operand(KuduFilterRel.class, some(operand(KuduQuery.class, none())))))),
-            relBuilderFactory, "KuduFilterSort");
+        super(operand(Sort.class, OPERAND),
+                relBuilderFactory, "KuduFilterSort");
     }
 
     @Override

@@ -6,18 +6,6 @@ import java.sql.SQLException;
 
 public class TestUtil {
 
-    public static String getExplainPlan(ResultSet rs) throws SQLException {
-        StringBuilder buf = new StringBuilder();
-        while (rs.next()) {
-            buf.append(rs.getString(1));
-            buf.append('\n');
-        }
-        if (buf.length() > 0) {
-            buf.setLength(buf.length()-1);
-        }
-        return buf.toString();
-    }
-
     public static void printResultSet(ResultSet rs) throws SQLException {
         ResultSetMetaData rsmd = rs.getMetaData();
         int columnCount = rsmd.getColumnCount();

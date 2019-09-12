@@ -57,7 +57,9 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
         this.tableSchema = tableSchema;
         this.limit = limit;
         this.offset = offset;
-        this.sort = sort;
+        // if we have an offset always sort by the primary key to ensure the rows are returned
+        // in a predictible order
+        this.sort = offset>0 || sort;
     }
 
     @VisibleForTesting

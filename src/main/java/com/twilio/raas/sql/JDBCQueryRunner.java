@@ -1,6 +1,8 @@
 package com.twilio.raas.sql;
 
 import com.zaxxer.hikari.HikariDataSource;
+
+import java.sql.SQLException;
 import java.util.concurrent.CompletionStage;
 import java.sql.ResultSet;
 import java.util.List;
@@ -16,6 +18,8 @@ import com.zaxxer.hikari.HikariConfig;
 import java.util.concurrent.ThreadFactory;
 import java.sql.Statement;
 import com.codahale.metrics.MetricRegistry;
+import org.apache.calcite.jdbc.CalciteConnection;
+import org.apache.calcite.jdbc.CalciteJdbc41Factory;
 
 /**
  * Executes Sql queries asynchronously. By providing a thread pool size,
@@ -28,7 +32,7 @@ public final class JDBCQueryRunner implements AutoCloseable {
 
     private HikariDataSource dbPool;
     private ExecutorService threadPool;
-    private String jdbcUrl;
+    private final String jdbcUrl;
 
     /**
      * Create a runner with a kudu connection string in the format of host1:7051,host2:7051
@@ -104,9 +108,28 @@ public final class JDBCQueryRunner implements AutoCloseable {
         return pendingResult;
     }
 
+    /**
+     * @return  Calcite's plan for the given sql
+     */
+    // TODO see if there is a better way to represent the query plan instead of a String
+    public String getExplainPlan(final String sql) throws SQLException {
+        try (Connection con = this.dbPool.getConnection();
+             Statement statement = con.createStatement();
+             ResultSet rs = statement.executeQuery("EXPLAIN PLAN FOR " + sql)) {
+             return SqlUtil.getExplainPlan(rs);
+        }
+    }
+
     @Override
     public void close() throws Exception {
         this.dbPool.close();
         this.threadPool.shutdown();
+    }
+
+    /**
+     * Remember to close this connection
+     */
+    public Connection getConnection() throws SQLException {
+        return this.dbPool.getConnection();
     }
 }

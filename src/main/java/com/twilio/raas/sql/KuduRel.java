@@ -40,8 +40,8 @@ public interface KuduRel extends RelNode {
      * add information into this container.
      */
     class Implementor {
-        public final List<List<CalciteKuduPredicate>> predicates = new ArrayList<>();
         public final List<Integer> kuduProjectedColumns  = new ArrayList<>();
+        public final List<List<CalciteKuduPredicate>> predicates = new ArrayList<>();
         public KuduTable openedTable;
         public RelOptTable table;
         public long limit = -1;
