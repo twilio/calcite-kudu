@@ -68,12 +68,25 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
 
         // Now build the Java code that represents the Physical scan of a
         // Kudu Table.
-        final Expression predicates = createAllScans(kuduImplementor.predicates);
+        final Expression predicates = list.append("predicates",
+            implementor.stash(kuduImplementor.predicates
+                .stream()
+                .map(subscan -> {
+                        return subscan
+                            .stream()
+                            .map(p -> {
+                                    return new CalciteKuduPredicate(
+                                        p.columnName,
+                                        p.operation.get(),
+                                        p.rightHandValue);
+                                })
+                            .collect(Collectors.toList());
+                    }).collect(Collectors.toList()), List.class));
 
         final Expression fields =
             list.append("kuduFields",
-                        constantArrayList(kuduImplementor.kuduProjectedColumns,
-                                          Integer.class));
+                implementor.stash(kuduImplementor.kuduProjectedColumns, List.class));
+
         final Expression limit =
                 list.append("limit",
                         Expressions.constant(kuduImplementor.limit));
@@ -101,61 +114,5 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
 
         KuduToEnumerableConverter.logger.debug("Created a KuduQueryable " + list.toBlock());
         return implementor.result(physType, list.toBlock());
-    }
-
-    /** E.g. {@code constantArrayList("x", "y")} returns
-     * "Arrays.asList('x', 'y')".
-     * @param values list of values
-     * @param clazz runtime class representing each element in the list
-     * @param <T> type of elements in the list
-     * @return method call which creates a list
-     */
-    private static <T> MethodCallExpression constantArrayList(List<T> values, Class clazz) {
-        return Expressions.call(BuiltInMethod.ARRAYS_AS_LIST.method,
-                                Expressions.newArrayInit(clazz, constantList(values)));
-    }
-
-    /** E.g. {@code constantList("x", "y")} returns
-     * {@code {ConstantExpression("x"), ConstantExpression("y")}}.
-     * @param values list of elements
-     * @param <T> type of elements inside this list
-     * @return list of constant expressions
-     */
-    private static <T> List<Expression> constantList(List<T> values) {
-        return values.stream().map(Expressions::constant).collect(Collectors.toList());
-    }
-
-    /**
-     * These next three methods are responsible for creating an ArrayList of
-     * {@link CalciteKuduPredicate} that are inputs into
-     * {@link KuduMethod.KUDU_QUERY_METHOD}.
-     */
-    private static Expression createAllScans(List<List<CalciteKuduPredicate>> allScans) {
-        return Expressions
-            .call(BuiltInMethod.ARRAYS_AS_LIST.method,
-                  allScans.stream().map(subScan -> createSubScan(subScan)).collect(Collectors.toList()));
-    }
-
-    private static Expression createSubScan(List<CalciteKuduPredicate> predicates) {
-        return Expressions
-            .call(BuiltInMethod.ARRAYS_AS_LIST.method,
-                  Expressions.newArrayInit(CalciteKuduPredicate.class,
-                                           predicates.stream()
-                                           .map(p -> createCalcitePredicate(p))
-                                           .collect(Collectors.toList())));
-    }
-
-    private static Expression createCalcitePredicate(CalciteKuduPredicate p) {
-        try {
-            return Expressions.new_(CalciteKuduPredicate.class.getConstructor(String.class,
-                                                                              KuduPredicate.ComparisonOp.class,
-                                                                              Object.class),
-                                    Arrays.asList(Expressions.constant(p.columnName),
-                                                  Expressions.constant(p.operation.get()),
-                                                  Expressions.constant(p.rightHandValue)));
-        }
-        catch (NoSuchMethodException constrDoesntExist) {
-            throw new RuntimeException("Constructor doesnt exist", constrDoesntExist);
-        }
     }
 }
