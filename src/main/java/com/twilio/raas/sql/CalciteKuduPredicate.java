@@ -9,7 +9,7 @@ import org.apache.kudu.Schema;
 
 /**
  * A simple "case" class / POJO to help with code generation in
- * {@link com.twilio.raas.sql.KuduToEnumerableConverter}. 
+ * {@link com.twilio.raas.sql.rules.KuduToEnumerableConverter}.
  * Simplifies the {@link org.apache.calcite.linq4j.tree.Expression}
  * generation so it is more readable
  */
@@ -39,7 +39,7 @@ public final class CalciteKuduPredicate {
      *
      * @return {@code KuduPredicate} that represents this POJO
      */
-    public KuduPredicate toPredicate(Schema tableSchema) {
+    public KuduPredicate toPredicate(Schema tableSchema, Optional<String> descendingSortedDateTimeField) {
         final ColumnSchema columnsSchema = tableSchema.getColumn(columnName);
         return this.operation
             .map(op -> {
@@ -72,6 +72,11 @@ public final class CalciteKuduPredicate {
                             .newComparisonPredicate(columnsSchema, op, (Integer) rightHandValue);
                     }
                     else if (rightHandValue instanceof Long) {
+                        if(descendingSortedDateTimeField.isPresent()) {
+                            // subtract epoch microseconds from Long.MAX_VALUE
+                            return KuduPredicate
+                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Long.MAX_VALUE - (Long)rightHandValue);
+                        }
                         return KuduPredicate
                             .newComparisonPredicate(columnsSchema, op, (Long) rightHandValue);
                     }
@@ -80,5 +85,15 @@ public final class CalciteKuduPredicate {
                     return null;
                 })
             .orElse(KuduPredicate.newIsNullPredicate(columnsSchema));
+    }
+
+    private KuduPredicate.ComparisonOp invertComparisonOp(final KuduPredicate.ComparisonOp currentOp) {
+      switch(currentOp) {
+        case GREATER: return KuduPredicate.ComparisonOp.LESS;
+        case GREATER_EQUAL: return KuduPredicate.ComparisonOp.LESS_EQUAL;
+        case LESS: return KuduPredicate.ComparisonOp.GREATER;
+        case LESS_EQUAL: return KuduPredicate.ComparisonOp.GREATER_EQUAL;
+        default: return currentOp; //Return current Op as is when Op is "EQUAL"
+      }
     }
 }

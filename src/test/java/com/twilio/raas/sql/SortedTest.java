@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -31,11 +32,11 @@ public final class SortedTest {
         final Object[] largestRow = {Long.valueOf(100), Long.valueOf(20)};
 
         final List<CalciteRow> lastScanner = Arrays.asList(
-            new CalciteRow(rowSchema, smallestRow, Arrays.asList(0)),
-            new CalciteRow(rowSchema, middleRow, Arrays.asList(0))
+            new CalciteRow(rowSchema, smallestRow, Arrays.asList(0), Optional.empty()),
+            new CalciteRow(rowSchema, middleRow, Arrays.asList(0), Optional.empty())
         );
         final List<CalciteRow> firstScanner = Arrays.asList(
-            new CalciteRow(rowSchema, largestRow, Arrays.asList(0))
+            new CalciteRow(rowSchema, largestRow, Arrays.asList(0), Optional.empty())
         );
 
         final List<Enumerator<CalciteRow>> subEnumerables = Arrays.asList(
@@ -61,7 +62,8 @@ public final class SortedTest {
            rowSchema,
            -1,
            -1,
-            false)
+            false,
+           Optional.empty())
            .sortedEnumerator(subEnumerables);
 
         assertTrue("Should have at least one result",

@@ -77,12 +77,13 @@ public final class JDBCQueryRunnerIT {
   @Test
   public void testQuery() throws Exception {
     try (final JDBCQueryRunner runner = new JDBCQueryRunner(testHarness.getMasterAddressesAsString(), 1)) {
-      List<Map<String, String>> records = runner
-	.executeSql("SELECT account_sid, sid FROM kudu.\"ReportCenter.DeliveredMessages\"", (rs -> {
-	      final Map<String, String> record = new HashMap<>();
+      List<Map<String, Object>> records = runner
+	.executeSql("SELECT account_sid, date_created, sid FROM kudu.\"ReportCenter.DeliveredMessages\"", (rs -> {
+	      final Map<String, Object> record = new HashMap<>();
 	      try {
 		record.put("account_sid", rs.getString(1));
-		record.put("sid", rs.getString(2));
+		record.put("date_created", rs.getLong(2));
+		record.put("sid", rs.getString(3));
 	      }
 	      catch (SQLException failed) {
 		// swallow it.

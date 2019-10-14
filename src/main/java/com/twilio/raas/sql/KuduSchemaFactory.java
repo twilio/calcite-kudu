@@ -5,6 +5,7 @@ import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Optional;
 
 
 public final class KuduSchemaFactory implements SchemaFactory {
@@ -16,7 +17,8 @@ public final class KuduSchemaFactory implements SchemaFactory {
     public Schema create(SchemaPlus parentSchema, String name,
                          Map<String, Object> operand) {
         final String connectString = (String) operand.get("connect");
-        schemaCache.computeIfAbsent(connectString, (masterAddresses) -> new KuduSchema(masterAddresses));
+        final Map<String, String> descendingSortedTables = (Map<String, String>) operand.get("descendingSortedTables");
+        schemaCache.computeIfAbsent(connectString, (masterAddresses) -> new KuduSchema(masterAddresses, Optional.of(descendingSortedTables)));
         return schemaCache.get(connectString);
     }
 }

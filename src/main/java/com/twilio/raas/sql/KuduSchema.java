@@ -21,11 +21,16 @@ import java.util.Optional;
 public final class KuduSchema extends AbstractSchema {
 
     private final AsyncKuduClient client;
+    private Optional<Map<String, String>> descendingSortedTables = Optional.empty();
     private Optional<Map<String, Table>> cachedTableMap = Optional.empty();
-  
+
     public KuduSchema(final String connectString) {
-        this.client = new AsyncKuduClient.AsyncKuduClientBuilder(connectString)
-            .build();
+        this(connectString, Optional.empty());
+    }
+
+    public KuduSchema(final String connectString, final Optional<Map<String, String>> descendingSortedTables) {
+        this.client = new AsyncKuduClient.AsyncKuduClientBuilder(connectString).build();
+        this.descendingSortedTables = descendingSortedTables;
     }
 
     @Override
@@ -48,10 +53,10 @@ public final class KuduSchema extends AbstractSchema {
         for (String tableName: tableNames) {
             try {
                 tableMap.put(tableName,
-                             new CalciteKuduTable(client
-                                                  .openTable(tableName)
-                                                  .join(),
-                                                  client));
+                             new CalciteKuduTable(client.openTable(tableName).join(),
+                                                  client,
+                                                  (descendingSortedTables.isPresent() && descendingSortedTables.get().containsKey(tableName)) ?
+                                                      Optional.of(descendingSortedTables.get().get(tableName)) : Optional.empty()));
             }
             catch (Exception failedToOpen) {
                 // @TODO: hmm this seems wrong.

@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;
 import org.apache.calcite.linq4j.Enumerator;
+
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
 
@@ -42,6 +44,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     public final boolean sort;
     public final long limit;
     public final long offset;
+    public final Optional<String> descendingSortedDateTimeField;
 
     public SortableEnumerable(
         List<AsyncKuduScanner> scanners,
@@ -50,7 +53,8 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
         final Schema tableSchema,
         final long limit,
         final long offset,
-        final boolean sort) {
+        final boolean sort,
+        final Optional<String> descendingSortedDateTimeField) {
         this.scanners = scanners;
         this.scansShouldStop = scansShouldStop;
         this.projectedSchema = projectedSchema;
@@ -60,6 +64,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
         // if we have an offset always sort by the primary key to ensure the rows are returned
         // in a predictible order
         this.sort = offset>0 || sort;
+        this.descendingSortedDateTimeField = descendingSortedDateTimeField;
     }
 
     @VisibleForTesting
@@ -247,9 +252,12 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                         // callback and the CalciteKuduEnumerable need to both share
                         // queue.
                         scanner.nextRows()
-                            .addBothDeferring(new ScannerCallback(scanner, rowResults, scansShouldStop,
-                                tableSchema,
-                                    projectedSchema));
+                            .addBothDeferring(new ScannerCallback(scanner,
+                                                                  rowResults,
+                                                                  scansShouldStop,
+                                                                  tableSchema,
+                                                                  projectedSchema,
+                                                                  descendingSortedDateTimeField));
                         // Limit is not required here. do not use it.
                         return new CalciteKuduEnumerable(
                             rowResults,
@@ -267,7 +275,12 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
             .forEach(scanner -> {
                     scanner.nextRows()
                         .addBothDeferring(
-                            new ScannerCallback(scanner, messages, scansShouldStop, tableSchema, projectedSchema));
+                            new ScannerCallback(scanner,
+                                                messages,
+                                                scansShouldStop,
+                                                tableSchema,
+                                                projectedSchema,
+                                                descendingSortedDateTimeField));
                 });
         final int numScanners = scanners.size();
 

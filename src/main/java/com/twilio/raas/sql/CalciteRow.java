@@ -5,9 +5,11 @@ import org.apache.kudu.client.RowResult;
 import org.apache.kudu.ColumnSchema;
 import java.nio.ByteBuffer;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.ArrayList;
 import java.math.BigDecimal;
+import java.util.Optional;
 
 /**
  * A Plain Java Object that represents a Projected response from Kudu RPCs. It
@@ -18,6 +20,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
     public final Schema rowSchema;
     public final Object[] rowData;
     public final List<Integer> primaryKeyColumnsInProjection;
+    public final Optional<String> descendingSortedDateTimeField;
 
     /**
      * Return the Integer indices in the Row Projection that match the primary
@@ -61,10 +64,14 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      * @param rowData   Raw data for the row. Needs to conform to rowSchema.
      * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
      */
-    public CalciteRow(final Schema rowSchema, final Object[] rowData, final List<Integer> primaryKeyColumnsInProjection) {
+    public CalciteRow(final Schema rowSchema,
+                      final Object[] rowData,
+                      final List<Integer> primaryKeyColumnsInProjection,
+                      final Optional<String> descendingSortedDateTimeField) {
         this.rowSchema = rowSchema;
         this.rowData = rowData;
         this.primaryKeyColumnsInProjection = primaryKeyColumnsInProjection;
+        this.descendingSortedDateTimeField = descendingSortedDateTimeField;
     }
 
     /**
@@ -73,13 +80,15 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      * @param rowFromKudu Row returned from the Scanner RPC.
      * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
      */
-    public CalciteRow(final RowResult rowFromKudu, final List<Integer> primaryKeyColumnsInProjection) {
+    public CalciteRow(final RowResult rowFromKudu,
+                      final List<Integer> primaryKeyColumnsInProjection,
+                      final Optional<String> descendingSortedDateTimeField) {
 
         final int rowCount = rowFromKudu.getColumnProjection().getColumns().size();
         this.rowData = new Object[rowCount];
         this.rowSchema = rowFromKudu.getSchema();
-
         this.primaryKeyColumnsInProjection = primaryKeyColumnsInProjection;
+        this.descendingSortedDateTimeField = descendingSortedDateTimeField;
 
         int columnIndex = 0;
         for (ColumnSchema columnType: this.rowSchema.getColumns()) {
@@ -98,7 +107,11 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                     this.rowData[columnIndex] = rowFromKudu.getInt(columnIndex);
                     break;
                 case INT64:
-                    this.rowData[columnIndex] = rowFromKudu.getLong(columnIndex);
+                    if (descendingSortedDateTimeField.isPresent() && columnType.getName().equals(descendingSortedDateTimeField.get())) {
+                        this.rowData[columnIndex] = (Long.MAX_VALUE - rowFromKudu.getLong(columnIndex))/1000L;
+                    } else {
+                        this.rowData[columnIndex] = rowFromKudu.getLong(columnIndex);
+                    }
                     break;
                 case STRING:
                     this.rowData[columnIndex] = rowFromKudu.getString(columnIndex);

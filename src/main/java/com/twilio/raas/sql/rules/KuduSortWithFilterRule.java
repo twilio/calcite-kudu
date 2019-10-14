@@ -59,7 +59,10 @@ public class KuduSortWithFilterRule extends RelOptRule {
 
         for (RelFieldCollation sortField: originalSort.getCollation().getFieldCollations()) {
             if (sortField.direction != RelFieldCollation.Direction.ASCENDING &&
-                sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING) {
+                sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING &&
+                !query.descendingSortedDateTimeField.isPresent())
+            // @TODO: See if there is a way to check if field is not the descending date time field and asking for a non ASC sort
+            {
                 return;
             }
             if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount()) {

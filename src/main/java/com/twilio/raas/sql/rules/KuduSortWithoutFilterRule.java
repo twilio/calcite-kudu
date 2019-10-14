@@ -46,7 +46,8 @@ public class KuduSortWithoutFilterRule extends RelOptRule {
 
         for (RelFieldCollation sortField: originalSort.getCollation().getFieldCollations()) {
             if (sortField.direction != RelFieldCollation.Direction.ASCENDING &&
-                    sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING) {
+                sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING &&
+                !query.descendingSortedDateTimeField.isPresent()) {
                 return;
             }
             if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount() ||

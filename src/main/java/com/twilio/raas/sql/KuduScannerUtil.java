@@ -3,26 +3,15 @@ package org.apache.kudu.client;
 // AbstractKuduScannerBuilder.lowerBoundPartitionKeyRaw and
 // AbstractKuduScannerBuilder.exclusiveUpperBoundPartitionKeyRaw
 
-import org.apache.kudu.client.AbstractKuduScannerBuilder;
-import org.apache.kudu.client.AsyncKuduClient;
-import org.apache.kudu.client.AsyncKuduScanner;
-import org.apache.kudu.client.KuduPredicate;
-import org.apache.kudu.client.KuduScanToken;
-import org.apache.kudu.client.ReplicaSelection;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Common;
 import org.apache.kudu.client.Client.ScanTokenPB;
-import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.shaded.com.google.protobuf.CodedInputStream;
 
 public class KuduScannerUtil {

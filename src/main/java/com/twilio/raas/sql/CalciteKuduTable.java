@@ -17,6 +17,7 @@ import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
 import org.apache.kudu.client.AsyncKuduClient;
 
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.AsyncKuduScanner;
 import org.apache.calcite.linq4j.Enumerator;
@@ -49,16 +50,22 @@ public final class CalciteKuduTable extends AbstractQueryableTable
 
     private final KuduTable openedTable;
     private final AsyncKuduClient client;
+    private final Optional<String> descendingSortedDateTimeField;
+
+    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client) {
+        this(openedTable, client, Optional.empty());
+    }
 
     /**
      * Create the {@code CalciteKuduTable} for a physical scan over
      * the provided {@link KuduTable}. {@code KuduTable} must exist
      * and be opened.
      */
-    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client) {
+    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client, final Optional<String> descendingSortedDateTimeField) {
         super(Object[].class);
         this.openedTable = openedTable;
         this.client = client;
+        this.descendingSortedDateTimeField = descendingSortedDateTimeField;
     }
 
     /**
@@ -69,8 +76,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         final RelDataTypeFactory.Builder builder = new RelDataTypeFactory.Builder(typeFactory);
         final Schema kuduSchema = this.openedTable.getSchema();
 
-        for (int i = 0; i < kuduSchema.getColumnCount(); i++) {
-            final ColumnSchema currentColumn = kuduSchema.getColumnByIndex(i);
+        for (final ColumnSchema currentColumn: kuduSchema.getColumns()) {
             switch (currentColumn.getType()) {
             case INT8:
                 builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.TINYINT)
@@ -85,8 +91,13 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                     .nullable(currentColumn.isNullable());
                 break;
             case INT64:
-                builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.BIGINT)
-                    .nullable(currentColumn.isNullable());
+                if (descendingSortedDateTimeField.isPresent() && descendingSortedDateTimeField.get().equals(currentColumn.getName())) {
+                    builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.TIMESTAMP)
+                        .nullable(currentColumn.isNullable());
+                } else {
+                    builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.BIGINT)
+                        .nullable(currentColumn.isNullable());
+                }
                 break;
             case BINARY:
                 builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.VARBINARY)
@@ -127,11 +138,12 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                          RelOptTable relOptTable) {
 
         final RelOptCluster cluster = context.getCluster();
-        return new KuduQuery(cluster, cluster.traitSetOf(KuduRel.CONVENTION),
-                             relOptTable, this.openedTable,
-                             this.getRowType(context
-                                             .getCluster()
-                                             .getTypeFactory()));
+        return new KuduQuery(cluster,
+                             cluster.traitSetOf(KuduRel.CONVENTION),
+                             relOptTable,
+                             this.openedTable,
+                             this.descendingSortedDateTimeField,
+                             this.getRowType(context.getCluster().getTypeFactory()));
     }
 
     /**
@@ -217,7 +229,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         }
 
         return new SortableEnumerable(scanners, scansShouldStop, projectedSchema,
-                openedTable.getSchema(), limit, offset, sorted);
+                openedTable.getSchema(), limit, offset, sorted, descendingSortedDateTimeField);
     }
 
     @Override
@@ -262,7 +274,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                            .map(subList -> {
                                                    return subList
                                                        .stream()
-                                                       .map(p ->  p.toPredicate(getTable().openedTable.getSchema()))
+                                                       .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedDateTimeField))
                                                        .collect(Collectors.toList());
                                                })
                 .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted);

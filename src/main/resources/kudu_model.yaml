@@ -6,3 +6,10 @@ schemas:
     factory: com.twilio.raas.sql.KuduSchemaFactory
     operand:
       connect: "localhost:7051"
+      kuduTableConfigs:
+        - tableName: ReportCenter.AuditEvents
+          descendingSortedFields:
+            - event_date
+        - tableName: AuditEvents-DailyIndex-Aggregation
+          descendingSortedFields:
+            - event_date
