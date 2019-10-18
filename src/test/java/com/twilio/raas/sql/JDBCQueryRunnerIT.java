@@ -25,21 +25,24 @@ import java.util.HashMap;
 import java.util.Map;
 import org.junit.Assert;
 import java.sql.SQLException;
+import com.twilio.dataEngine.protocol.ExecuteQueryLog;
+import com.twilio.dataEngine.protocol.ExecuteQueryRequest;
+import java.util.Collections;
 
 @RunWith(JUnit4.class)
 public final class JDBCQueryRunnerIT {
-  private static final Logger logger = LoggerFactory.getLogger(JDBCQueryRunnerIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(JDBCQueryRunnerIT.class);
 
-  public static String FIRST_SID = "SM1234857";
-  public static String SECOND_SID = "SM123485789";
+    public static String FIRST_SID = "SM1234857";
+    public static String SECOND_SID = "SM123485789";
 
-  public static String ACCOUNT_SID = "AC1234567";
+    public static String ACCOUNT_SID = "AC1234567";
 
-  @ClassRule
-  public static KuduTestHarness testHarness = new KuduTestHarness();
-  public static final String BASE_TABLE_NAME = "ReportCenter.DeliveredMessages";
+    @ClassRule
+    public static KuduTestHarness testHarness = new KuduTestHarness();
+    public static final String BASE_TABLE_NAME = "ReportCenter.DeliveredMessages";
 
-  public static KuduTable TABLE;
+    public static KuduTable TABLE;
 
   @BeforeClass
   public static void setup() throws Exception {
@@ -50,9 +53,9 @@ public final class JDBCQueryRunnerIT {
 
     testHarness.getClient().createTable(BASE_TABLE_NAME, new Schema(columns),
         new org.apache.kudu.client.CreateTableOptions()
-            .addHashPartitions(Arrays.asList("account_sid"), 5)
+        .addHashPartitions(Arrays.asList("account_sid"), 5)
+        .setNumReplicas(1));
 
-            .setNumReplicas(1));
     final AsyncKuduSession insertSession = testHarness.getAsyncClient().newSession();
     TABLE = testHarness.getClient().openTable(BASE_TABLE_NAME);
 
@@ -71,33 +74,44 @@ public final class JDBCQueryRunnerIT {
     insertSession.apply(secondRowOp).join();
   }
 
-  @AfterClass
-  public static void tearDown() throws Exception {
-    testHarness.getClient().deleteTable(BASE_TABLE_NAME);
-  }
-
-  @Test
-  public void testQuery() throws Exception {
-    try (final JDBCQueryRunner runner = new JDBCQueryRunner(testHarness.getMasterAddressesAsString(), 1)) {
-      List<Map<String, Object>> records = runner
-          .executeSql("SELECT account_sid, date_created, sid FROM kudu.\"ReportCenter.DeliveredMessages\"", (rs -> {
-            final Map<String, Object> record = new HashMap<>();
-            try {
-              record.put("account_sid", rs.getString(1));
-              record.put("date_created", rs.getLong(2));
-              record.put("sid", rs.getString(3));
-            } catch (SQLException failed) {
-              // swallow it.
-            }
-            return record;
-          }))
-          .toCompletableFuture().get();
-      Assert.assertEquals("should get the rows back",
-          2, records.size());
-      Assert.assertEquals("First record's account sid should match",
-          ACCOUNT_SID, records.get(0).get("account_sid"));
-      Assert.assertEquals("Second record's account sid should match",
-          ACCOUNT_SID, records.get(1).get("account_sid"));
+    @AfterClass
+    public static void tearDown() throws Exception {
+        testHarness.getClient().deleteTable(BASE_TABLE_NAME);
     }
-  }
+
+    @Test
+    public void testQuery() throws Exception {
+      try (final JDBCQueryRunner runner = new JDBCQueryRunner(testHarness.getMasterAddressesAsString(), 1)) {
+        List<Map<String, String>> records = runner
+          .executeSql("SELECT account_sid, sid FROM kudu.\"ReportCenter.DeliveredMessages\"", (rs -> {
+                    final Map<String, String> record = new HashMap<>();
+                    try {
+                      record.put("account_sid", rs.getString(1));
+                      record.put("sid", rs.getString(2));
+                    }
+                    catch (SQLException failed) {
+                      // swallow it.
+                    }
+                    return record;
+                  }),
+              new ExecuteQueryLog(
+                  new ExecuteQueryRequest(
+                      "test-dataset",
+                      Collections.emptyList(),
+                      Collections.emptyList(),
+                      0,
+                      Collections.emptyList(),
+                      null,
+                      null,
+                      Collections.emptyMap()),
+                  "test-query"), false)
+          .toCompletableFuture().get();
+        Assert.assertEquals("should get the rows back",
+            2, records.size());
+        Assert.assertEquals("First record's account sid should match",
+            ACCOUNT_SID, records.get(0).get("account_sid"));
+        Assert.assertEquals("Second record's account sid should match",
+            ACCOUNT_SID, records.get(1).get("account_sid"));
+      }
+    }
 }

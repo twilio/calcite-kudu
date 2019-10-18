@@ -1,6 +1,11 @@
 package com.twilio.raas.sql;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.apache.calcite.runtime.Hook;
+import com.twilio.dataEngine.protocol.ExecuteQueryLog;
+import java.util.function.Consumer;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.linq4j.tree.Expression;
 
 import java.sql.SQLException;
 import java.util.concurrent.CompletionStage;
@@ -104,22 +109,35 @@ public final class JDBCQueryRunner implements AutoCloseable {
      * future that will be complete with either a list of T or with an exception
      *
      * @param <T>                   A user supplied type that a {@link ResultSet} will be transformed into
-     * @param sql                   Raw sql to execute against dataset
+     * @param sql                   Raw sql to execute against data set
      * @param resultSetTransformer  function to transform a {@link ResultSet} into a T
      *
      * @return Future that will contain a {@link List} of T
      */
-    public <T> CompletionStage<List<T>> executeSql(final String sql, final Function<ResultSet, T> resultSetTransformer) {
+    public <T> CompletionStage<List<T>> executeSql(final String sql, final Function<ResultSet, T> resultSetTransformer,
+        final ExecuteQueryLog log, final Boolean isPrevious) {
+
         final CompletableFuture<List<T>> pendingResult = new CompletableFuture<>();
+        final long taskCreationTime = System.currentTimeMillis();
         this.threadPool.execute(() -> {
                 List<T> allRows = new ArrayList<>();
-                try (Connection con = this.dbPool.getConnection();
-                     Statement statement = con.createStatement();
-                     ResultSet rs = statement.executeQuery(sql)) {
-                    while(rs.next()) {
-                        allRows.add(resultSetTransformer.apply(rs));
+                final long startJDBCAcquistion = System.currentTimeMillis();
+                try (Connection con = this.dbPool.getConnection()) {
+                    final long connectionAcquiredAt = System.currentTimeMillis();
+                    log.setJdbcConnectionAcquired(isPrevious, connectionAcquiredAt - taskCreationTime);
+                    try (Statement statement = con.createStatement();
+                        ResultSet rs = statement.executeQuery(sql)) {
+                        boolean firstRow = true;
+                        while(rs.next()) {
+                            if (firstRow) {
+                                firstRow = false;
+                                log.setDurationToFirstRow(isPrevious,
+                                    System.currentTimeMillis() - connectionAcquiredAt);
+                            }
+                            allRows.add(resultSetTransformer.apply(rs));
+                        }
+                        pendingResult.complete(allRows);
                     }
-                    pendingResult.complete(allRows);
                 }
                 catch (Exception | Error failure) {
                     pendingResult.completeExceptionally(failure);

@@ -13,6 +13,11 @@
     <name>SQL parsing, optimization and execution</name>
 
     <dependencies>
+        <dependency>
+            <artifactId>data-engine-protocol</artifactId>
+            <groupId>com.twilio.raas</groupId>
+        </dependency>
+
 	<dependency>
             <artifactId>freemarker</artifactId>
             <groupId>org.freemarker</groupId>
@@ -22,7 +27,7 @@
             <groupId>org.apache.kudu</groupId>
             <artifactId>kudu-client</artifactId>
         </dependency>
-	<!-- it is unclear to me how drill includes calcite version 1.17.0-drill-r2 -->
+
 	<dependency>
 	    <groupId>org.apache.calcite</groupId>
 	    <artifactId>calcite-core</artifactId>
