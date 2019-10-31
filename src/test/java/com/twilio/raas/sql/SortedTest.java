@@ -32,11 +32,11 @@ public final class SortedTest {
         final Object[] largestRow = {Long.valueOf(100), Long.valueOf(20)};
 
         final List<CalciteRow> lastScanner = Arrays.asList(
-            new CalciteRow(rowSchema, smallestRow, Arrays.asList(0), Optional.empty()),
-            new CalciteRow(rowSchema, middleRow, Arrays.asList(0), Optional.empty())
+            new CalciteRow(rowSchema, smallestRow, Arrays.asList(0), Collections.<Integer>emptyList()),
+            new CalciteRow(rowSchema, middleRow, Arrays.asList(0), Collections.<Integer>emptyList())
         );
         final List<CalciteRow> firstScanner = Arrays.asList(
-            new CalciteRow(rowSchema, largestRow, Arrays.asList(0), Optional.empty())
+            new CalciteRow(rowSchema, largestRow, Arrays.asList(0), Collections.<Integer>emptyList())
         );
 
         final List<Enumerator<CalciteRow>> subEnumerables = Arrays.asList(
@@ -63,7 +63,7 @@ public final class SortedTest {
            -1,
            -1,
             false,
-           Optional.empty())
+           Collections.<Integer>emptyList())
            .sortedEnumerator(subEnumerables);
 
         assertTrue("Should have at least one result",

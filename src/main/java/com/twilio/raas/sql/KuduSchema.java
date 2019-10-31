@@ -13,6 +13,8 @@ import com.google.common.collect.ImmutableMultimap;
 import java.sql.Timestamp;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.impl.ScalarFunctionImpl;
+import org.apache.kudu.client.KuduTable;
+
 import java.util.Collection;
 import java.util.Set;
 import java.util.Optional;
@@ -21,16 +23,16 @@ import java.util.Optional;
 public final class KuduSchema extends AbstractSchema {
 
     private final AsyncKuduClient client;
-    private Optional<Map<String, String>> descendingSortedTables = Optional.empty();
+    private final Map<String, KuduTableConfig> kuduTableConfigMap;
     private Optional<Map<String, Table>> cachedTableMap = Optional.empty();
 
     public KuduSchema(final String connectString) {
-        this(connectString, Optional.empty());
+        this(connectString, Collections.EMPTY_MAP);
     }
 
-    public KuduSchema(final String connectString, final Optional<Map<String, String>> descendingSortedTables) {
+    public KuduSchema(final String connectString, final Map<String, KuduTableConfig> kuduTableConfigMap) {
         this.client = new AsyncKuduClient.AsyncKuduClientBuilder(connectString).build();
-        this.descendingSortedTables = descendingSortedTables;
+        this.kuduTableConfigMap = kuduTableConfigMap;
     }
 
     @Override
@@ -52,11 +54,13 @@ public final class KuduSchema extends AbstractSchema {
         }
         for (String tableName: tableNames) {
             try {
+                final KuduTable openedTable = client.openTable(tableName).join();
+                final List<String> descendingSortedColumns = kuduTableConfigMap.containsKey(tableName) ? kuduTableConfigMap.get(tableName).getDescendingSortedFields() : Collections.<String>emptyList();
+                final List<Integer> descendingSortedColumnIndices = descendingSortedColumns.stream().map(name -> openedTable.getSchema().getColumnIndex(name)).collect(Collectors.toList());
                 tableMap.put(tableName,
                              new CalciteKuduTable(client.openTable(tableName).join(),
                                                   client,
-                                                  (descendingSortedTables.isPresent() && descendingSortedTables.get().containsKey(tableName)) ?
-                                                      Optional.of(descendingSortedTables.get().get(tableName)) : Optional.empty()));
+                                                  descendingSortedColumnIndices));
             }
             catch (Exception failedToOpen) {
                 // @TODO: hmm this seems wrong.

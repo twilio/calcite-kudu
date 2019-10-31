@@ -18,12 +18,20 @@ import org.junit.runners.JUnit4;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
 public final class DescendingSortedOnDatetimeIT {
@@ -35,23 +43,51 @@ public final class DescendingSortedOnDatetimeIT {
 
   public static String ACCOUNT_SID = "AC1234567";
 
+  private static final String EVENT_DATE_FIELD = "event_date";
+
   @ClassRule
   public static KuduTestHarness testHarness = new KuduTestHarness();
   private static final String BASE_TABLE_NAME = "ReportCenter.AuditEvents";
 
   private static KuduTable TABLE;
 
+  private static void validateRow(ResultSet rs,
+                                  long expectedTimestamp,
+                                  String expectedSid) throws SQLException {
+    assertEquals("Mismatched account sid", ACCOUNT_SID,
+        rs.getString("account_sid"));
+    assertEquals("Mismatched event_date", expectedTimestamp,
+        rs.getTimestamp(EVENT_DATE_FIELD).toInstant().toEpochMilli());
+    assertEquals("Mismatched sid", expectedSid,
+        rs.getString("sid"));
+  }
+
   @BeforeClass
   public static void setup() throws Exception {
     final List<ColumnSchema> columns = Arrays.asList(
         new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).key(true).build(),
         new ColumnSchema.ColumnSchemaBuilder("event_date", Type.INT64).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("sid", Type.STRING).key(true).build());
+        new ColumnSchema.ColumnSchemaBuilder("sid", Type.STRING).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("resource_type", Type.STRING).build());
 
-    testHarness.getClient().createTable(BASE_TABLE_NAME, new Schema(columns),
+    Schema schema = new Schema(columns);
+    PartialRow row1 = schema.newPartialRow();
+    row1.addLong(EVENT_DATE_FIELD, Long.MAX_VALUE - (Instant.parse("2018-12-31T00:00:00.000Z").toEpochMilli()*1000L));
+    PartialRow row2 = schema.newPartialRow();
+    row2.addLong(EVENT_DATE_FIELD, Long.MAX_VALUE - (Instant.parse("2019-01-01T00:00:00.000Z").toEpochMilli()*1000L));
+    PartialRow row3 = schema.newPartialRow();
+    row3.addLong(EVENT_DATE_FIELD, Long.MAX_VALUE - (Instant.parse("2019-01-02T00:00:00.000Z").toEpochMilli()*1000L));
+    PartialRow row4 = schema.newPartialRow();
+    row3.addLong(EVENT_DATE_FIELD, Long.MAX_VALUE - (Instant.parse("2019-01-03T00:00:00.000Z").toEpochMilli()*1000L));
+
+
+    testHarness.getClient().createTable(BASE_TABLE_NAME, schema,
         new org.apache.kudu.client.CreateTableOptions()
             .addHashPartitions(Arrays.asList("account_sid"), 5)
-
+            .setRangePartitionColumns(Arrays.asList("event_date"))
+            .addRangePartition(row4, row3)
+            .addRangePartition(row3, row2)
+            .addRangePartition(row2, row1)
             .setNumReplicas(1));
     final AsyncKuduSession insertSession = testHarness.getAsyncClient().newSession();
     TABLE = testHarness.getClient().openTable(BASE_TABLE_NAME);
@@ -61,13 +97,15 @@ public final class DescendingSortedOnDatetimeIT {
     firstRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
     firstRowWrite.addLong("event_date", Long.MAX_VALUE - (Instant.parse("2019-01-02T01:00:00.000Z").toEpochMilli()*1000L));
     firstRowWrite.addString("sid", DescendingSortedOnDatetimeIT.FIRST_SID);
+    firstRowWrite.addString("resource_type", "message-body");
     insertSession.apply(firstRowOp).join();
 
     final Upsert secondRowOp = TABLE.newUpsert();
     final PartialRow secondRowWrite = secondRowOp.getRow();
     secondRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
     secondRowWrite.addLong("event_date", Long.MAX_VALUE - (Instant.parse("2019-01-02T02:25:00.000Z").toEpochMilli()*1000L));
-    secondRowWrite.addString("sid", "SM123485789");
+    secondRowWrite.addString("sid", DescendingSortedOnDatetimeIT.SECOND_SID);
+    secondRowWrite.addString("resource_type", "recording");
     insertSession.apply(secondRowOp).join();
 
     final Upsert thirdRowOp = TABLE.newUpsert();
@@ -75,6 +113,7 @@ public final class DescendingSortedOnDatetimeIT {
     thirdRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
     thirdRowWrite.addLong("event_date", Long.MAX_VALUE - (Instant.parse("2019-01-01T01:00:00.000Z").toEpochMilli()*1000L));
     thirdRowWrite.addString("sid", DescendingSortedOnDatetimeIT.THIRD_SID);
+    thirdRowWrite.addString("resource_type", "sms-geographic-permission");
     insertSession.apply(thirdRowOp).join();
   }
 
@@ -214,6 +253,70 @@ public final class DescendingSortedOnDatetimeIT {
           ACCOUNT_SID, records.get(0).get("account_sid"));
       Assert.assertTrue("First record's datetime is later than second's",
           Instant.ofEpochMilli((Long)records.get(0).get("event_date")).isAfter(Instant.ofEpochMilli((Long)records.get(1).get("event_date"))));
+    }
+  }
+
+  @Test
+  public void testSortWithFilter() throws Exception {
+    try (final JDBCQueryRunner runner = new JDBCQueryRunner(testHarness.getMasterAddressesAsString(), 1)) {
+      String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+      try (Connection conn = DriverManager.getConnection(url)) {
+        String firstBatchSqlFormat = "SELECT * FROM kudu.\"ReportCenter" +
+            ".AuditEvents\" "
+            + "WHERE account_sid = '%s' "
+            + "ORDER BY event_date desc, account_sid asc ";
+        String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+
+        // verify plan
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+        String plan = SqlUtil.getExplainPlan(rs);
+        String expectedPlanFormat = "KuduToEnumerableRel\n"
+        +"  KuduSortRel(sort0=[$1], sort1=[$0], dir0=[DESC], dir1=[ASC])\n"
+        +"    KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n"
+        +"      KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
+        String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+        assertEquals("Unexpected plan ", expectedPlan, plan);
+        rs = conn.createStatement().executeQuery(firstBatchSql);
+
+        assertTrue(rs.next());
+        validateRow(rs, 1546395900000L, DescendingSortedOnDatetimeIT.SECOND_SID);
+        assertTrue(rs.next());
+        validateRow(rs, 1546390800000L, DescendingSortedOnDatetimeIT.FIRST_SID);
+        assertTrue(rs.next());
+        validateRow(rs, 1546304400000L, DescendingSortedOnDatetimeIT.THIRD_SID);
+      }
+    }
+  }
+
+  @Test
+  public void testSortOnNonPkFieldWithFilter() throws Exception {
+    try (final JDBCQueryRunner runner = new JDBCQueryRunner(testHarness.getMasterAddressesAsString(), 1)) {
+      String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+      try (Connection conn = DriverManager.getConnection(url)) {
+        String firstBatchSqlFormat = "SELECT * FROM kudu.\"ReportCenter" +
+            ".AuditEvents\" "
+            + "WHERE account_sid = '%s' "
+            + "ORDER BY event_date desc, resource_type asc ";
+        String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+
+        // verify plan
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+        String plan = SqlUtil.getExplainPlan(rs);
+        String expectedPlanFormat = "EnumerableSort(sort0=[$1], sort1=[$3], dir0=[DESC], dir1=[ASC])\n" +
+            "  KuduToEnumerableRel\n" +
+            "    KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+            "      KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
+        String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+        assertEquals("Unexpected plan ", expectedPlan, plan);
+        rs = conn.createStatement().executeQuery(firstBatchSql);
+
+        assertTrue(rs.next());
+        validateRow(rs, 1546395900000L, DescendingSortedOnDatetimeIT.SECOND_SID);
+        assertTrue(rs.next());
+        validateRow(rs, 1546390800000L, DescendingSortedOnDatetimeIT.FIRST_SID);
+        assertTrue(rs.next());
+        validateRow(rs, 1546304400000L, DescendingSortedOnDatetimeIT.THIRD_SID);
+      }
     }
   }
 }

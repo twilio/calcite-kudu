@@ -44,7 +44,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     public final boolean sort;
     public final long limit;
     public final long offset;
-    public final Optional<String> descendingSortedDateTimeField;
+    public final List<Integer> descendingSortedDateTimeFieldIndices;
 
     public SortableEnumerable(
         List<AsyncKuduScanner> scanners,
@@ -54,7 +54,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
         final long limit,
         final long offset,
         final boolean sort,
-        final Optional<String> descendingSortedDateTimeField) {
+        final List<Integer> descendingSortedDateTimeFieldIndices) {
         this.scanners = scanners;
         this.scansShouldStop = scansShouldStop;
         this.projectedSchema = projectedSchema;
@@ -64,7 +64,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
         // if we have an offset always sort by the primary key to ensure the rows are returned
         // in a predictible order
         this.sort = offset>0 || sort;
-        this.descendingSortedDateTimeField = descendingSortedDateTimeField;
+        this.descendingSortedDateTimeFieldIndices = descendingSortedDateTimeFieldIndices;
     }
 
     @VisibleForTesting
@@ -257,7 +257,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                                                                   scansShouldStop,
                                                                   tableSchema,
                                                                   projectedSchema,
-                                                                  descendingSortedDateTimeField));
+                                                                  descendingSortedDateTimeFieldIndices));
                         // Limit is not required here. do not use it.
                         return new CalciteKuduEnumerable(
                             rowResults,
@@ -280,7 +280,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                                                 scansShouldStop,
                                                 tableSchema,
                                                 projectedSchema,
-                                                descendingSortedDateTimeField));
+                                                descendingSortedDateTimeFieldIndices));
                 });
         final int numScanners = scanners.size();
 

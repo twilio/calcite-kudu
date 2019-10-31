@@ -50,10 +50,10 @@ public final class CalciteKuduTable extends AbstractQueryableTable
 
     private final KuduTable openedTable;
     private final AsyncKuduClient client;
-    private final Optional<String> descendingSortedDateTimeField;
+    private final List<Integer> descendingSortedDateTimeFieldIndices;
 
     public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client) {
-        this(openedTable, client, Optional.empty());
+        this(openedTable, client, Collections.<Integer>emptyList());
     }
 
     /**
@@ -61,11 +61,11 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      * the provided {@link KuduTable}. {@code KuduTable} must exist
      * and be opened.
      */
-    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client, final Optional<String> descendingSortedDateTimeField) {
+    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client, final List<Integer> descendingSortedDateTimeFieldIndices) {
         super(Object[].class);
         this.openedTable = openedTable;
         this.client = client;
-        this.descendingSortedDateTimeField = descendingSortedDateTimeField;
+        this.descendingSortedDateTimeFieldIndices = descendingSortedDateTimeFieldIndices;
     }
 
     /**
@@ -76,7 +76,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         final RelDataTypeFactory.Builder builder = new RelDataTypeFactory.Builder(typeFactory);
         final Schema kuduSchema = this.openedTable.getSchema();
 
-        for (final ColumnSchema currentColumn: kuduSchema.getColumns()) {
+        for (int i = 0; i < kuduSchema.getColumnCount(); i++) {
+            final ColumnSchema currentColumn = kuduSchema.getColumnByIndex(i);
             switch (currentColumn.getType()) {
             case INT8:
                 builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.TINYINT)
@@ -91,7 +92,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                     .nullable(currentColumn.isNullable());
                 break;
             case INT64:
-                if (descendingSortedDateTimeField.isPresent() && descendingSortedDateTimeField.get().equals(currentColumn.getName())) {
+                if (descendingSortedDateTimeFieldIndices.contains(i)) {
                     builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.TIMESTAMP)
                         .nullable(currentColumn.isNullable());
                 } else {
@@ -142,7 +143,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                              cluster.traitSetOf(KuduRel.CONVENTION),
                              relOptTable,
                              this.openedTable,
-                             this.descendingSortedDateTimeField,
+                             this.descendingSortedDateTimeFieldIndices,
                              this.getRowType(context.getCluster().getTypeFactory()));
     }
 
@@ -229,7 +230,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         }
 
         return new SortableEnumerable(scanners, scansShouldStop, projectedSchema,
-                openedTable.getSchema(), limit, offset, sorted, descendingSortedDateTimeField);
+                openedTable.getSchema(), limit, offset, sorted, descendingSortedDateTimeFieldIndices);
     }
 
     @Override
@@ -274,7 +275,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                            .map(subList -> {
                                                    return subList
                                                        .stream()
-                                                       .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedDateTimeField))
+                                                       .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedDateTimeFieldIndices))
                                                        .collect(Collectors.toList());
                                                })
                 .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted);

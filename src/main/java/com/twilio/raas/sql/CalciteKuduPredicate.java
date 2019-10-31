@@ -1,5 +1,6 @@
 package com.twilio.raas.sql;
 
+import java.util.List;
 import java.util.Optional;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.client.KuduPredicate;
@@ -39,7 +40,7 @@ public final class CalciteKuduPredicate {
      *
      * @return {@code KuduPredicate} that represents this POJO
      */
-    public KuduPredicate toPredicate(Schema tableSchema, Optional<String> descendingSortedDateTimeField) {
+    public KuduPredicate toPredicate(Schema tableSchema, List<Integer> descendingSortedDateTimeFieldIndices) {
         final ColumnSchema columnsSchema = tableSchema.getColumn(columnName);
         return this.operation
             .map(op -> {
@@ -72,7 +73,7 @@ public final class CalciteKuduPredicate {
                             .newComparisonPredicate(columnsSchema, op, (Integer) rightHandValue);
                     }
                     else if (rightHandValue instanceof Long) {
-                        if(descendingSortedDateTimeField.isPresent()) {
+                        if(descendingSortedDateTimeFieldIndices.contains(tableSchema.getColumnIndex(columnName))) {
                             // subtract epoch microseconds from Long.MAX_VALUE
                             return KuduPredicate
                                 .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Long.MAX_VALUE - (Long)rightHandValue);

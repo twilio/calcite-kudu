@@ -20,7 +20,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
     public final Schema rowSchema;
     public final Object[] rowData;
     public final List<Integer> primaryKeyColumnsInProjection;
-    public final Optional<String> descendingSortedDateTimeField;
+    public final List<Integer> descendingSortedDateTimeFieldIndices;
 
     /**
      * Return the Integer indices in the Row Projection that match the primary
@@ -58,6 +58,25 @@ public final class CalciteRow implements Comparable<CalciteRow> {
     }
 
     /**
+     * Return the Integer indices of the tableIndices in the Row Projection.
+     */
+    public static List<Integer> findColumnsIndicesInProjection(final Schema projectedSchema, final List<Integer> tableIndices, final Schema tableSchema) {
+        final List<Integer> columnsInProjection = new ArrayList<>();
+        final List<ColumnSchema> columnSchemas = projectedSchema.getColumns();
+
+        for (Integer fieldIndex : tableIndices) {
+            final ColumnSchema columnSchema = tableSchema.getColumnByIndex(fieldIndex);
+            for (int columnIdx = 0; columnIdx < projectedSchema.getColumnCount(); columnIdx++) {
+                if (columnSchemas.get(columnIdx).getName().equals(columnSchema.getName())) {
+                    columnsInProjection.add(columnIdx);
+                    break;
+                }
+            }
+        }
+        return columnsInProjection;
+    }
+
+    /**
      * Create a Calcite row with provided rowData. Used for Testing.
      *
      * @param rowSchema The schema of the query projection
@@ -67,11 +86,11 @@ public final class CalciteRow implements Comparable<CalciteRow> {
     public CalciteRow(final Schema rowSchema,
                       final Object[] rowData,
                       final List<Integer> primaryKeyColumnsInProjection,
-                      final Optional<String> descendingSortedDateTimeField) {
+                      final List<Integer> descendingSortedDateTimeFieldIndices) {
         this.rowSchema = rowSchema;
         this.rowData = rowData;
         this.primaryKeyColumnsInProjection = primaryKeyColumnsInProjection;
-        this.descendingSortedDateTimeField = descendingSortedDateTimeField;
+        this.descendingSortedDateTimeFieldIndices = descendingSortedDateTimeFieldIndices;
     }
 
     /**
@@ -82,13 +101,13 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      */
     public CalciteRow(final RowResult rowFromKudu,
                       final List<Integer> primaryKeyColumnsInProjection,
-                      final Optional<String> descendingSortedDateTimeField) {
+                      final List<Integer> descendingSortedDateTimeFieldIndices) {
 
         final int rowCount = rowFromKudu.getColumnProjection().getColumns().size();
         this.rowData = new Object[rowCount];
         this.rowSchema = rowFromKudu.getSchema();
         this.primaryKeyColumnsInProjection = primaryKeyColumnsInProjection;
-        this.descendingSortedDateTimeField = descendingSortedDateTimeField;
+        this.descendingSortedDateTimeFieldIndices = descendingSortedDateTimeFieldIndices;
 
         int columnIndex = 0;
         for (ColumnSchema columnType: this.rowSchema.getColumns()) {
@@ -107,7 +126,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                     this.rowData[columnIndex] = rowFromKudu.getInt(columnIndex);
                     break;
                 case INT64:
-                    if (descendingSortedDateTimeField.isPresent() && columnType.getName().equals(descendingSortedDateTimeField.get())) {
+                    if (descendingSortedDateTimeFieldIndices.contains(columnIndex)) {
                         this.rowData[columnIndex] = (Long.MAX_VALUE - rowFromKudu.getLong(columnIndex))/1000L;
                     } else {
                         this.rowData[columnIndex] = rowFromKudu.getLong(columnIndex);

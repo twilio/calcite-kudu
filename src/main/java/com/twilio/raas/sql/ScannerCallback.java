@@ -35,18 +35,18 @@ final public class ScannerCallback
     final Queue<CalciteScannerMessage<CalciteRow>> rowResults;
     final AtomicBoolean scansShouldStop;
     final List<Integer> primaryKeyColumnsInProjection;
-    final Optional<String> descendingSortedDateTimeField;
+    final List<Integer> descendingSortedDateTimeFieldIndices;
     public ScannerCallback(final AsyncKuduScanner scanner,
                            final Queue<CalciteScannerMessage<CalciteRow>> rowResults,
                            final AtomicBoolean scansShouldStop,
                            final Schema tableSchema,
                            final Schema projectedSchema,
-                           final Optional<String> descendingSortedDateTimeField) {
+                           final List<Integer> descendingSortedDateTimeFieldIndices) {
         this.scanner = scanner;
         this.rowResults = rowResults;
         this.scansShouldStop = scansShouldStop;
         this.primaryKeyColumnsInProjection = CalciteRow.findPrimaryKeyColumnsInProjection(projectedSchema, tableSchema);
-        this.descendingSortedDateTimeField = descendingSortedDateTimeField;
+        this.descendingSortedDateTimeFieldIndices = CalciteRow.findColumnsIndicesInProjection(projectedSchema, descendingSortedDateTimeFieldIndices, tableSchema);
         logger.debug("ScannerCallback created for scanner" + scanner);
     }
 
@@ -57,7 +57,7 @@ final public class ScannerCallback
             while (nextBatch != null && nextBatch.hasNext()) {
                 final RowResult row = nextBatch.next();
                 final CalciteScannerMessage<CalciteRow> wrappedRow = new CalciteScannerMessage<>(
-                    new CalciteRow(row, primaryKeyColumnsInProjection, descendingSortedDateTimeField));
+                    new CalciteRow(row, primaryKeyColumnsInProjection, descendingSortedDateTimeFieldIndices));
                 if (rowResults.offer(wrappedRow) == false) {
                     // failed to add to the results queue, time to stop doing work.
                     logger.error("failed to insert a new row into pending results. Triggering early exit");
