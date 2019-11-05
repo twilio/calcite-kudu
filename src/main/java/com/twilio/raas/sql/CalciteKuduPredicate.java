@@ -79,8 +79,8 @@ public final class CalciteKuduPredicate {
                       if(descendingSortedDateTimeFieldIndices.contains(tableSchema.getColumnIndex(columnName))) {
                         // subtract epoch microseconds from Long.MAX_VALUE
                         return KuduPredicate
-                            .newComparisonPredicate(columnsSchema, invertComparisonOp(op), JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS -
-                                (Long)rightHandValue);
+                            .newComparisonPredicate(columnsSchema, invertComparisonOp(op),
+                                JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Long)rightHandValue);
                       }
                         return KuduPredicate
                             .newComparisonPredicate(columnsSchema, op, (Long) rightHandValue);

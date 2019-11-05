@@ -145,10 +145,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                 case UNIXTIME_MICROS:
                     // @TODO: is this the right response type?
                     if (descendingSortedDateTimeFieldIndices.contains(columnIndex)) {
-                        final Instant timeInstant = rowFromKudu.getTimestamp(columnIndex).toInstant();
-                        this.rowData[columnIndex] = (JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS -
-                            (TimeUnit.SECONDS.toMicros(timeInstant.getEpochSecond()) + TimeUnit.NANOSECONDS.toMicros(timeInstant.getNano())) // Get microseconds to subtract from reverse epoch
-                        )/1000L; // Divide by 1000L to convert to epoch milliseconds
+                        this.rowData[columnIndex] = (JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli());
                     } else {
                         this.rowData[columnIndex] = rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli();
                     }
@@ -207,7 +204,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                 cmp = ((Long) this.rowData[positionInProjection]).compareTo(
                         ((Long) o.rowData[positionInProjection]));
                 if (cmp != 0) {
-                    return cmp;
+                    return (descendingSortedDateTimeFieldIndices.contains(positionInProjection)) ? Math.negateExact(cmp) : cmp;
                 }
                 break;
             case STRING:
