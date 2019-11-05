@@ -1,11 +1,14 @@
 package com.twilio.raas.sql;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.client.KuduPredicate;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.util.concurrent.TimeUnit;
+
 import org.apache.kudu.Schema;
 
 /**
@@ -73,11 +76,12 @@ public final class CalciteKuduPredicate {
                             .newComparisonPredicate(columnsSchema, op, (Integer) rightHandValue);
                     }
                     else if (rightHandValue instanceof Long) {
-                        if(descendingSortedDateTimeFieldIndices.contains(tableSchema.getColumnIndex(columnName))) {
-                            // subtract epoch microseconds from Long.MAX_VALUE
-                            return KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Long.MAX_VALUE - (Long)rightHandValue);
-                        }
+                      if(descendingSortedDateTimeFieldIndices.contains(tableSchema.getColumnIndex(columnName))) {
+                        // subtract epoch microseconds from Long.MAX_VALUE
+                        return KuduPredicate
+                            .newComparisonPredicate(columnsSchema, invertComparisonOp(op), JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS -
+                                (Long)rightHandValue);
+                      }
                         return KuduPredicate
                             .newComparisonPredicate(columnsSchema, op, (Long) rightHandValue);
                     }
@@ -94,7 +98,9 @@ public final class CalciteKuduPredicate {
         case GREATER_EQUAL: return KuduPredicate.ComparisonOp.LESS_EQUAL;
         case LESS: return KuduPredicate.ComparisonOp.GREATER;
         case LESS_EQUAL: return KuduPredicate.ComparisonOp.GREATER_EQUAL;
-        default: return currentOp; //Return current Op as is when Op is "EQUAL"
+        case EQUAL: return currentOp;
+        default: throw new IllegalArgumentException(
+            String.format("Passed in an Operator that doesn't make sense for Kudu Predicates: %s", currentOp));
       }
     }
 }

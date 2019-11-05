@@ -58,9 +58,14 @@ public class KuduSortWithFilterRule extends RelOptRule {
         }
 
         for (RelFieldCollation sortField: originalSort.getCollation().getFieldCollations()) {
-            if (sortField.direction != RelFieldCollation.Direction.ASCENDING &&
-                sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING &&
-                !query.descendingSortedDateTimeFieldIndices.contains(sortField.getFieldIndex()))
+            // Reject for descending sorted fields if sort direction is not Descending
+            if ((query.descendingSortedDateTimeFieldIndices.contains(sortField.getFieldIndex()) &&
+                sortField.direction != RelFieldCollation.Direction.DESCENDING &&
+                sortField.direction != RelFieldCollation.Direction.STRICTLY_DESCENDING) ||
+                // Else Reject if sort order is not ascending
+                (!query.descendingSortedDateTimeFieldIndices.contains(sortField.getFieldIndex()) &&
+                    sortField.direction != RelFieldCollation.Direction.ASCENDING &&
+                    sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING))
             {
                 return;
             }

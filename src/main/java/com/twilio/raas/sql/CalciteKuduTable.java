@@ -92,13 +92,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                     .nullable(currentColumn.isNullable());
                 break;
             case INT64:
-                if (descendingSortedDateTimeFieldIndices.contains(i)) {
-                    builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.TIMESTAMP)
-                        .nullable(currentColumn.isNullable());
-                } else {
-                    builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.BIGINT)
-                        .nullable(currentColumn.isNullable());
-                }
+                builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.BIGINT)
+                    .nullable(currentColumn.isNullable());
                 break;
             case BINARY:
                 builder.add(currentColumn.getName().toUpperCase(), SqlTypeName.VARBINARY)

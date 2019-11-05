@@ -6,10 +6,12 @@ import org.apache.kudu.ColumnSchema;
 import java.nio.ByteBuffer;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A Plain Java Object that represents a Projected response from Kudu RPCs. It
@@ -126,11 +128,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                     this.rowData[columnIndex] = rowFromKudu.getInt(columnIndex);
                     break;
                 case INT64:
-                    if (descendingSortedDateTimeFieldIndices.contains(columnIndex)) {
-                        this.rowData[columnIndex] = (Long.MAX_VALUE - rowFromKudu.getLong(columnIndex))/1000L;
-                    } else {
-                        this.rowData[columnIndex] = rowFromKudu.getLong(columnIndex);
-                    }
+                    this.rowData[columnIndex] = rowFromKudu.getLong(columnIndex);
                     break;
                 case STRING:
                     this.rowData[columnIndex] = rowFromKudu.getString(columnIndex);
@@ -146,7 +144,14 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                     break;
                 case UNIXTIME_MICROS:
                     // @TODO: is this the right response type?
-                    this.rowData[columnIndex] = rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli();
+                    if (descendingSortedDateTimeFieldIndices.contains(columnIndex)) {
+                        final Instant timeInstant = rowFromKudu.getTimestamp(columnIndex).toInstant();
+                        this.rowData[columnIndex] = (JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS -
+                            (TimeUnit.SECONDS.toMicros(timeInstant.getEpochSecond()) + TimeUnit.NANOSECONDS.toMicros(timeInstant.getNano())) // Get microseconds to subtract from reverse epoch
+                        )/1000L; // Divide by 1000L to convert to epoch milliseconds
+                    } else {
+                        this.rowData[columnIndex] = rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli();
+                    }
                     break;
                 case DECIMAL:
                     this.rowData[columnIndex] = rowFromKudu.getDecimal(columnIndex);

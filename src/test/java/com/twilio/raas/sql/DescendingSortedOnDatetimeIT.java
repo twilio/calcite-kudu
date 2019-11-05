@@ -66,19 +66,19 @@ public final class DescendingSortedOnDatetimeIT {
   public static void setup() throws Exception {
     final List<ColumnSchema> columns = Arrays.asList(
         new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("event_date", Type.INT64).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("event_date", Type.UNIXTIME_MICROS).key(true).build(),
         new ColumnSchema.ColumnSchemaBuilder("sid", Type.STRING).key(true).build(),
         new ColumnSchema.ColumnSchemaBuilder("resource_type", Type.STRING).build());
 
     Schema schema = new Schema(columns);
     PartialRow row1 = schema.newPartialRow();
-    row1.addLong(EVENT_DATE_FIELD, Long.MAX_VALUE - (Instant.parse("2018-12-31T00:00:00.000Z").toEpochMilli()*1000L));
+    row1.addLong(EVENT_DATE_FIELD, JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Instant.parse("2018-12-31T00:00:00.000Z").toEpochMilli()*1000L));
     PartialRow row2 = schema.newPartialRow();
-    row2.addLong(EVENT_DATE_FIELD, Long.MAX_VALUE - (Instant.parse("2019-01-01T00:00:00.000Z").toEpochMilli()*1000L));
+    row2.addLong(EVENT_DATE_FIELD, JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Instant.parse("2019-01-01T00:00:00.000Z").toEpochMilli()*1000L));
     PartialRow row3 = schema.newPartialRow();
-    row3.addLong(EVENT_DATE_FIELD, Long.MAX_VALUE - (Instant.parse("2019-01-02T00:00:00.000Z").toEpochMilli()*1000L));
+    row3.addLong(EVENT_DATE_FIELD, JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Instant.parse("2019-01-02T00:00:00.000Z").toEpochMilli()*1000L));
     PartialRow row4 = schema.newPartialRow();
-    row3.addLong(EVENT_DATE_FIELD, Long.MAX_VALUE - (Instant.parse("2019-01-03T00:00:00.000Z").toEpochMilli()*1000L));
+    row3.addLong(EVENT_DATE_FIELD, JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Instant.parse("2019-01-03T00:00:00.000Z").toEpochMilli()*1000L));
 
 
     testHarness.getClient().createTable(BASE_TABLE_NAME, schema,
@@ -95,7 +95,7 @@ public final class DescendingSortedOnDatetimeIT {
     final Upsert firstRowOp = TABLE.newUpsert();
     final PartialRow firstRowWrite = firstRowOp.getRow();
     firstRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    firstRowWrite.addLong("event_date", Long.MAX_VALUE - (Instant.parse("2019-01-02T01:00:00.000Z").toEpochMilli()*1000L));
+    firstRowWrite.addLong("event_date", JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Instant.parse("2019-01-02T01:00:00.000Z").toEpochMilli()*1000L));
     firstRowWrite.addString("sid", DescendingSortedOnDatetimeIT.FIRST_SID);
     firstRowWrite.addString("resource_type", "message-body");
     insertSession.apply(firstRowOp).join();
@@ -103,7 +103,7 @@ public final class DescendingSortedOnDatetimeIT {
     final Upsert secondRowOp = TABLE.newUpsert();
     final PartialRow secondRowWrite = secondRowOp.getRow();
     secondRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    secondRowWrite.addLong("event_date", Long.MAX_VALUE - (Instant.parse("2019-01-02T02:25:00.000Z").toEpochMilli()*1000L));
+    secondRowWrite.addLong("event_date", JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Instant.parse("2019-01-02T02:25:00.000Z").toEpochMilli()*1000L));
     secondRowWrite.addString("sid", DescendingSortedOnDatetimeIT.SECOND_SID);
     secondRowWrite.addString("resource_type", "recording");
     insertSession.apply(secondRowOp).join();
@@ -111,7 +111,7 @@ public final class DescendingSortedOnDatetimeIT {
     final Upsert thirdRowOp = TABLE.newUpsert();
     final PartialRow thirdRowWrite = thirdRowOp.getRow();
     thirdRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    thirdRowWrite.addLong("event_date", Long.MAX_VALUE - (Instant.parse("2019-01-01T01:00:00.000Z").toEpochMilli()*1000L));
+    thirdRowWrite.addLong("event_date", JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Instant.parse("2019-01-01T01:00:00.000Z").toEpochMilli()*1000L));
     thirdRowWrite.addString("sid", DescendingSortedOnDatetimeIT.THIRD_SID);
     thirdRowWrite.addString("resource_type", "sms-geographic-permission");
     insertSession.apply(thirdRowOp).join();
@@ -271,9 +271,9 @@ public final class DescendingSortedOnDatetimeIT {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
         String plan = SqlUtil.getExplainPlan(rs);
         String expectedPlanFormat = "KuduToEnumerableRel\n"
-        +"  KuduSortRel(sort0=[$1], sort1=[$0], dir0=[DESC], dir1=[ASC])\n"
-        +"    KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n"
-        +"      KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
+            +"  KuduSortRel(sort0=[$1], sort1=[$0], dir0=[DESC], dir1=[ASC])\n"
+            +"    KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n"
+            +"      KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
         String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
         assertEquals("Unexpected plan ", expectedPlan, plan);
         rs = conn.createStatement().executeQuery(firstBatchSql);
@@ -282,6 +282,68 @@ public final class DescendingSortedOnDatetimeIT {
         validateRow(rs, 1546395900000L, DescendingSortedOnDatetimeIT.SECOND_SID);
         assertTrue(rs.next());
         validateRow(rs, 1546390800000L, DescendingSortedOnDatetimeIT.FIRST_SID);
+        assertTrue(rs.next());
+        validateRow(rs, 1546304400000L, DescendingSortedOnDatetimeIT.THIRD_SID);
+      }
+    }
+  }
+
+  @Test
+  public void testAscendingSortOnDescendingFieldWithFilter() throws Exception {
+    try (final JDBCQueryRunner runner = new JDBCQueryRunner(testHarness.getMasterAddressesAsString(), 1)) {
+      String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+      try (Connection conn = DriverManager.getConnection(url)) {
+        String firstBatchSqlFormat = "SELECT * FROM kudu.\"ReportCenter" +
+            ".AuditEvents\" "
+            + "WHERE account_sid = '%s' "
+            + "ORDER BY event_date asc ";
+        String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+
+        // verify plan
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+        String plan = SqlUtil.getExplainPlan(rs);
+        String expectedPlanFormat = "EnumerableSort(sort0=[$1], dir0=[ASC])\n" +
+            "  KuduToEnumerableRel\n" +
+            "    KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+            "      KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
+        String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+        assertEquals("Unexpected plan ", expectedPlan, plan);
+        rs = conn.createStatement().executeQuery(firstBatchSql);
+
+        assertTrue(rs.next());
+        validateRow(rs, 1546304400000L, DescendingSortedOnDatetimeIT.THIRD_SID);
+        assertTrue(rs.next());
+        validateRow(rs, 1546390800000L, DescendingSortedOnDatetimeIT.FIRST_SID);
+        assertTrue(rs.next());
+        validateRow(rs, 1546395900000L, DescendingSortedOnDatetimeIT.SECOND_SID);
+      }
+    }
+  }
+
+  @Test
+  public void testSortWithFilterAndLimit() throws Exception {
+    try (final JDBCQueryRunner runner = new JDBCQueryRunner(testHarness.getMasterAddressesAsString(), 1)) {
+      String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+      try (Connection conn = DriverManager.getConnection(url)) {
+        String firstBatchSqlFormat = "SELECT * FROM kudu.\"ReportCenter" +
+            ".AuditEvents\" "
+            + "WHERE account_sid = '%s' and event_date <= TIMESTAMP'2019-01-02 00:00:00' "
+            + "ORDER BY event_date desc "
+            + "LIMIT 1";
+        String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+
+        // verify plan
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+        String plan = SqlUtil.getExplainPlan(rs);
+        String expectedPlanFormat = "EnumerableLimit(fetch=[1])\n" +
+            "  KuduToEnumerableRel\n" +
+            "    KuduSortRel(sort0=[$1], dir0=[DESC])\n" +
+            "      KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567 , event_date LESS_EQUAL 1546387200000000])\n" +
+            "        KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
+        String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+        assertEquals("Unexpected plan ", expectedPlan, plan);
+        rs = conn.createStatement().executeQuery(firstBatchSql);
+
         assertTrue(rs.next());
         validateRow(rs, 1546304400000L, DescendingSortedOnDatetimeIT.THIRD_SID);
       }

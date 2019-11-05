@@ -28,6 +28,7 @@ import org.apache.calcite.jdbc.CalciteJdbc41Factory;
  */
 public final class JDBCQueryRunner implements AutoCloseable {
     public static String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'ReportCenter.AuditEvents', descendingSortedFields:['event_date']}, {tableName: 'AuditEvents-DailyIndex-Aggregation', descendingSortedFields:['event_date']}]}}]};caseSensitive=false;timeZone=UTC";
+    public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = Long.MAX_VALUE/1000L;
     private static int POOL_COUNTER = 0;
 
     private HikariDataSource dbPool;
