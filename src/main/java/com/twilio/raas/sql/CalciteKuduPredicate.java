@@ -1,13 +1,11 @@
 package com.twilio.raas.sql;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.client.KuduPredicate;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.kudu.Schema;
 
@@ -80,7 +78,7 @@ public final class CalciteKuduPredicate {
                         // subtract epoch microseconds from Long.MAX_VALUE
                         return KuduPredicate
                             .newComparisonPredicate(columnsSchema, invertComparisonOp(op),
-                                JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Long)rightHandValue);
+                                CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Long)rightHandValue);
                       }
                         return KuduPredicate
                             .newComparisonPredicate(columnsSchema, op, (Long) rightHandValue);

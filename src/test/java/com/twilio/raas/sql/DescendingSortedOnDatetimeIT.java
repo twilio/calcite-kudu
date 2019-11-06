@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
@@ -72,13 +71,13 @@ public final class DescendingSortedOnDatetimeIT {
 
     Schema schema = new Schema(columns);
     PartialRow row1 = schema.newPartialRow();
-    row1.addTimestamp(EVENT_DATE_FIELD, new Timestamp(JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2018-12-31T00:00:00.000Z").toEpochMilli())));
+    row1.addTimestamp(EVENT_DATE_FIELD, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2018-12-31T00:00:00.000Z").toEpochMilli())));
     PartialRow row2 = schema.newPartialRow();
-    row2.addTimestamp(EVENT_DATE_FIELD, new Timestamp(JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2019-01-01T00:00:00.000Z").toEpochMilli())));
+    row2.addTimestamp(EVENT_DATE_FIELD, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2019-01-01T00:00:00.000Z").toEpochMilli())));
     PartialRow row3 = schema.newPartialRow();
-    row3.addTimestamp(EVENT_DATE_FIELD, new Timestamp(JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS- (Instant.parse("2019-01-02T00:00:00.000Z").toEpochMilli())));
+    row3.addTimestamp(EVENT_DATE_FIELD, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS- (Instant.parse("2019-01-02T00:00:00.000Z").toEpochMilli())));
     PartialRow row4 = schema.newPartialRow();
-    row4.addTimestamp(EVENT_DATE_FIELD, new Timestamp(JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2019-01-03T00:00:00.000Z").toEpochMilli())));
+    row4.addTimestamp(EVENT_DATE_FIELD, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2019-01-03T00:00:00.000Z").toEpochMilli())));
 
     testHarness.getClient().createTable(BASE_TABLE_NAME, schema,
         new org.apache.kudu.client.CreateTableOptions()
@@ -94,7 +93,7 @@ public final class DescendingSortedOnDatetimeIT {
     final Upsert firstRowOp = TABLE.newUpsert();
     final PartialRow firstRowWrite = firstRowOp.getRow();
     firstRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    firstRowWrite.addTimestamp("event_date", new Timestamp(JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2019-01-02T01:00:00.000Z").toEpochMilli())));
+    firstRowWrite.addTimestamp("event_date", new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2019-01-02T01:00:00.000Z").toEpochMilli())));
     firstRowWrite.addString("sid", DescendingSortedOnDatetimeIT.FIRST_SID);
     firstRowWrite.addString("resource_type", "message-body");
     insertSession.apply(firstRowOp).join();
@@ -102,7 +101,7 @@ public final class DescendingSortedOnDatetimeIT {
     final Upsert secondRowOp = TABLE.newUpsert();
     final PartialRow secondRowWrite = secondRowOp.getRow();
     secondRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    secondRowWrite.addTimestamp("event_date", new Timestamp(JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS- (Instant.parse("2019-01-02T02:25:00.000Z").toEpochMilli())));
+    secondRowWrite.addTimestamp("event_date", new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS- (Instant.parse("2019-01-02T02:25:00.000Z").toEpochMilli())));
     secondRowWrite.addString("sid", DescendingSortedOnDatetimeIT.SECOND_SID);
     secondRowWrite.addString("resource_type", "recording");
     insertSession.apply(secondRowOp).join();
@@ -110,7 +109,7 @@ public final class DescendingSortedOnDatetimeIT {
     final Upsert thirdRowOp = TABLE.newUpsert();
     final PartialRow thirdRowWrite = thirdRowOp.getRow();
     thirdRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    thirdRowWrite.addTimestamp("event_date", new Timestamp(JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2019-01-01T01:00:00.000Z").toEpochMilli())));
+    thirdRowWrite.addTimestamp("event_date", new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Instant.parse("2019-01-01T01:00:00.000Z").toEpochMilli())));
     thirdRowWrite.addString("sid", DescendingSortedOnDatetimeIT.THIRD_SID);
     thirdRowWrite.addString("resource_type", "sms-geographic-permission");
     insertSession.apply(thirdRowOp).join();

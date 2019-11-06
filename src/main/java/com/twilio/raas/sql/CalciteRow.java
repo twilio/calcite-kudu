@@ -4,14 +4,9 @@ import org.apache.kudu.Schema;
 import org.apache.kudu.client.RowResult;
 import org.apache.kudu.ColumnSchema;
 import java.nio.ByteBuffer;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.List;
 import java.util.ArrayList;
 import java.math.BigDecimal;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
  * A Plain Java Object that represents a Projected response from Kudu RPCs. It
@@ -84,6 +79,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      * @param rowSchema The schema of the query projection
      * @param rowData   Raw data for the row. Needs to conform to rowSchema.
      * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
+     * @param descendingSortedDateTimeFieldIndices  Index of the descending sorted fields in the rowSchema projection
      */
     public CalciteRow(final Schema rowSchema,
                       final Object[] rowData,
@@ -100,6 +96,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      *
      * @param rowFromKudu Row returned from the Scanner RPC.
      * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
+     * @param descendingSortedDateTimeFieldIndices  Index of the descending sorted fields in the rowSchema projection
      */
     public CalciteRow(final RowResult rowFromKudu,
                       final List<Integer> primaryKeyColumnsInProjection,
@@ -145,7 +142,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                 case UNIXTIME_MICROS:
                     // @TODO: is this the right response type?
                     if (descendingSortedDateTimeFieldIndices.contains(columnIndex)) {
-                        this.rowData[columnIndex] = (JDBCQueryRunner.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli());
+                        this.rowData[columnIndex] = (CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli());
                     } else {
                         this.rowData[columnIndex] = rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli();
                     }
@@ -204,6 +201,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                 cmp = ((Long) this.rowData[positionInProjection]).compareTo(
                         ((Long) o.rowData[positionInProjection]));
                 if (cmp != 0) {
+                    // Negate comparator sign based on if column is descending sorted
                     return (descendingSortedDateTimeFieldIndices.contains(positionInProjection)) ? Math.negateExact(cmp) : cmp;
                 }
                 break;

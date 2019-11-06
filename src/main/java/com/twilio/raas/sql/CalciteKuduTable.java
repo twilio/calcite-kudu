@@ -3,6 +3,7 @@ package com.twilio.raas.sql;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.linq4j.Enumerable;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -17,7 +18,6 @@ import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
 import org.apache.kudu.client.AsyncKuduClient;
 
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.AsyncKuduScanner;
 import org.apache.calcite.linq4j.Enumerator;
@@ -47,6 +47,10 @@ import org.apache.kudu.client.KuduScannerUtil;
 public final class CalciteKuduTable extends AbstractQueryableTable
     implements TranslatableTable {
     private static final Logger logger = LoggerFactory.getLogger(CalciteKuduTable.class);
+
+    public static final Instant EPOCH_DAY_FOR_REVERSE_SORT = Instant.parse("9999-12-31T00:00:00.000000Z");
+    public static final Long EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS = EPOCH_DAY_FOR_REVERSE_SORT.toEpochMilli();
+    public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = org.apache.kudu.util.TimestampUtil.timestampToMicros(new java.sql.Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
 
     private final KuduTable openedTable;
     private final AsyncKuduClient client;

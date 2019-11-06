@@ -3,26 +3,20 @@ package com.twilio.raas.sql;
 import com.zaxxer.hikari.HikariDataSource;
 
 import java.sql.SQLException;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.concurrent.CompletionStage;
 import java.sql.ResultSet;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CompletableFuture;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.Properties;
 import com.zaxxer.hikari.HikariConfig;
 import java.util.concurrent.ThreadFactory;
 import java.sql.Statement;
 import com.codahale.metrics.MetricRegistry;
-import org.apache.calcite.jdbc.CalciteConnection;
-import org.apache.calcite.jdbc.CalciteJdbc41Factory;
 
 /**
  * Executes Sql queries asynchronously. By providing a thread pool size,
@@ -31,11 +25,6 @@ import org.apache.calcite.jdbc.CalciteJdbc41Factory;
  */
 public final class JDBCQueryRunner implements AutoCloseable {
     public static String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'ReportCenter.AuditEvents', descendingSortedFields:['event_date']}, {tableName: 'AuditEvents-DailyIndex-Aggregation', descendingSortedFields:['event_date']}]}}]};caseSensitive=false;timeZone=UTC";
-
-    public static final Instant EPOCH_DAY_FOR_REVERSE_SORT = Instant.parse("9999-12-31T00:00:00.000000Z");
-    public static final Long EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS = EPOCH_DAY_FOR_REVERSE_SORT.toEpochMilli();
-    public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = TimeUnit.SECONDS.toMicros(EPOCH_DAY_FOR_REVERSE_SORT.getEpochSecond()) + TimeUnit.NANOSECONDS.toMicros(EPOCH_DAY_FOR_REVERSE_SORT.getNano());
-
     private static int POOL_COUNTER = 0;
 
     private HikariDataSource dbPool;
