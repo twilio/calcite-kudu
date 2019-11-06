@@ -20,12 +20,14 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.kudu.client.KuduTable;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Relational expression representing a scan of a KuduTable
  */
 public final class KuduQuery extends TableScan implements KuduRel {
     final public KuduTable openedTable;
+    final public List<Integer> descendingSortedFieldIndices;
     final public RelDataType projectRowType;
 
     /**
@@ -36,10 +38,15 @@ public final class KuduQuery extends TableScan implements KuduRel {
      * @param openedTable    Kudu table
      * @param projectRowType Fields and types to project; null to project raw row
      */
-    public KuduQuery(RelOptCluster cluster, RelTraitSet traitSet,
-                     RelOptTable table, KuduTable openedTable, RelDataType projectRowType) {
+    public KuduQuery(RelOptCluster cluster,
+                     RelTraitSet traitSet,
+                     RelOptTable table,
+                     KuduTable openedTable,
+                     List<Integer> descendingSortedFieldIndices,
+                     RelDataType projectRowType) {
         super(cluster, traitSet, table);
         this.openedTable = openedTable;
+        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
         this.projectRowType = projectRowType;
         assert getConvention() == KuduRel.CONVENTION;
     }

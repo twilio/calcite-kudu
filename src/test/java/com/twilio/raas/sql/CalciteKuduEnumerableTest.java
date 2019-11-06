@@ -1,5 +1,7 @@
 package com.twilio.raas.sql;
 
+import java.util.Collections;
+import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.twilio.raas.sql.CalciteScannerMessage.MessageType;
@@ -41,7 +43,7 @@ public final class CalciteKuduEnumerableTest {
         final Enumerator<CalciteRow> enumerable = new CalciteKuduEnumerable(queue, new AtomicBoolean(false))
             .enumerator();
         final Object[] singleRow = {Long.valueOf(1)};
-        queue.add(new CalciteScannerMessage<CalciteRow>(new CalciteRow(rowSchema, singleRow, Arrays.asList(0))));
+        queue.add(new CalciteScannerMessage<CalciteRow>(new CalciteRow(rowSchema, singleRow, Arrays.asList(0), Collections.<Integer>emptyList())));
         queue.add(CalciteScannerMessage.<CalciteRow>createEndMessage());
         assertTrue("Should signal there are messages",
             enumerable.moveNext());

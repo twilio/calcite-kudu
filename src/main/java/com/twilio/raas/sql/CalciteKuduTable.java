@@ -3,6 +3,7 @@ package com.twilio.raas.sql;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.linq4j.Enumerable;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -47,18 +48,28 @@ public final class CalciteKuduTable extends AbstractQueryableTable
     implements TranslatableTable {
     private static final Logger logger = LoggerFactory.getLogger(CalciteKuduTable.class);
 
+    public static final Instant EPOCH_DAY_FOR_REVERSE_SORT = Instant.parse("9999-12-31T00:00:00.000000Z");
+    public static final Long EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS = EPOCH_DAY_FOR_REVERSE_SORT.toEpochMilli();
+    public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = org.apache.kudu.util.TimestampUtil.timestampToMicros(new java.sql.Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
+
     private final KuduTable openedTable;
     private final AsyncKuduClient client;
+    private final List<Integer> descendingSortedFieldIndices;
+
+    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client) {
+        this(openedTable, client, Collections.<Integer>emptyList());
+    }
 
     /**
      * Create the {@code CalciteKuduTable} for a physical scan over
      * the provided {@link KuduTable}. {@code KuduTable} must exist
      * and be opened.
      */
-    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client) {
+    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client, final List<Integer> descendingSortedFieldIndices) {
         super(Object[].class);
         this.openedTable = openedTable;
         this.client = client;
+        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
     }
 
     /**
@@ -127,11 +138,12 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                          RelOptTable relOptTable) {
 
         final RelOptCluster cluster = context.getCluster();
-        return new KuduQuery(cluster, cluster.traitSetOf(KuduRel.CONVENTION),
-                             relOptTable, this.openedTable,
-                             this.getRowType(context
-                                             .getCluster()
-                                             .getTypeFactory()));
+        return new KuduQuery(cluster,
+                             cluster.traitSetOf(KuduRel.CONVENTION),
+                             relOptTable,
+                             this.openedTable,
+                             this.descendingSortedFieldIndices,
+                             this.getRowType(context.getCluster().getTypeFactory()));
     }
 
     /**
@@ -217,7 +229,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         }
 
         return new SortableEnumerable(scanners, scansShouldStop, projectedSchema,
-                openedTable.getSchema(), limit, offset, sorted);
+                openedTable.getSchema(), limit, offset, sorted, descendingSortedFieldIndices);
     }
 
     @Override
@@ -262,7 +274,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                            .map(subList -> {
                                                    return subList
                                                        .stream()
-                                                       .map(p ->  p.toPredicate(getTable().openedTable.getSchema()))
+                                                       .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedFieldIndices))
                                                        .collect(Collectors.toList());
                                                })
                 .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted);

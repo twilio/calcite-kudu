@@ -3,6 +3,7 @@ package com.twilio.raas.sql.rules;
 import com.twilio.raas.sql.KuduRel;
 import com.twilio.raas.sql.rel.KuduToEnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
+import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
@@ -19,7 +20,7 @@ import org.slf4j.Logger;
  * {@link KuduRel#CONVENTION} to {@link EnumerableConvention}.
  *
  * Bulk of the work is in the implement method which takes an
- * {@link EnumeralbeRelImplementor} and creates
+ * {@link EnumerableRelImplementor} and creates
  * {@link org.apache.calcite.linq4j.tree.BlockStatement}.
  */
 public class KuduToEnumerableConverter extends ConverterRule {
