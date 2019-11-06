@@ -54,7 +54,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
 
     private final KuduTable openedTable;
     private final AsyncKuduClient client;
-    private final List<Integer> descendingSortedDateTimeFieldIndices;
+    private final List<Integer> descendingSortedFieldIndices;
 
     public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client) {
         this(openedTable, client, Collections.<Integer>emptyList());
@@ -65,11 +65,11 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      * the provided {@link KuduTable}. {@code KuduTable} must exist
      * and be opened.
      */
-    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client, final List<Integer> descendingSortedDateTimeFieldIndices) {
+    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client, final List<Integer> descendingSortedFieldIndices) {
         super(Object[].class);
         this.openedTable = openedTable;
         this.client = client;
-        this.descendingSortedDateTimeFieldIndices = descendingSortedDateTimeFieldIndices;
+        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
     }
 
     /**
@@ -142,7 +142,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                              cluster.traitSetOf(KuduRel.CONVENTION),
                              relOptTable,
                              this.openedTable,
-                             this.descendingSortedDateTimeFieldIndices,
+                             this.descendingSortedFieldIndices,
                              this.getRowType(context.getCluster().getTypeFactory()));
     }
 
@@ -229,7 +229,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         }
 
         return new SortableEnumerable(scanners, scansShouldStop, projectedSchema,
-                openedTable.getSchema(), limit, offset, sorted, descendingSortedDateTimeFieldIndices);
+                openedTable.getSchema(), limit, offset, sorted, descendingSortedFieldIndices);
     }
 
     @Override
@@ -274,7 +274,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                            .map(subList -> {
                                                    return subList
                                                        .stream()
-                                                       .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedDateTimeFieldIndices))
+                                                       .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedFieldIndices))
                                                        .collect(Collectors.toList());
                                                })
                 .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted);

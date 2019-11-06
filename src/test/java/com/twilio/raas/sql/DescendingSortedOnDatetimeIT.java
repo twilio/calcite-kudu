@@ -40,7 +40,7 @@ public final class DescendingSortedOnDatetimeIT {
   private static String SECOND_SID = "SM123485789";
   private static String THIRD_SID = "SM485789123";
 
-  public static String ACCOUNT_SID = "AC1234567";
+  private static String ACCOUNT_SID = "AC1234567";
 
   private static final String EVENT_DATE_FIELD = "event_date";
 

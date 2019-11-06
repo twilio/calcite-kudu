@@ -27,7 +27,7 @@ import java.util.Optional;
  */
 public final class KuduQuery extends TableScan implements KuduRel {
     final public KuduTable openedTable;
-    final public List<Integer> descendingSortedDateTimeFieldIndices;
+    final public List<Integer> descendingSortedFieldIndices;
     final public RelDataType projectRowType;
 
     /**
@@ -42,11 +42,11 @@ public final class KuduQuery extends TableScan implements KuduRel {
                      RelTraitSet traitSet,
                      RelOptTable table,
                      KuduTable openedTable,
-                     List<Integer> descendingSortedDateTimeFieldIndices,
+                     List<Integer> descendingSortedFieldIndices,
                      RelDataType projectRowType) {
         super(cluster, traitSet, table);
         this.openedTable = openedTable;
-        this.descendingSortedDateTimeFieldIndices = descendingSortedDateTimeFieldIndices;
+        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
         this.projectRowType = projectRowType;
         assert getConvention() == KuduRel.CONVENTION;
     }

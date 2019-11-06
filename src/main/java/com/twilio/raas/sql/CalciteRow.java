@@ -17,7 +17,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
     public final Schema rowSchema;
     public final Object[] rowData;
     public final List<Integer> primaryKeyColumnsInProjection;
-    public final List<Integer> descendingSortedDateTimeFieldIndices;
+    public final List<Integer> descendingSortedFieldIndices;
 
     /**
      * Return the Integer indices in the Row Projection that match the primary
@@ -79,16 +79,16 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      * @param rowSchema The schema of the query projection
      * @param rowData   Raw data for the row. Needs to conform to rowSchema.
      * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
-     * @param descendingSortedDateTimeFieldIndices  Index of the descending sorted fields in the rowSchema projection
+     * @param descendingSortedFieldIndices  Index of the descending sorted fields in the rowSchema projection
      */
     public CalciteRow(final Schema rowSchema,
                       final Object[] rowData,
                       final List<Integer> primaryKeyColumnsInProjection,
-                      final List<Integer> descendingSortedDateTimeFieldIndices) {
+                      final List<Integer> descendingSortedFieldIndices) {
         this.rowSchema = rowSchema;
         this.rowData = rowData;
         this.primaryKeyColumnsInProjection = primaryKeyColumnsInProjection;
-        this.descendingSortedDateTimeFieldIndices = descendingSortedDateTimeFieldIndices;
+        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
     }
 
     /**
@@ -96,17 +96,17 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      *
      * @param rowFromKudu Row returned from the Scanner RPC.
      * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
-     * @param descendingSortedDateTimeFieldIndices  Index of the descending sorted fields in the rowSchema projection
+     * @param descendingSortedFieldIndices  Index of the descending sorted fields in the rowSchema projection
      */
     public CalciteRow(final RowResult rowFromKudu,
                       final List<Integer> primaryKeyColumnsInProjection,
-                      final List<Integer> descendingSortedDateTimeFieldIndices) {
+                      final List<Integer> descendingSortedFieldIndices) {
 
         final int rowCount = rowFromKudu.getColumnProjection().getColumns().size();
         this.rowData = new Object[rowCount];
         this.rowSchema = rowFromKudu.getSchema();
         this.primaryKeyColumnsInProjection = primaryKeyColumnsInProjection;
-        this.descendingSortedDateTimeFieldIndices = descendingSortedDateTimeFieldIndices;
+        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
 
         int columnIndex = 0;
         for (ColumnSchema columnType: this.rowSchema.getColumns()) {
@@ -116,16 +116,32 @@ public final class CalciteRow implements Comparable<CalciteRow> {
             else {
                 switch(columnType.getType()) {
                 case INT8:
-                    this.rowData[columnIndex] = rowFromKudu.getByte(columnIndex);
+                    if (descendingSortedFieldIndices.contains(columnIndex)) {
+                        this.rowData[columnIndex] = (Byte.MAX_VALUE - rowFromKudu.getByte(columnIndex));
+                    } else {
+                        this.rowData[columnIndex] = rowFromKudu.getByte(columnIndex);
+                    }
                     break;
                 case INT16:
-                    this.rowData[columnIndex] = rowFromKudu.getShort(columnIndex);
+                    if (descendingSortedFieldIndices.contains(columnIndex)) {
+                        this.rowData[columnIndex] = (Short.MAX_VALUE - rowFromKudu.getShort(columnIndex));
+                    } else {
+                        this.rowData[columnIndex] = rowFromKudu.getShort(columnIndex);
+                    }
                     break;
                 case INT32:
-                    this.rowData[columnIndex] = rowFromKudu.getInt(columnIndex);
+                    if (descendingSortedFieldIndices.contains(columnIndex)) {
+                        this.rowData[columnIndex] = (Integer.MAX_VALUE - rowFromKudu.getInt(columnIndex));
+                    } else {
+                        this.rowData[columnIndex] = rowFromKudu.getInt(columnIndex);
+                    }
                     break;
                 case INT64:
-                    this.rowData[columnIndex] = rowFromKudu.getLong(columnIndex);
+                    if (descendingSortedFieldIndices.contains(columnIndex)) {
+                        this.rowData[columnIndex] = (Long.MAX_VALUE - rowFromKudu.getLong(columnIndex));
+                    } else {
+                        this.rowData[columnIndex] = rowFromKudu.getLong(columnIndex);
+                    }
                     break;
                 case STRING:
                     this.rowData[columnIndex] = rowFromKudu.getString(columnIndex);
@@ -141,13 +157,14 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                     break;
                 case UNIXTIME_MICROS:
                     // @TODO: is this the right response type?
-                    if (descendingSortedDateTimeFieldIndices.contains(columnIndex)) {
+                    if (descendingSortedFieldIndices.contains(columnIndex)) {
                         this.rowData[columnIndex] = (CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli());
                     } else {
                         this.rowData[columnIndex] = rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli();
                     }
                     break;
                 case DECIMAL:
+                    // BigDecimal would need a decided upon large value to choose to subtract from, in case if its used for reverse sorting
                     this.rowData[columnIndex] = rowFromKudu.getDecimal(columnIndex);
                     break;
                 default:
@@ -178,21 +195,21 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                 cmp = ((Byte) this.rowData[positionInProjection]).compareTo(
                         ((Byte) o.rowData[positionInProjection]));
                 if (cmp != 0) {
-                    return cmp;
+                    return (descendingSortedFieldIndices.contains(positionInProjection)) ? Math.negateExact(cmp) : cmp;
                 }
                 break;
             case INT16:
                 cmp = ((Short) this.rowData[positionInProjection]).compareTo(
                         ((Short) o.rowData[positionInProjection]));
                 if (cmp != 0) {
-                    return cmp;
+                    return (descendingSortedFieldIndices.contains(positionInProjection)) ? Math.negateExact(cmp) : cmp;
                 }
                 break;
             case INT32:
                 cmp = ((Integer) this.rowData[positionInProjection]).compareTo(
                         ((Integer) o.rowData[positionInProjection]));
                 if (cmp != 0) {
-                    return cmp;
+                    return (descendingSortedFieldIndices.contains(positionInProjection)) ? Math.negateExact(cmp) : cmp;
                 }
                 break;
             // @TODO: is this the right response type?
@@ -202,7 +219,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                         ((Long) o.rowData[positionInProjection]));
                 if (cmp != 0) {
                     // Negate comparator sign based on if column is descending sorted
-                    return (descendingSortedDateTimeFieldIndices.contains(positionInProjection)) ? Math.negateExact(cmp) : cmp;
+                    return (descendingSortedFieldIndices.contains(positionInProjection)) ? Math.negateExact(cmp) : cmp;
                 }
                 break;
             case STRING:

@@ -32,28 +32,51 @@ public final class JDBCQueryRunner implements AutoCloseable {
     private final String jdbcUrl;
 
     /**
-     * Create a runner with a kudu connection string in the format of host1:7051,host2:7051
+     * Overloaded constructor to create a runner with a kudu connection string in the format of host1:7051,host2:7051
      * where 7051 is the rpc port of the Kudu Leader running on that host.
      *
      * @param kuduConnectionString comma delimited list of kudu master and rpc port
      * @param threadPoolSize       size of the jdbc connection pool
      */
     public JDBCQueryRunner(final String kuduConnectionString, final int threadPoolSize) {
-        this(kuduConnectionString, threadPoolSize, null);
+        this(CALCITE_MODEL_TEMPLATE, kuduConnectionString, threadPoolSize, null);
+    }
+
+    /**
+     * Overloaded constructor which allows a yaml template to be specified for query processing
+     *
+     * @param template yaml template for defining schemata and other DB, table configs
+     * @param kuduConnectionString comma delimited list of kudu master and rpc port
+     * @param threadPoolSize       size of the jdbc connection pool
+     */
+    public JDBCQueryRunner(final String template, final String kuduConnectionString, final int threadPoolSize) {
+        this(template, kuduConnectionString, threadPoolSize, null);
+    }
+
+    /**
+     * Overloaded constructor with metrics registry parameter
+     *
+     * @param kuduConnectionString comma delimited list of kudu master and rpc port
+     * @param threadPoolSize       size of the jdbc connection pool
+     * @param registry MetricRegistry to capture metrics around query processing
+     */
+    public JDBCQueryRunner(final String kuduConnectionString, final int threadPoolSize, final MetricRegistry registry) {
+        this(CALCITE_MODEL_TEMPLATE, kuduConnectionString, threadPoolSize, registry);
     }
 
     /**
      * Create a runner with a kudu connection string in the format of host1:7051,host2:7051
      * where 7051 is the rpc port of the Kudu Leader running on that host.
      *
+     * @param template yaml template for defining schemata and other DB, table configs
      * @param kuduConnectionString comma delimited list of kudu master and rpc port
      * @param threadPoolSize       size of the jdbc connection pool
      * @param registry             Dropwizard metrics registry that will be used for some stats.
      */
-    public JDBCQueryRunner(final String kuduConnectionString, final int threadPoolSize, final MetricRegistry registry) {
+    public JDBCQueryRunner(final String template, final String kuduConnectionString, final int threadPoolSize, final MetricRegistry registry) {
         final Properties connectionProps = new Properties();
 
-        this.jdbcUrl = String.format(CALCITE_MODEL_TEMPLATE, kuduConnectionString);
+        this.jdbcUrl = String.format(template, kuduConnectionString);
         connectionProps.put("jdbcUrl", jdbcUrl);
         connectionProps.put("maximumPoolSize", threadPoolSize);
         connectionProps.put("minimumIdle", threadPoolSize);
