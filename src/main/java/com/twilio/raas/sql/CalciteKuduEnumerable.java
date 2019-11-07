@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Queue;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.AbstractEnumerable;
+import java.util.concurrent.BlockingQueue;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +20,7 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
 
     private CalciteScannerMessage<CalciteRow> next = null;
 
-    private final Queue<CalciteScannerMessage<CalciteRow>> rowResults;
+    private final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults;
     private final AtomicBoolean shouldStop;
 
     int closedScansCounter = 0;
@@ -33,7 +34,7 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
      * @param rowResults  shared queue to consume from for all the results
      * @param shouldStop    shared boolean that indicates termination of all scans.
      */
-    public CalciteKuduEnumerable(final Queue<CalciteScannerMessage<CalciteRow>> rowResults,
+    public CalciteKuduEnumerable(final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults,
                                  final AtomicBoolean shouldStop) {
         this.rowResults = rowResults;
         this.shouldStop = shouldStop;
@@ -50,7 +51,13 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
                 }
                 CalciteScannerMessage<CalciteRow> iterationNext;
                 do {
-                    iterationNext = rowResults.poll();
+                    try {
+                        iterationNext = rowResults.poll(350, TimeUnit.MILLISECONDS);
+                    }
+                    catch (InterruptedException interrupted) {
+                        logger.info("Interrupted during poll, closing scanner");
+                        iterationNext = CalciteScannerMessage.createEndMessage();
+                    }
                     if (iterationNext != null) {
                         switch (iterationNext.type) {
                         case CLOSE:

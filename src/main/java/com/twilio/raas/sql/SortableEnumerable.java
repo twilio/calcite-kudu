@@ -10,14 +10,14 @@ import org.apache.calcite.linq4j.Enumerator;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.calcite.linq4j.AbstractEnumerable;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Queue;
 import org.apache.kudu.client.AsyncKuduScanner;
 import org.apache.kudu.Schema;
-import org.jctools.queues.MpscUnboundedArrayQueue;
-import org.jctools.queues.SpscUnboundedArrayQueue;
 
 /**
  * An {@link Enumerable} that *can* returns Kudu records in Ascending order on
@@ -83,7 +83,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     }
 
     public Enumerator<Object[]> unsortedEnumerator(final int numScanners,
-        final Queue<CalciteScannerMessage<CalciteRow>> messages) {
+        final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages) {
         return new Enumerator<Object[]>() {
             private int finishedScanners = 0;
             private Object[] next = null;
@@ -108,7 +108,12 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                 }
                 CalciteScannerMessage<CalciteRow> fetched;
                 do {
-                    fetched = messages.poll();
+                    try {
+                        fetched = messages.poll(350, TimeUnit.MILLISECONDS);
+                    }
+                    catch (InterruptedException interrupted) {
+                        fetched = CalciteScannerMessage.createEndMessage();
+                    }
                     if (fetched != null) {
                         if (fetched.type == CalciteScannerMessage.MessageType.ERROR) {
                             throw new RuntimeException("A scanner failed, failing whole query", fetched.failure.get());
@@ -245,8 +250,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                 scanners
                 .stream()
                 .map(scanner -> {
-                        // Using Unbounded Queues here which is not awesome.
-                        final Queue<CalciteScannerMessage<CalciteRow>> rowResults = new SpscUnboundedArrayQueue<>(3000);
+                        final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>(3000);
 
                         // Yuck!!! side effect within a mapper. This is because the
                         // callback and the CalciteKuduEnumerable need to both share
@@ -266,10 +270,9 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                     }
                 )
                 .map(enumerable -> enumerable.enumerator())
-                .collect(Collectors.toList()
-                ));
+                .collect(Collectors.toList()));
         }
-        final Queue<CalciteScannerMessage<CalciteRow>> messages = new MpscUnboundedArrayQueue<>(3000);
+        final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages = new LinkedBlockingQueue<>(3000);
         scanners
             .stream()
             .forEach(scanner -> {
