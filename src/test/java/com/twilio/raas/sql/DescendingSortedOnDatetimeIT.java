@@ -17,6 +17,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.twilio.dataEngine.protocol.ExecuteQueryLog;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -135,7 +136,7 @@ public final class DescendingSortedOnDatetimeIT {
               //swallow it
             }
             return record;
-          }))
+         }), new ExecuteQueryLog(null, "test"), false)
           .toCompletableFuture().get();
       Assert.assertEquals("should get the rows back",
           3, records.size());
@@ -163,7 +164,7 @@ public final class DescendingSortedOnDatetimeIT {
               //swallow it
             }
             return record;
-          }))
+          }), new ExecuteQueryLog(null, "test"), false)
           .toCompletableFuture().get();
       Assert.assertEquals("should get the rows back",
           3, records.size());
@@ -191,7 +192,7 @@ public final class DescendingSortedOnDatetimeIT {
               //swallow it
             }
             return record;
-          }))
+         }), new ExecuteQueryLog(null, "test"), false)
           .toCompletableFuture().get();
       Assert.assertEquals("should get the rows back",
           1, records.size());
@@ -217,7 +218,7 @@ public final class DescendingSortedOnDatetimeIT {
               //swallow it
             }
             return record;
-          }))
+          }), new ExecuteQueryLog(null, "test"), false)
           .toCompletableFuture().get();
       Assert.assertEquals("should get the rows back",
           2, records.size());
@@ -243,7 +244,7 @@ public final class DescendingSortedOnDatetimeIT {
               //swallow it
             }
             return record;
-          }))
+          }), new ExecuteQueryLog(null, "test"), false)
           .toCompletableFuture().get();
       Assert.assertEquals("should get the rows back",
           2, records.size());
