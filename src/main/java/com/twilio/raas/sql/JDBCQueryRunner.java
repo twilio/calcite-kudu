@@ -121,7 +121,6 @@ public final class JDBCQueryRunner implements AutoCloseable {
         final long taskCreationTime = System.currentTimeMillis();
         this.threadPool.execute(() -> {
                 List<T> allRows = new ArrayList<>();
-                final long startJDBCAcquistion = System.currentTimeMillis();
                 try (Connection con = this.dbPool.getConnection()) {
                     final long connectionAcquiredAt = System.currentTimeMillis();
                     log.setJdbcConnectionAcquired(isPrevious, connectionAcquiredAt - taskCreationTime);
