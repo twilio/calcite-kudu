@@ -73,9 +73,6 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
                         }
                     }
 
-                    // This is a tight spin, would love it if
-                    // there was a rowResults.poll(TIMEOUT) but
-                    // there is not.
                 } while (iterationNext == null);
 
                 if (iterationNext.type == CalciteScannerMessage.MessageType.CLOSE) {
