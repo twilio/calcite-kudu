@@ -1,7 +1,7 @@
 package com.twilio.raas.sql;
 
 import java.util.Optional;
-import java.util.Queue;
+import java.util.concurrent.BlockingQueue;
 import com.stumbleupon.async.Callback;
 import org.apache.kudu.client.RowResultIterator;
 import org.apache.kudu.client.RowResult;
@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.Partition;
 import java.util.List;
 import org.apache.kudu.Schema;
+import java.util.concurrent.TimeUnit;
 
 import com.stumbleupon.async.Deferred;
 import org.apache.kudu.client.AsyncKuduScanner;
@@ -30,14 +31,15 @@ final public class ScannerCallback
 
     private static final Logger logger = LoggerFactory.getLogger(ScannerCallback.class);
     private static final CalciteScannerMessage<CalciteRow> CLOSE_MESSAGE = CalciteScannerMessage.<CalciteRow>createEndMessage();
+    private static long OFFER_TIMEOUT_MS = 350;
 
     final AsyncKuduScanner scanner;
-    final Queue<CalciteScannerMessage<CalciteRow>> rowResults;
+    final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults;
     final AtomicBoolean scansShouldStop;
     final List<Integer> primaryKeyColumnsInProjection;
     final List<Integer> descendingSortedFieldIndices;
     public ScannerCallback(final AsyncKuduScanner scanner,
-                           final Queue<CalciteScannerMessage<CalciteRow>> rowResults,
+                           final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults,
                            final AtomicBoolean scansShouldStop,
                            final Schema tableSchema,
                            final Schema projectedSchema,
@@ -58,15 +60,10 @@ final public class ScannerCallback
                 final RowResult row = nextBatch.next();
                 final CalciteScannerMessage<CalciteRow> wrappedRow = new CalciteScannerMessage<>(
                     new CalciteRow(row, primaryKeyColumnsInProjection, descendingSortedFieldIndices));
-                if (rowResults.offer(wrappedRow) == false) {
-                    // failed to add to the results queue, time to stop doing work.
-                    logger.error("failed to insert a new row into pending results. Triggering early exit");
-                    earlyExit = true;
-                    final boolean failedMessage = rowResults.offer(
-                        new CalciteScannerMessage<CalciteRow>(
-                            new RuntimeException("Queue was full, could not insert row")));
-                    break;
-                }
+                // Blocks if the queue is full.
+                // @TODO: How to we protect it from locking up here because nothing is consuming
+                // from the queue.
+                rowResults.put(wrappedRow);
             }
         }
         catch (Exception | Error failure) {
@@ -74,9 +71,14 @@ final public class ScannerCallback
             // this means we have to abort this scan.
             logger.error("Failed to parse out row. Setting early exit", failure);
             earlyExit = true;
-            final boolean failedMessage = rowResults.offer(
-                new CalciteScannerMessage<CalciteRow>(
-                    new RuntimeException("Failed to parse results.", failure)));
+            try {
+              rowResults.put(
+                  new CalciteScannerMessage<CalciteRow>(
+                      new RuntimeException("Failed to parse results.", failure)));
+            }
+            catch (InterruptedException ignored) {
+              logger.error("Interrupted during put, moving to close scanner");
+            }
         }
 
         // If the scanner can continue and we are not stopping
@@ -85,10 +87,12 @@ final public class ScannerCallback
         }
 
         // Else -> scanner has completed, notify the consumer of rowResults
-        final boolean closeResult = rowResults.offer(
-            CLOSE_MESSAGE);
-        if (!closeResult) {
-            logger.error("Failed to put close result message into row results queue");
+        try {
+          // This blocks to ensure the query finishes.
+          rowResults.put(CLOSE_MESSAGE);
+        }
+        catch (InterruptedException threadInterrupted) {
+          logger.error("Interrupted while closing. Means queue is full. Closing scanner");
         }
         scanner.close();
         return null;
