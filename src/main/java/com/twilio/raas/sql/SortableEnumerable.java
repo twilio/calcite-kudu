@@ -250,7 +250,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                 scanners
                 .stream()
                 .map(scanner -> {
-                        final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>(3000);
+                        final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>();
 
                         // Yuck!!! side effect within a mapper. This is because the
                         // callback and the CalciteKuduEnumerable need to both share
@@ -272,7 +272,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                 .map(enumerable -> enumerable.enumerator())
                 .collect(Collectors.toList()));
         }
-        final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages = new LinkedBlockingQueue<>(3000);
+        final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages = new LinkedBlockingQueue<>();
         scanners
             .stream()
             .forEach(scanner -> {
