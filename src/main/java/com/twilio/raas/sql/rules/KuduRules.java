@@ -24,13 +24,17 @@ public class KuduRules {
             new KuduSortJoinTransposeRule(LogicalSort.class, LogicalFilter.class,
                     LogicalJoin.class, RelFactories.LOGICAL_BUILDER);
 
+    public static final OuterToInnerJoinRule OUTER_TO_INNER = new OuterToInnerJoinRule(
+        RelFactories.LOGICAL_BUILDER);
+
     public static List<RelOptRule> RULES = Arrays.asList(
             FILTER,
             PROJECT,
             SORT,
             FILTER_SORT,
             LIMIT,
-            SORT_JOIN_TRANSPOSE
+            SORT_JOIN_TRANSPOSE,
+            OUTER_TO_INNER
     );
 
 }
