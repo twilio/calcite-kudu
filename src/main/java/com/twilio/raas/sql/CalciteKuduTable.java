@@ -177,7 +177,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         List<AsyncKuduScanner> scanners = predicates
             .stream()
             .map(subScan -> {
-                    KuduScanToken.KuduScanTokenBuilder tokenBuilder = this.client.syncClient().newScanTokenBuilder(openedTable);
+                    KuduScanToken.KuduScanTokenBuilder tokenBuilder = this.client.syncClient().newScanTokenBuilder(openedTable).setFaultTolerant(true);
                     if (!columnIndices.isEmpty()) {
                         tokenBuilder.setProjectedColumnIndexes(columnIndices);
                     }
