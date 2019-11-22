@@ -177,7 +177,11 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         List<AsyncKuduScanner> scanners = predicates
             .stream()
             .map(subScan -> {
-                    KuduScanToken.KuduScanTokenBuilder tokenBuilder = this.client.syncClient().newScanTokenBuilder(openedTable).setFaultTolerant(true);
+                    KuduScanToken.KuduScanTokenBuilder tokenBuilder = this.client.syncClient().newScanTokenBuilder(openedTable);
+                    if (sorted) {
+                        // Allows for consistent row order in reads as it puts in ORDERED by Pk when faultTolerant is set to true
+                        tokenBuilder.setFaultTolerant(true);
+                    }
                     if (!columnIndices.isEmpty()) {
                         tokenBuilder.setProjectedColumnIndexes(columnIndices);
                     }
