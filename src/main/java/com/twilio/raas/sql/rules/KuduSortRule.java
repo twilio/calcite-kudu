@@ -28,8 +28,7 @@ import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.kudu.client.KuduTable;
 
 /**
- * When a query is executed without a filter, check to see if the sort is in
- * Kudu Primary Key order. If so, tell Enumerable to sort results
+ * Two Sort Rules that look to push the Sort into the Kudu RPC.
  */
 public abstract class KuduSortRule extends RelOptRule {
 
@@ -108,6 +107,10 @@ public abstract class KuduSortRule extends RelOptRule {
     call.transformTo(newNode);
   }
 
+  /**
+   * Rule to match a Sort above {@link KuduQuery}. Applies only if sort matches primary key order.
+   * Can match descending sorted tables as well. {@see KuduQuery#descendingSortedFieldIndices}
+   */
   public static class KuduSortWithoutFilter extends KuduSortRule {
 
     public KuduSortWithoutFilter(final RelBuilderFactory factory) {
@@ -124,6 +127,11 @@ public abstract class KuduSortRule extends RelOptRule {
     }
   }
 
+  /**
+   * Rule to match a Sort above {@link Filter} and it is above {@link KuduQuery}. Applies if sort
+   * matches primary key or if the primary key is required in the filter.
+   * Can match descending sorted tables as well {@see KuduQuery#descendingSortedFieldIndices}
+   */
   public static class KuduSortWithFilter extends KuduSortRule {
     public KuduSortWithFilter(final RelBuilderFactory factory) {
       super(factory, "WithFilter", FILTER_OPERAND);
@@ -140,42 +148,47 @@ public abstract class KuduSortRule extends RelOptRule {
     }
   }
 
+  /**
+   * Searches {@link RexNode} to see if the Kudu column index -- stored as {@link mustHave} is
+   * present in the {@code RexNode} and is required.
+   * Currently does not handle OR clauses.
+   */
   public static class KuduFilterVisitor extends RexVisitorImpl<Boolean> {
-        public final int mustHave;
-        public KuduFilterVisitor(final int mustHave) {
-            super(true);
-            this.mustHave = mustHave;
-        }
-
-        public Boolean visitInputRef(final RexInputRef inputRef) {
-            return inputRef.getIndex() == this.mustHave;
-        }
-
-        public Boolean visitLocalRef(final RexLocalRef localRef) {
-            return Boolean.FALSE;
-        }
-
-        public Boolean visitLiteral(final RexLiteral literal) {
-            return Boolean.FALSE;
-        }
-
-        public Boolean visitCall(final RexCall call) {
-            switch (call.getOperator().getKind()) {
-                case EQUALS:
-                    return call.operands.get(0).accept(this);
-                case AND:
-                    for (final RexNode operand : call.operands) {
-                        if (operand.accept(this) == Boolean.TRUE) {
-                            return Boolean.TRUE;
-                        }
-                    }
-                    return Boolean.FALSE;
-                case OR:
-                    // @TODO: figure this one out. It is very tricky, if each
-                    // operand has the exact same value for mustHave then
-                    // this should match.
-            }
-            return Boolean.FALSE;
-        }
+    public final int mustHave;
+    public KuduFilterVisitor(final int mustHave) {
+      super(true);
+      this.mustHave = mustHave;
     }
+
+    public Boolean visitInputRef(final RexInputRef inputRef) {
+      return inputRef.getIndex() == this.mustHave;
+    }
+
+    public Boolean visitLocalRef(final RexLocalRef localRef) {
+      return Boolean.FALSE;
+    }
+
+    public Boolean visitLiteral(final RexLiteral literal) {
+      return Boolean.FALSE;
+    }
+
+    public Boolean visitCall(final RexCall call) {
+      switch (call.getOperator().getKind()) {
+      case EQUALS:
+        return call.operands.get(0).accept(this);
+      case AND:
+        for (final RexNode operand : call.operands) {
+          if (operand.accept(this) == Boolean.TRUE) {
+            return Boolean.TRUE;
+          }
+        }
+        return Boolean.FALSE;
+      case OR:
+        // @TODO: figure this one out. It is very tricky, if each
+        // operand has the exact same value for mustHave then
+        // this should match.
+      }
+      return Boolean.FALSE;
+    }
+  }
 }

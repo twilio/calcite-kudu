@@ -20,13 +20,16 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.kudu.client.KuduTable;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Relational expression representing a scan of a KuduTable
  */
 public final class KuduQuery extends TableScan implements KuduRel {
     final public KuduTable openedTable;
+
+   /**
+    * List of column indices that are stored in reverse order.
+    */
     final public List<Integer> descendingSortedFieldIndices;
     final public RelDataType projectRowType;
 

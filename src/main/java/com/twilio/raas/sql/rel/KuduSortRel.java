@@ -24,11 +24,8 @@ import org.apache.calcite.util.trace.CalciteTrace;
 import org.slf4j.Logger;
 
 /**
- * This relation takes as input the {@link KuduToEnumerableRel} and
- * wraps it's output from {@link KuduToEnumerableRel#implement} into another
- * code block that calls {@link SortableEnumerable#setSorted} and optionally
- * calls {@link SortableEnumerable#setLimit} and
- * {@link SortableEnumerable#setOffset}.
+ * This relation sets {@link Implementor#sorted} to true and conditionally sets
+ * {@link Implementor#limit} and {@link Implementor#offset}.
  */
 public class KuduSortRel extends Sort implements KuduRel {
 
