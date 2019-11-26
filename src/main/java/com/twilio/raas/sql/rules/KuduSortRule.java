@@ -32,11 +32,11 @@ import org.apache.kudu.client.KuduTable;
  */
 public abstract class KuduSortRule extends RelOptRule {
 
-  public static final RelOptRuleOperand SIMPLE_OPERAND =
+  private static final RelOptRuleOperand SIMPLE_OPERAND =
     operand(KuduToEnumerableRel.class,
         some(operand(KuduQuery.class, none())));
 
-  public static final RelOptRuleOperand FILTER_OPERAND =
+  private static final RelOptRuleOperand FILTER_OPERAND =
     operand(KuduToEnumerableRel.class, some(
             operand(KuduFilterRel.class, some(operand(KuduQuery.class, none())))));
 
