@@ -9,6 +9,7 @@ import java.util.List;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.Schema;
 import org.apache.kudu.ColumnSchema;
@@ -29,6 +30,8 @@ import java.util.Collections;
 import org.apache.calcite.adapter.java.AbstractQueryableTable;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.schema.Statistic;
+import org.apache.calcite.schema.Statistics;
 import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.schema.impl.AbstractTableQueryable;
 import org.slf4j.Logger;
@@ -70,6 +73,16 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         this.openedTable = openedTable;
         this.client = client;
         this.descendingSortedFieldIndices = descendingSortedFieldIndices;
+    }
+
+    @Override
+    public Statistic getStatistic() {
+        return Statistics.of(null,
+                Collections.singletonList(ImmutableBitSet
+                    .range(this.openedTable.getSchema().getPrimaryKeyColumnCount())),
+                Collections.emptyList(),
+                // @TODO: Explore always sorting.
+                Collections.emptyList());
     }
 
     /**
