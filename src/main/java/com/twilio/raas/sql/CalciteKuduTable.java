@@ -81,7 +81,10 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                 Collections.singletonList(ImmutableBitSet
                     .range(this.openedTable.getSchema().getPrimaryKeyColumnCount())),
                 Collections.emptyList(),
-                // @TODO: Explore always sorting.
+                // We don't always sort for two reasons:
+                // 1. When applying a Filter we want to also sort that doesn't magically happen by
+                //    setting this as a RelCollation
+                // 2. Awhile ago we saw performance degrade with always sorting.
                 Collections.emptyList());
     }
 
