@@ -2,19 +2,30 @@ package com.twilio.raas.sql;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.EnumerableDefaults;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;
+import java.util.Map;
+
 import org.apache.calcite.linq4j.Enumerator;
+import org.apache.calcite.linq4j.Grouping;
+import org.apache.calcite.linq4j.function.Function0;
+import org.apache.calcite.linq4j.function.Function1;
+import org.apache.calcite.linq4j.function.Function2;
 
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.calcite.linq4j.AbstractEnumerable;
+import org.apache.calcite.linq4j.AbstractEnumerable2;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.AsyncKuduScanner;
 import org.apache.kudu.Schema;
@@ -42,6 +53,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     private final Schema tableSchema;
 
     public final boolean sort;
+  public final boolean groupByLimited;
     public final long limit;
     public final long offset;
     public final List<Integer> descendingSortedFieldIndices;
@@ -54,7 +66,8 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
         final long limit,
         final long offset,
         final boolean sort,
-        final List<Integer> descendingSortedFieldIndices) {
+        final List<Integer> descendingSortedFieldIndices,
+        final boolean groupByLimited) {
         this.scanners = scanners;
         this.scansShouldStop = scansShouldStop;
         this.projectedSchema = projectedSchema;
@@ -65,6 +78,11 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
         // in a predictible order
         this.sort = offset>0 || sort;
         this.descendingSortedFieldIndices = descendingSortedFieldIndices;
+        if (groupByLimited && !this.sort) {
+          throw new IllegalArgumentException(
+              "Cannot apply limit on group by without sorting the results first");
+        }
+        this.groupByLimited = groupByLimited;
     }
 
     @VisibleForTesting
@@ -73,7 +91,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     }
 
     private boolean checkLimitReached(int totalMoves) {
-        if (limit > 0 ) {
+        if (limit > 0 && !groupByLimited) {
             long moveOffset = offset > 0 ? offset : 0;
             if (totalMoves - moveOffset > limit) {
                 return true;
@@ -207,6 +225,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                     }
                 }
                 if (smallest == null) {
+                  logger.error("Couldn't find a row. exit");
                     return false;
                 }
                 next = smallest.rowData;
@@ -217,6 +236,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
                     subEnumerables.get(chosenEnumerable).moveNext());
                 totalMoves++;
                 boolean limitReached = checkLimitReached(totalMoves);
+
                 if (limitReached) {
                     scansShouldStop.set(true);
                 }
@@ -289,4 +309,85 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
 
         return unsortedEnumerator(numScanners, messages);
     }
+
+  @Override
+  public <TKey, TAccumulate, TResult> Enumerable<TResult> groupBy(
+      Function1<Object[], TKey> keySelector,
+      Function0<TAccumulate> accumulatorInitializer,
+      Function2<TAccumulate, Object[], TAccumulate> accumulatorAdder,
+      Function2<TKey, TAccumulate, TResult> resultSelector) {
+    if (!groupByLimited) {
+      return EnumerableDefaults.groupBy(getThis(), keySelector,
+          accumulatorInitializer, accumulatorAdder, resultSelector);
+    }
+
+    int uniqueGroupCount = 0;
+    final Map<TKey, TAccumulate> map = new HashMap<>();
+    TKey lastKey = null;
+    try (Enumerator<Object[]> os = getThis().enumerator()) {
+      while (os.moveNext()) {
+        Object[] o = os.current();
+        TKey key = keySelector.apply(o);
+
+        if (lastKey == null || !key.equals(lastKey)) {
+          lastKey = key;
+          uniqueGroupCount++;
+          if (uniqueGroupCount > limit) {
+            break;
+          }
+        }
+
+        TAccumulate accumulator = map.get(key);
+        if (accumulator == null) {
+          accumulator = accumulatorInitializer.apply();
+          accumulator = accumulatorAdder.apply(accumulator, o);
+          map.put(key, accumulator);
+        }
+        else {
+          TAccumulate originalAccumulate = accumulator;
+          accumulator = accumulatorAdder.apply(accumulator, o);
+          if (originalAccumulate != accumulator) {
+            map.put(key, accumulator);
+          }
+        }
+      }
+    }
+    return new LookupResultEnumerable<>(map, resultSelector);
+  }
+
+  /** Reads a populated map, applying a selector function.
+   *
+   * @param <TResult> result type
+   * @param <TKey> key type
+   * @param <TAccumulate> accumulator type */
+  private static class LookupResultEnumerable<TResult, TKey, TAccumulate>
+      extends AbstractEnumerable2<TResult> {
+    private final Map<TKey, TAccumulate> map;
+    private final Function2<TKey, TAccumulate, TResult> resultSelector;
+
+    LookupResultEnumerable(Map<TKey, TAccumulate> map,
+        Function2<TKey, TAccumulate, TResult> resultSelector) {
+      this.map = map;
+      this.resultSelector = resultSelector;
+    }
+
+    public Iterator<TResult> iterator() {
+      final Iterator<Map.Entry<TKey, TAccumulate>> iterator =
+          map.entrySet().iterator();
+      return new Iterator<TResult>() {
+        public boolean hasNext() {
+          return iterator.hasNext();
+        }
+
+        public TResult next() {
+          final Map.Entry<TKey, TAccumulate> entry = iterator.next();
+          return resultSelector.apply(entry.getKey(), entry.getValue());
+        }
+
+        public void remove() {
+          throw new UnsupportedOperationException();
+        }
+      };
+    }
+  }
 }

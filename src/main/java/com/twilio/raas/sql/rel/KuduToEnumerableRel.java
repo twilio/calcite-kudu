@@ -106,7 +106,8 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
         Expression enumerable = list.append("enumerable",
                 Expressions.call(table,
                         KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit,
-                        offset, sorted));
+                        offset, sorted,
+                        Expressions.constant(kuduImplementor.groupByLimited)));
 
         Hook.QUERY_PLAN.run(predicates);
         list.add(

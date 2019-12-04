@@ -43,16 +43,20 @@ public abstract class KuduSortRule extends RelOptRule {
   public static final RelOptRule SIMPLE_SORT_RULE = new KuduSortWithoutFilter(RelFactories.LOGICAL_BUILDER);
   public static final RelOptRule FILTER_SORT_RULE = new KuduSortWithFilter(RelFactories.LOGICAL_BUILDER);
 
-  public KuduSortRule(final RelBuilderFactory relBuilderFactory, final String description, final RelOptRuleOperand operand) {
-    super(operand(Sort.class, operand), relBuilderFactory,
-        String.format("KuduSort: %s", description));
+  public KuduSortRule(RelOptRuleOperand operand, RelBuilderFactory factory, String description) {
+    super(operand, factory, description);
   }
 
-  public void perform(final RelOptRuleCall call, final Sort originalSort, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
+
+  public boolean canApply (final Sort originalSort, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
     // If there is no sort -- i.e. there is only a limit
     // don't pay the cost of returning rows in sorted order.
     if (originalSort.getCollation().getFieldCollations().isEmpty()) {
-      return;
+      return false;
+    }
+
+    if (originalSort.getTraitSet().contains(KuduRel.CONVENTION)) {
+      return false;
     }
 
     int mustMatch = 0;
@@ -67,7 +71,8 @@ public abstract class KuduSortRule extends RelOptRule {
               sortField.direction != RelFieldCollation.Direction.ASCENDING &&
               sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING))
         {
-          return;
+          System.out.println("Rejecting for not matching direction");
+          return false;
         }
       if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount() ||
           sortField.getFieldIndex() != mustMatch) {
@@ -78,33 +83,32 @@ public abstract class KuduSortRule extends RelOptRule {
             final KuduFilterVisitor visitor = new KuduFilterVisitor(mustMatch);
             final Boolean foundFieldInCondition = originalCondition.accept(visitor);
             if (foundFieldInCondition == Boolean.FALSE) {
-              return;
+              return false;
             }
             mustMatch++;
           }
         }
         else {
-          return;
+          return false;
         }
       }
 
       mustMatch++;
     }
+    return true;
+  }
 
-    // Now transform call into our new rule. This new rule will generate
-    // EnumerableRel.Result -- which contains the java code to compile.
-    final RelNode input = originalSort.getInput();
-    final RelTraitSet traitSet =
-      originalSort.getTraitSet().replace(KuduRel.CONVENTION)
-      .replace(originalSort.getCollation());
-    final RelNode newNode = new KuduSortRel(
-        input.getCluster(),
-        traitSet,
-        convert(input, traitSet.replace(RelCollations.EMPTY)),
-        originalSort.getCollation(),
-        originalSort.offset,
-        originalSort.fetch);
-    call.transformTo(newNode);
+
+  public void perform(final RelOptRuleCall call, final Sort originalSort, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
+    if (canApply(originalSort, query, openedTable, filter)) {
+      final RelNode input = originalSort.getInput();
+      final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRel.CONVENTION)
+        .replace(originalSort.getCollation());
+      final RelNode newNode = new KuduSortRel(input.getCluster(), traitSet,
+          convert(input, traitSet.replace(RelCollations.EMPTY)),
+          originalSort.getCollation(), originalSort.offset, originalSort.fetch);
+      call.transformTo(newNode);
+    }
   }
 
   /**
@@ -114,7 +118,7 @@ public abstract class KuduSortRule extends RelOptRule {
   public static class KuduSortWithoutFilter extends KuduSortRule {
 
     public KuduSortWithoutFilter(final RelBuilderFactory factory) {
-      super(factory, "WithoutFilter", SIMPLE_OPERAND);
+      super(operand(Sort.class, SIMPLE_OPERAND), factory, "KuduSort: Simple");
     }
 
     @Override
@@ -134,7 +138,7 @@ public abstract class KuduSortRule extends RelOptRule {
    */
   public static class KuduSortWithFilter extends KuduSortRule {
     public KuduSortWithFilter(final RelBuilderFactory factory) {
-      super(factory, "WithFilter", FILTER_OPERAND);
+      super(operand(Sort.class, FILTER_OPERAND), factory, "KuduSort: Filters");
     }
 
     @Override

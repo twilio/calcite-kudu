@@ -63,7 +63,8 @@ public final class SortedTest {
            -1,
            -1,
             false,
-           Collections.<Integer>emptyList())
+           Collections.<Integer>emptyList(),
+           false)
            .sortedEnumerator(subEnumerables);
 
         assertTrue("Should have at least one result",

@@ -55,6 +55,10 @@ public final class CalciteKuduTable extends AbstractQueryableTable
     public static final Long EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS = EPOCH_DAY_FOR_REVERSE_SORT.toEpochMilli();
     public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = org.apache.kudu.util.TimestampUtil.timestampToMicros(new java.sql.Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
 
+    private final static Double DIMENSION_TABLE_ROW_COUNT = 1000.0;
+    private final static Double CUBE_TABLE_ROW_COUNT = 2000000.0;
+    private final static Double FACT_TABLE_ROW_COUNT = 20000000.0;
+
     private final KuduTable openedTable;
     private final AsyncKuduClient client;
     private final List<Integer> descendingSortedFieldIndices;
@@ -77,9 +81,35 @@ public final class CalciteKuduTable extends AbstractQueryableTable
 
     @Override
     public Statistic getStatistic() {
-        return Statistics.of(null,
-                Collections.singletonList(ImmutableBitSet
-                    .range(this.openedTable.getSchema().getPrimaryKeyColumnCount())),
+      final String tableName = this.openedTable.getName();
+      // Simple rules.
+      // "-" in table name, you are a cube
+      // "." in table name, you are a raw fact table
+      // "anything else" you are a dimension table.
+      final List<ImmutableBitSet> primaryKeys = Collections.singletonList(ImmutableBitSet
+          .range(this.openedTable.getSchema().getPrimaryKeyColumnCount()));
+      if (tableName.contains("-")) {
+        return Statistics.of(CUBE_TABLE_ROW_COUNT,
+            primaryKeys,
+            Collections.emptyList(),
+            // We don't always sort for two reasons:
+            // 1. When applying a Filter we want to also sort that doesn't magically happen by
+            //    setting this as a RelCollation
+            // 2. Awhile ago we saw performance degrade with always sorting.
+            Collections.emptyList());
+      }
+      if (tableName.contains(".")) {
+        return Statistics.of(FACT_TABLE_ROW_COUNT,
+                primaryKeys,
+                Collections.emptyList(),
+                // We don't always sort for two reasons:
+                // 1. When applying a Filter we want to also sort that doesn't magically happen by
+                //    setting this as a RelCollation
+                // 2. Awhile ago we saw performance degrade with always sorting.
+                Collections.emptyList());
+      }
+      return Statistics.of(DIMENSION_TABLE_ROW_COUNT,
+                primaryKeys,
                 Collections.emptyList(),
                 // We don't always sort for two reasons:
                 // 1. When applying a Filter we want to also sort that doesn't magically happen by
@@ -178,7 +208,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      */
     public Enumerable<Object[]> executeQuery(final List<List<KuduPredicate>> predicates,
                                              List<Integer> columnIndices, final long limit,
-                                             final long offset, final boolean sorted) {
+        final long offset, final boolean sorted, final boolean groupByLimited) {
         // Here all the results from all the scans are collected. This is consumed
         // by the Enumerable.enumerator() that this method returns.
         // Set when the enumerator is told to close().
@@ -203,7 +233,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                     }
                     // we can only push down the limit if  we are ordering by the pk columns
                     // and if there is no offset
-                    if (sortByPK && offset==-1 && limit!=-1) {
+                    if (sortByPK && offset==-1 && limit!=-1 && !groupByLimited) {
                         tokenBuilder.limit(limit);
                     }
                     subScan
@@ -249,7 +279,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         }
 
         return new SortableEnumerable(scanners, scansShouldStop, projectedSchema,
-                openedTable.getSchema(), limit, offset, sorted, descendingSortedFieldIndices);
+            openedTable.getSchema(), limit, offset, sorted, descendingSortedFieldIndices, groupByLimited);
     }
 
     @Override
@@ -272,7 +302,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
             //noinspection unchecked
             final Enumerable<T> enumerable =
                 (Enumerable<T>) getTable().executeQuery(Collections.emptyList(),
-                        Collections.emptyList(), -1, -1, false);
+                    Collections.emptyList(), -1, -1, false, false);
             return enumerable.enumerator();
         }
 
@@ -288,7 +318,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
          */
         public Enumerable<Object[]> query(List<List<CalciteKuduPredicate>> predicates,
                                           List<Integer> fieldsIndices,
-                                          long limit, long offset, boolean sorted) {
+            long limit, long offset, boolean sorted, boolean groupByLimited) {
             return getTable().executeQuery(predicates
                                            .stream()
                                            .map(subList -> {
@@ -297,7 +327,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                                        .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedFieldIndices))
                                                        .collect(Collectors.toList());
                                                })
-                .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted);
+                .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted, groupByLimited);
         }
     }
 

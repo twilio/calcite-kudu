@@ -28,7 +28,8 @@ public class KuduRules {
             SORT,
             FILTER_SORT,
             LIMIT,
-            SORT_JOIN_TRANSPOSE
+            SORT_JOIN_TRANSPOSE,
+            new KuduSortAggregationTranspose(RelFactories.LOGICAL_BUILDER)
     );
 
 }

@@ -19,10 +19,10 @@ import org.apache.kudu.client.KuduTable;
  * against the table.
  *
  * Each optimizer rule implemented in this module converts a boring
- * basic {@link RelNode} into a {@link KuduRel}. 
+ * basic {@link RelNode} into a {@link KuduRel}.
  */
 public interface KuduRel extends RelNode {
-  
+
     Convention CONVENTION = new Convention.Impl("KUDU", KuduRel.class);
 
     /**
@@ -35,8 +35,8 @@ public interface KuduRel extends RelNode {
     void implement(Implementor implementor);
 
     /**
-     * Implementor is a container that represents the set of 
-     * Kudu Scans. Each {@link KuduRel} implementation will 
+     * Implementor is a container that represents the set of
+     * Kudu Scans. Each {@link KuduRel} implementation will
      * add information into this container.
      */
     class Implementor {
@@ -47,6 +47,7 @@ public interface KuduRel extends RelNode {
         public long limit = -1;
         public long offset = -1;
         public boolean sorted = false;
+        public boolean groupByLimited = false;
 
         public void visitChild(int ordinal, RelNode input) {
             assert ordinal == 0;
@@ -54,4 +55,3 @@ public interface KuduRel extends RelNode {
         }
     }
 }
-				 
