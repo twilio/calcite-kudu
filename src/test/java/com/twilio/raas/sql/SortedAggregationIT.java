@@ -156,4 +156,29 @@ public final class SortedAggregationIT {
     }
   }
 
+  @Test
+  public void aggregateSortedResultsByAccountAndByteWithOffset() throws Exception {
+    final String sql = String.format(
+        "SELECT account_sid, sum(cast(reverse_long_field as bigint)) \"reverse_long_field\" FROM %s WHERE account_sid = '%s' GROUP BY reverse_byte_field, account_sid ORDER BY account_sid ASC, reverse_byte_field DESC limit 1 offset 1",
+        descendingSortTableName, JDBCQueryRunnerIT.ACCOUNT_SID);
+
+    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs);
+
+      ResultSet queryResult = conn.createStatement().executeQuery(sql);
+
+      assertTrue("Should have results to iterate over",
+          queryResult.next());
+      assertTrue(String.format("Plan should contain KuduSortRel. It is\n%s", plan),
+          plan.contains("KuduSortRel"));
+      assertTrue(String.format("KuduSortRel should have groupByLimited set to true. It doesn't\n%s", plan),
+          plan.contains("groupByLimited=[true]"));
+      assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
+          1000L == queryResult.getLong(2));
+      assertFalse("Should not have any more results",
+          queryResult.next());
+    }
+  }
 }

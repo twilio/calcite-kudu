@@ -58,8 +58,8 @@ public class KuduSortAggregationTranspose extends KuduSortRule {
 
     final RelNode newAggregation = originalAggregate.copy(originalAggregate.getTraitSet(),
         Collections.singletonList(newKuduEnumerable));
-    final RelNode newLimit = originalSort.copy(originalSort.getTraitSet(),
-        Collections.singletonList(newAggregation));
+    final RelNode newLimit = originalSort.copy(originalSort.getTraitSet(), newAggregation,
+        originalSort.getCollation(), null, originalSort.fetch);
 
     call.transformTo(newLimit);
   }

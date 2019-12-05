@@ -180,7 +180,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
             private int totalMoves = 0;
 
             private void moveToOffset() {
-                if (offset > 0) {
+                if (offset > 0 && !groupByLimited) {
                     while(totalMoves < offset && moveNext());
                 }
             }
@@ -324,6 +324,13 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     int uniqueGroupCount = 0;
     final Map<TKey, TAccumulate> map = new HashMap<>();
     TKey lastKey = null;
+    final long groupFetchLimit;
+    if (offset > 0) {
+      groupFetchLimit = limit + offset;
+    }
+    else {
+      groupFetchLimit = limit;
+    }
     try (Enumerator<Object[]> os = getThis().enumerator()) {
       while (os.moveNext()) {
         Object[] o = os.current();
@@ -332,9 +339,14 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
         if (lastKey == null || !key.equals(lastKey)) {
           lastKey = key;
           uniqueGroupCount++;
-          if (uniqueGroupCount > limit) {
+
+          if (uniqueGroupCount > groupFetchLimit) {
             break;
           }
+        }
+
+        if (offset > 0 && uniqueGroupCount <= offset) {
+          continue;
         }
 
         TAccumulate accumulator = map.get(key);
