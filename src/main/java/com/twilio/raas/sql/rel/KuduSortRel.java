@@ -1,22 +1,11 @@
 package com.twilio.raas.sql.rel;
 
 import com.twilio.raas.sql.KuduRel;
-import com.twilio.raas.sql.SortableEnumerable;
-import org.apache.calcite.adapter.enumerable.EnumerableConvention;
-import org.apache.calcite.adapter.enumerable.EnumerableRel;
-import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
-import org.apache.calcite.adapter.enumerable.PhysType;
-import org.apache.calcite.adapter.enumerable.PhysTypeImpl;
-import org.apache.calcite.linq4j.Ord;
-import org.apache.calcite.linq4j.tree.BlockBuilder;
-import org.apache.calcite.linq4j.tree.Expression;
-import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
-import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.Sort;
@@ -42,11 +31,11 @@ public class KuduSortRel extends Sort implements KuduRel {
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet,
       RelNode child, RelCollation collation, RexNode offset, RexNode fetch, boolean belowAggregate) {
-    super(cluster, traitSet, child, collation, offset, fetch);
-    assert getConvention() == KuduRel.CONVENTION;
-    assert getConvention() == child.getConvention();
-    this.belowAggregate = belowAggregate;
-  }
+      super(cluster, traitSet, child, collation, offset, fetch);
+      assert getConvention() == KuduRel.CONVENTION;
+      assert getConvention() == child.getConvention();
+      this.belowAggregate = belowAggregate;
+    }
 
     @Override
     public Sort copy(RelTraitSet traitSet, RelNode input,
@@ -54,12 +43,12 @@ public class KuduSortRel extends Sort implements KuduRel {
       return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, belowAggregate);
     }
 
-  @Override
-  public RelWriter explainTerms(RelWriter pw) {
-    super.explainTerms(pw);
-    pw.item("groupByLimited", belowAggregate);
-    return pw;
-  }
+    @Override
+    public RelWriter explainTerms(RelWriter pw) {
+      super.explainTerms(pw);
+      pw.item("groupByLimited", belowAggregate);
+      return pw;
+    }
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner,
@@ -84,7 +73,7 @@ public class KuduSortRel extends Sort implements KuduRel {
             final Long properFetch = (Long)parsedFetch.getValue2();
             implementor.limit = properFetch;
         }
-        System.out.println("setting it to " + belowAggregate);
+
         implementor.groupByLimited = belowAggregate;
     }
 }
