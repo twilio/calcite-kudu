@@ -71,7 +71,6 @@ public abstract class KuduSortRule extends RelOptRule {
               sortField.direction != RelFieldCollation.Direction.ASCENDING &&
               sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING))
         {
-          System.out.println("Rejecting for not matching direction");
           return false;
         }
       if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount() ||

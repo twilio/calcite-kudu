@@ -9,12 +9,10 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.calcite.linq4j.Enumerator;
-import org.apache.calcite.linq4j.Grouping;
 import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Function2;
 
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -44,271 +42,284 @@ import org.apache.kudu.Schema;
  * {@link SortableEnumerable#setSorted} is called.
  */
 public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
-    private static final Logger logger = LoggerFactory.getLogger(SortableEnumerable.class);
+  private static final Logger logger = LoggerFactory.getLogger(SortableEnumerable.class);
 
-    private final List<AsyncKuduScanner> scanners;
+  private final List<AsyncKuduScanner> scanners;
 
-    private final AtomicBoolean scansShouldStop;
-    private final Schema projectedSchema;
-    private final Schema tableSchema;
+  private final AtomicBoolean scansShouldStop;
+  private final Schema projectedSchema;
+  private final Schema tableSchema;
 
-    public final boolean sort;
+  public final boolean sort;
   public final boolean groupByLimited;
-    public final long limit;
-    public final long offset;
-    public final List<Integer> descendingSortedFieldIndices;
+  public final long limit;
+  public final long offset;
+  public final List<Integer> descendingSortedFieldIndices;
 
-    public SortableEnumerable(
-        List<AsyncKuduScanner> scanners,
-        final AtomicBoolean scansShouldStop,
-        final Schema projectedSchema,
-        final Schema tableSchema,
-        final long limit,
-        final long offset,
-        final boolean sort,
-        final List<Integer> descendingSortedFieldIndices,
-        final boolean groupByLimited) {
-        this.scanners = scanners;
-        this.scansShouldStop = scansShouldStop;
-        this.projectedSchema = projectedSchema;
-        this.tableSchema = tableSchema;
-        this.limit = limit;
-        this.offset = offset;
-        // if we have an offset always sort by the primary key to ensure the rows are returned
-        // in a predictible order
-        this.sort = offset>0 || sort;
-        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
-        if (groupByLimited && !this.sort) {
-          throw new IllegalArgumentException(
-              "Cannot apply limit on group by without sorting the results first");
+  /**
+   * A SortableEnumerable is an {@link Enumerable} for Kudu that can be configured to be sorted.
+   *
+   * @param scanners a List of running {@link AsyncKuduScanner}
+   * @param scansShouldStop signal to be used by this class to stop the scanners
+   * @param tableSchema {@link Schema} for the kudu table
+   * @param limit the number of rows this should return. -1 indicates no limit
+   * @param offset the number of rows from kudu to skip prior to returning rows
+   * @param sort whether or not have Kudu RPCs come back in sorted by primary key
+   * @param descendingSortedFieldIndices is a list of column indices that are sorted in reverse
+   * @param groupByLimited when sorted, and {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)
+   *
+   * @throws IllegalArgumentException when groupByLimited is true but sorted is false
+   */
+  public SortableEnumerable(
+      List<AsyncKuduScanner> scanners,
+      final AtomicBoolean scansShouldStop,
+      final Schema projectedSchema,
+      final Schema tableSchema,
+      final long limit,
+      final long offset,
+      final boolean sort,
+      final List<Integer> descendingSortedFieldIndices,
+      final boolean groupByLimited) {
+    this.scanners = scanners;
+    this.scansShouldStop = scansShouldStop;
+    this.projectedSchema = projectedSchema;
+    this.tableSchema = tableSchema;
+    this.limit = limit;
+    this.offset = offset;
+    // if we have an offset always sort by the primary key to ensure the rows are returned
+    // in a predictible order
+    this.sort = offset>0 || sort;
+    this.descendingSortedFieldIndices = descendingSortedFieldIndices;
+    if (groupByLimited && !this.sort) {
+      throw new IllegalArgumentException(
+          "Cannot apply limit on group by without sorting the results first");
+    }
+    this.groupByLimited = groupByLimited;
+  }
+
+  @VisibleForTesting
+  List<AsyncKuduScanner> getScanners() {
+    return scanners;
+  }
+
+  private boolean checkLimitReached(int totalMoves) {
+    if (limit > 0 && !groupByLimited) {
+      long moveOffset = offset > 0 ? offset : 0;
+      if (totalMoves - moveOffset > limit) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public Enumerator<Object[]> unsortedEnumerator(final int numScanners,
+      final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages) {
+    return new Enumerator<Object[]>() {
+      private int finishedScanners = 0;
+      private Object[] next = null;
+      private boolean finished = false;
+      private int totalMoves = 0;
+      private boolean movedToOffset = false;
+
+      private void moveToOffset() {
+        movedToOffset = true;
+        if (offset > 0) {
+          while(totalMoves < offset && moveNext());
         }
-        this.groupByLimited = groupByLimited;
-    }
+      }
 
-    @VisibleForTesting
-    List<AsyncKuduScanner> getScanners() {
-        return scanners;
-    }
-
-    private boolean checkLimitReached(int totalMoves) {
-        if (limit > 0 && !groupByLimited) {
-            long moveOffset = offset > 0 ? offset : 0;
-            if (totalMoves - moveOffset > limit) {
-                return true;
-            }
+      @Override
+      public boolean moveNext() {
+        if (finished) {
+          return false;
         }
-        return false;
-    }
-
-    public Enumerator<Object[]> unsortedEnumerator(final int numScanners,
-        final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages) {
-        return new Enumerator<Object[]>() {
-            private int finishedScanners = 0;
-            private Object[] next = null;
-            private boolean finished = false;
-            private int totalMoves = 0;
-            private boolean movedToOffset = false;
-
-            private void moveToOffset() {
-                movedToOffset = true;
-                if (offset > 0) {
-                    while(totalMoves < offset && moveNext());
-                }
-            }
-
-            @Override
-            public boolean moveNext() {
-                if (finished) {
-                    return false;
-                }
-                if (!movedToOffset) {
-                    moveToOffset();
-                }
-                CalciteScannerMessage<CalciteRow> fetched;
-                do {
-                    try {
-                        fetched = messages.poll(350, TimeUnit.MILLISECONDS);
-                    }
-                    catch (InterruptedException interrupted) {
-                        fetched = CalciteScannerMessage.createEndMessage();
-                    }
-                    if (fetched != null) {
-                        if (fetched.type == CalciteScannerMessage.MessageType.ERROR) {
-                            throw new RuntimeException("A scanner failed, failing whole query", fetched.failure.get());
-                        }
-                        if (fetched.type == CalciteScannerMessage.MessageType.CLOSE) {
-                            if (++finishedScanners >= numScanners) {
-                                finished = true;
-                                return false;
-                            }
-                        }
-                    }
-
-                } while(fetched == null ||
-                    fetched.type != CalciteScannerMessage.MessageType.ROW);
-                next = fetched.row.get().rowData;
-                totalMoves++;
-                boolean limitReached = checkLimitReached(totalMoves);
-                if (limitReached) {
-                    scansShouldStop.set(true);
-                }
-                return !limitReached;
-            }
-
-            @Override
-            public Object[] current() {
-                return next;
-            }
-
-            @Override
-            public void reset() {
-                throw new RuntimeException("Cannot reset an UnsortedEnumerable");
-            }
-
-            @Override
-            public void close() {
-                scansShouldStop.set(true);
-            }
-        };
-    }
-
-    public Enumerator<Object[]> sortedEnumerator(final List<Enumerator<CalciteRow>> subEnumerables) {
-
-        return new Enumerator<Object[]>() {
-            private Object[] next = null;
-            private List<Boolean> enumerablesWithRows = new ArrayList<>(subEnumerables.size());
-            private int totalMoves = 0;
-
-            private void moveToOffset() {
-                if (offset > 0 && !groupByLimited) {
-                    while(totalMoves < offset && moveNext());
-                }
-            }
-
-            @Override
-            public boolean moveNext() {
-                // @TODO: is possible for subEnumerables to be empty?
-                if (subEnumerables.isEmpty()) {
-                    return false;
-                }
-
-                if (enumerablesWithRows.isEmpty()) {
-                    for (int idx = 0; idx < subEnumerables.size(); idx++) {
-                        enumerablesWithRows.add(subEnumerables.get(idx).moveNext());
-                    }
-                    moveToOffset();
-                    logger.debug("Setup scanners {}", enumerablesWithRows);
-                }
-                CalciteRow smallest = null;
-                int chosenEnumerable = -1;
-                for (int idx = 0; idx < subEnumerables.size(); idx++) {
-                    if (enumerablesWithRows.get(idx)) {
-                        final CalciteRow enumerablesNext = subEnumerables.get(idx).current();
-                        if (smallest == null) {
-                            logger.trace("smallest isn't set setting to {}", enumerablesNext.rowData);
-                            smallest = enumerablesNext;
-                            chosenEnumerable = idx;
-                        }
-                        else if (enumerablesNext.compareTo(smallest) < 0) {
-                            logger.trace("{} is smaller then {}",
-                                enumerablesNext.rowData, smallest.rowData);
-                            smallest = enumerablesNext;
-                            chosenEnumerable = idx;
-                        }
-                        else {
-                            logger.trace("{} is larger then {}",
-                                enumerablesNext.rowData, smallest.rowData);
-                        }
-                    }
-                    else {
-                        logger.trace("{} index doesn't have next", idx);
-                    }
-                }
-                if (smallest == null) {
-                  logger.error("Couldn't find a row. exit");
-                    return false;
-                }
-                next = smallest.rowData;
-                // Move the chosen one forward. The others have their smallest
-                // already in the front of their queues.
-                logger.trace("Chosen idx {} to move next", chosenEnumerable);
-                enumerablesWithRows.set(chosenEnumerable,
-                    subEnumerables.get(chosenEnumerable).moveNext());
-                totalMoves++;
-                boolean limitReached = checkLimitReached(totalMoves);
-
-                if (limitReached) {
-                    scansShouldStop.set(true);
-                }
-                return !limitReached;
-            }
-
-            @Override
-            public Object[] current() {
-                return next;
-            }
-
-            @Override
-            public void reset() {
-                subEnumerables
-                    .stream()
-                    .forEach(e -> e.reset());
-            }
-
-            @Override
-            public void close() {
-                subEnumerables.stream()
-                    .forEach(enumerable -> enumerable.close());
-            }
-        };
-    }
-
-    @Override
-    public Enumerator<Object[]> enumerator() {
-        if (sort) {
-            return sortedEnumerator(
-                scanners
-                .stream()
-                .map(scanner -> {
-                        final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>();
-
-                        // Yuck!!! side effect within a mapper. This is because the
-                        // callback and the CalciteKuduEnumerable need to both share
-                        // queue.
-                        scanner.nextRows()
-                            .addBothDeferring(new ScannerCallback(scanner,
-                                                                  rowResults,
-                                                                  scansShouldStop,
-                                                                  tableSchema,
-                                                                  projectedSchema,
-                                                                  descendingSortedFieldIndices));
-                        // Limit is not required here. do not use it.
-                        return new CalciteKuduEnumerable(
-                            rowResults,
-                            scansShouldStop
-                        );
-                    }
-                )
-                .map(enumerable -> enumerable.enumerator())
-                .collect(Collectors.toList()));
+        if (!movedToOffset) {
+          moveToOffset();
         }
-        final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages = new LinkedBlockingQueue<>();
-        scanners
-            .stream()
-            .forEach(scanner -> {
-                    scanner.nextRows()
-                        .addBothDeferring(
-                            new ScannerCallback(scanner,
-                                                messages,
-                                                scansShouldStop,
-                                                tableSchema,
-                                                projectedSchema,
-                                                descendingSortedFieldIndices));
-                });
-        final int numScanners = scanners.size();
+        CalciteScannerMessage<CalciteRow> fetched;
+        do {
+          try {
+            fetched = messages.poll(350, TimeUnit.MILLISECONDS);
+          }
+          catch (InterruptedException interrupted) {
+            fetched = CalciteScannerMessage.createEndMessage();
+          }
+          if (fetched != null) {
+            if (fetched.type == CalciteScannerMessage.MessageType.ERROR) {
+              throw new RuntimeException("A scanner failed, failing whole query", fetched.failure.get());
+            }
+            if (fetched.type == CalciteScannerMessage.MessageType.CLOSE) {
+              if (++finishedScanners >= numScanners) {
+                finished = true;
+                return false;
+              }
+            }
+          }
 
-        return unsortedEnumerator(numScanners, messages);
+        } while(fetched == null ||
+            fetched.type != CalciteScannerMessage.MessageType.ROW);
+        next = fetched.row.get().rowData;
+        totalMoves++;
+        boolean limitReached = checkLimitReached(totalMoves);
+        if (limitReached) {
+          scansShouldStop.set(true);
+        }
+        return !limitReached;
+      }
+
+      @Override
+      public Object[] current() {
+        return next;
+      }
+
+      @Override
+      public void reset() {
+        throw new RuntimeException("Cannot reset an UnsortedEnumerable");
+      }
+
+      @Override
+      public void close() {
+        scansShouldStop.set(true);
+      }
+    };
+  }
+
+  public Enumerator<Object[]> sortedEnumerator(final List<Enumerator<CalciteRow>> subEnumerables) {
+
+    return new Enumerator<Object[]>() {
+      private Object[] next = null;
+      private List<Boolean> enumerablesWithRows = new ArrayList<>(subEnumerables.size());
+      private int totalMoves = 0;
+
+      private void moveToOffset() {
+        if (offset > 0 && !groupByLimited) {
+          while(totalMoves < offset && moveNext());
+        }
+      }
+
+      @Override
+      public boolean moveNext() {
+        // @TODO: is possible for subEnumerables to be empty?
+        if (subEnumerables.isEmpty()) {
+          return false;
+        }
+
+        if (enumerablesWithRows.isEmpty()) {
+          for (int idx = 0; idx < subEnumerables.size(); idx++) {
+            enumerablesWithRows.add(subEnumerables.get(idx).moveNext());
+          }
+          moveToOffset();
+          logger.debug("Setup scanners {}", enumerablesWithRows);
+        }
+        CalciteRow smallest = null;
+        int chosenEnumerable = -1;
+        for (int idx = 0; idx < subEnumerables.size(); idx++) {
+          if (enumerablesWithRows.get(idx)) {
+            final CalciteRow enumerablesNext = subEnumerables.get(idx).current();
+            if (smallest == null) {
+              logger.trace("smallest isn't set setting to {}", enumerablesNext.rowData);
+              smallest = enumerablesNext;
+              chosenEnumerable = idx;
+            }
+            else if (enumerablesNext.compareTo(smallest) < 0) {
+              logger.trace("{} is smaller then {}",
+                  enumerablesNext.rowData, smallest.rowData);
+              smallest = enumerablesNext;
+              chosenEnumerable = idx;
+            }
+            else {
+              logger.trace("{} is larger then {}",
+                  enumerablesNext.rowData, smallest.rowData);
+            }
+          }
+          else {
+            logger.trace("{} index doesn't have next", idx);
+          }
+        }
+        if (smallest == null) {
+          return false;
+        }
+        next = smallest.rowData;
+        // Move the chosen one forward. The others have their smallest
+        // already in the front of their queues.
+        logger.trace("Chosen idx {} to move next", chosenEnumerable);
+        enumerablesWithRows.set(chosenEnumerable,
+            subEnumerables.get(chosenEnumerable).moveNext());
+        totalMoves++;
+        boolean limitReached = checkLimitReached(totalMoves);
+
+        if (limitReached) {
+          scansShouldStop.set(true);
+        }
+        return !limitReached;
+      }
+
+      @Override
+      public Object[] current() {
+        return next;
+      }
+
+      @Override
+      public void reset() {
+        subEnumerables
+          .stream()
+          .forEach(e -> e.reset());
+      }
+
+      @Override
+      public void close() {
+        subEnumerables.stream()
+          .forEach(enumerable -> enumerable.close());
+      }
+    };
+  }
+
+  @Override
+  public Enumerator<Object[]> enumerator() {
+    if (sort) {
+      return sortedEnumerator(
+          scanners
+          .stream()
+          .map(scanner -> {
+                final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>();
+
+                // Yuck!!! side effect within a mapper. This is because the
+                // callback and the CalciteKuduEnumerable need to both share
+                // queue.
+                scanner.nextRows()
+                  .addBothDeferring(new ScannerCallback(scanner,
+                          rowResults,
+                          scansShouldStop,
+                          tableSchema,
+                          projectedSchema,
+                          descendingSortedFieldIndices));
+                // Limit is not required here. do not use it.
+                return new CalciteKuduEnumerable(
+                    rowResults,
+                    scansShouldStop
+                );
+              }
+          )
+          .map(enumerable -> enumerable.enumerator())
+          .collect(Collectors.toList()));
     }
+    final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages = new LinkedBlockingQueue<>();
+    scanners
+      .stream()
+      .forEach(scanner -> {
+            scanner.nextRows()
+              .addBothDeferring(
+                  new ScannerCallback(scanner,
+                      messages,
+                      scansShouldStop,
+                      tableSchema,
+                      projectedSchema,
+                      descendingSortedFieldIndices));
+          });
+    final int numScanners = scanners.size();
+
+    return unsortedEnumerator(numScanners, messages);
+  }
 
   @Override
   public <TKey, TAccumulate, TResult> Enumerable<TResult> groupBy(
@@ -316,6 +327,9 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
       Function0<TAccumulate> accumulatorInitializer,
       Function2<TAccumulate, Object[], TAccumulate> accumulatorAdder,
       Function2<TKey, TAccumulate, TResult> resultSelector) {
+    // When Grouping rows but the aggregation is not sorted by primary key direction or there is no
+    // limit to the grouping, read every single matching row for this query.
+    // This implies sorted = false.
     if (!groupByLimited) {
       return EnumerableDefaults.groupBy(getThis(), keySelector,
           accumulatorInitializer, accumulatorAdder, resultSelector);
@@ -324,6 +338,9 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     int uniqueGroupCount = 0;
     final Map<TKey, TAccumulate> map = new HashMap<>();
     TKey lastKey = null;
+
+    // groupFetchLimit calculates it's size based on offset. When offset is present, it needs to
+    // skip an equalivent  number of unique group keys
     final long groupFetchLimit;
     if (offset > 0) {
       groupFetchLimit = limit + offset;
@@ -340,11 +357,14 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
           lastKey = key;
           uniqueGroupCount++;
 
+          // When we have seen limit + 1 unique group by keys, exit.
+          // or in the case of an offset, limit + offset + 1 unique group by keys.
           if (uniqueGroupCount > groupFetchLimit) {
             break;
           }
         }
 
+        // When we are still skipping group by keys.
         if (offset > 0 && uniqueGroupCount <= offset) {
           continue;
         }
@@ -373,7 +393,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
    * @param <TKey> key type
    * @param <TAccumulate> accumulator type */
   private static class LookupResultEnumerable<TResult, TKey, TAccumulate>
-      extends AbstractEnumerable2<TResult> {
+    extends AbstractEnumerable2<TResult> {
     private final Map<TKey, TAccumulate> map;
     private final Function2<TKey, TAccumulate, TResult> resultSelector;
 
@@ -385,7 +405,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
 
     public Iterator<TResult> iterator() {
       final Iterator<Map.Entry<TKey, TAccumulate>> iterator =
-          map.entrySet().iterator();
+        map.entrySet().iterator();
       return new Iterator<TResult>() {
         public boolean hasNext() {
           return iterator.hasNext();
