@@ -58,9 +58,17 @@ public class KuduSortAggregationTransposeRule extends KuduSortRule {
 
     final RelNode newAggregation = originalAggregate.copy(originalAggregate.getTraitSet(),
         Collections.singletonList(newKuduEnumerable));
-    final RelNode newLimit = originalSort.copy(originalSort.getTraitSet(), newAggregation,
+
+    // Copy the existing sort but remove the offset. Keep the existing sort above the Aggregation
+    // because the order coming out of the Aggregation is not the sort order. The Aggregation will
+    // only see records that will match the sort and limit instructions but it will not output them
+    // in sorted order. Therefore, the original sort object must be above it with one caveat, the
+    // offset must be removed. The Offset will be passed into the KuduSortRel ensure the
+    // SortableEnumerable skips the records according to the offset in the query. Skipping records
+    // is no longer required of the sort that lives *above* the Aggregation.
+    final RelNode newSortAndLimit = originalSort.copy(originalSort.getTraitSet(), newAggregation,
         originalSort.getCollation(), null, originalSort.fetch);
 
-    call.transformTo(newLimit);
+    call.transformTo(newSortAndLimit);
   }
 }
