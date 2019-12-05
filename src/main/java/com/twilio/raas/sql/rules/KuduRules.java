@@ -15,12 +15,14 @@ public class KuduRules {
 
     public static final KuduFilterRule FILTER = new KuduFilterRule(RelFactories.LOGICAL_BUILDER);
     public static final KuduProjectRule PROJECT = new KuduProjectRule(RelFactories.LOGICAL_BUILDER);
-  public static final RelOptRule FILTER_SORT = KuduSortRule.FILTER_SORT_RULE;
-  public static final RelOptRule SORT = KuduSortRule.SIMPLE_SORT_RULE;
+    public static final RelOptRule FILTER_SORT = KuduSortRule.FILTER_SORT_RULE;
+    public static final RelOptRule SORT = KuduSortRule.SIMPLE_SORT_RULE;
     public static final KuduLimitRule LIMIT = new KuduLimitRule();
     public static final KuduSortJoinTransposeRule SORT_JOIN_TRANSPOSE =
             new KuduSortJoinTransposeRule(LogicalSort.class, LogicalFilter.class,
                     LogicalJoin.class, RelFactories.LOGICAL_BUILDER);
+    public static final RelOptRule AGGREGATION_SORT_LIMIT = new KuduSortAggregationTranspose(
+            RelFactories.LOGICAL_BUILDER);
 
     public static List<RelOptRule> RULES = Arrays.asList(
             FILTER,
@@ -29,7 +31,7 @@ public class KuduRules {
             FILTER_SORT,
             LIMIT,
             SORT_JOIN_TRANSPOSE,
-            new KuduSortAggregationTranspose(RelFactories.LOGICAL_BUILDER)
+            AGGREGATION_SORT_LIMIT
     );
 
 }
