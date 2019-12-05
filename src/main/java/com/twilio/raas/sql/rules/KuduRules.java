@@ -21,7 +21,7 @@ public class KuduRules {
     public static final KuduSortJoinTransposeRule SORT_JOIN_TRANSPOSE =
             new KuduSortJoinTransposeRule(LogicalSort.class, LogicalFilter.class,
                     LogicalJoin.class, RelFactories.LOGICAL_BUILDER);
-    public static final RelOptRule AGGREGATION_SORT_LIMIT = new KuduSortAggregationTranspose(
+    public static final RelOptRule AGGREGATION_SORT_LIMIT = new KuduSortAggregationTransposeRule(
             RelFactories.LOGICAL_BUILDER);
 
     public static List<RelOptRule> RULES = Arrays.asList(

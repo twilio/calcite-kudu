@@ -18,8 +18,8 @@ import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.tools.RelBuilderFactory;
 
-public class KuduSortAggregationTranspose extends KuduSortRule {
-  public KuduSortAggregationTranspose(RelBuilderFactory relBuilderFactory) {
+public class KuduSortAggregationTransposeRule extends KuduSortRule {
+  public KuduSortAggregationTransposeRule(RelBuilderFactory relBuilderFactory) {
     super(operand(Sort.class,
                     some(operand(Aggregate.class,
                             some(operand(KuduToEnumerableRel.class,
