@@ -1,5 +1,6 @@
 package com.twilio.raas.sql;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
@@ -93,12 +94,22 @@ public final class SortedAggregationIT {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
 
+      final String expectedPlan = "EnumerableLimit(fetch=[1])\n" +
+        "  EnumerableSort(sort0=[$0], dir0=[ASC])\n" +
+        "    EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($4)], EXPR$2=[$SUM0($3)])\n" +
+        "      KuduToEnumerableRel\n" +
+        "        KuduSortRel(sort0=[$0], dir0=[ASC], fetch=[1], groupByLimited=[true])\n" +
+        "          KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+        "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+
       assertTrue("Should have results to iterate over",
           queryResult.next());
       assertTrue(String.format("Plan should contain KuduSortRel. It is\n%s", plan),
           plan.contains("KuduSortRel"));
       assertTrue(String.format("KuduSortRel should have groupByLimited set to true. It doesn't\n%s", plan),
           plan.contains("groupByLimited=[true]"));
+      assertEquals("Full SQL plan has changed\n",
+          expectedPlan, plan);
       assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
           2001L == queryResult.getLong(2));
       assertFalse("Should not have any more results",
@@ -117,6 +128,16 @@ public final class SortedAggregationIT {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
 
+      final String expectedPlan =
+        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], reverse_long_field=[$t2], REVERSE_BYTE_FIELD=[$t1])\n" +
+        "  EnumerableLimit(fetch=[1])\n" +
+        "    EnumerableSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC])\n" +
+        "      EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($4)])\n" +
+        "        KuduToEnumerableRel\n" +
+        "          KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[1], groupByLimited=[true])\n" +
+        "            KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+        "              KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
       assertTrue("Should have results to iterate over",
@@ -125,6 +146,8 @@ public final class SortedAggregationIT {
           plan.contains("KuduSortRel"));
       assertTrue(String.format("KuduSortRel should have groupByLimited set to true. It doesn't\n%s", plan),
           plan.contains("groupByLimited=[true]"));
+      assertEquals("Full SQL plan has changed\n",
+          expectedPlan, plan);
       assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
           1001L == queryResult.getLong(2));
       assertFalse("Should not have any more results",
@@ -142,6 +165,13 @@ public final class SortedAggregationIT {
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
+      final String expectedPlan =
+        "EnumerableLimit(fetch=[1])\n" +
+        "  EnumerableSort(sort0=[$0], dir0=[DESC])\n" +
+        "    EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($4)])\n" +
+        "      KuduToEnumerableRel\n" +
+        "        KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+        "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -149,6 +179,8 @@ public final class SortedAggregationIT {
           queryResult.next());
       assertFalse(String.format("Plan should not contain KuduSortRel. It is\n%s", plan),
           plan.contains("KuduSortRel"));
+      assertEquals("Full SQL plan has changed\n",
+          expectedPlan, plan);
       assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
           2001L == queryResult.getLong(2));
       assertFalse("Should not have any more results",
@@ -166,6 +198,15 @@ public final class SortedAggregationIT {
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
+      final String expectedPlan =
+        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], reverse_long_field=[$t2], REVERSE_BYTE_FIELD=[$t1])\n" +
+        "  EnumerableLimit(fetch=[1])\n" +
+        "    EnumerableSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC])\n" +
+        "      EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($4)])\n" +
+        "        KuduToEnumerableRel\n" +
+        "          KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], offset=[1], fetch=[1], groupByLimited=[true])\n" +
+        "            KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+        "              KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -175,6 +216,8 @@ public final class SortedAggregationIT {
           plan.contains("KuduSortRel"));
       assertTrue(String.format("KuduSortRel should have groupByLimited set to true. It doesn't\n%s", plan),
           plan.contains("groupByLimited=[true]"));
+      assertEquals("Full SQL plan has changed\n",
+          expectedPlan, plan);
       assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
           1000L == queryResult.getLong(2));
       assertFalse("Should not have any more results",
