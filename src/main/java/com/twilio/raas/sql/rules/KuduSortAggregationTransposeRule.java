@@ -5,12 +5,12 @@ import java.util.Optional;
 
 import com.twilio.raas.sql.KuduQuery;
 import com.twilio.raas.sql.KuduRel;
-import com.twilio.raas.sql.rel.KuduFilterRel;
 import com.twilio.raas.sql.rel.KuduSortRel;
 import com.twilio.raas.sql.rel.KuduToEnumerableRel;
 
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
@@ -56,19 +56,12 @@ public class KuduSortAggregationTransposeRule extends KuduSortRule {
     final RelNode newKuduEnumerable = new KuduToEnumerableRel(originalSort.getCluster(),
         originalSort.getTraitSet(), newSort);
 
-    final RelNode newAggregation = originalAggregate.copy(originalAggregate.getTraitSet(),
+    // Create a the aggregation relation and indicate it is sorted based on result.
+    final RelNode newAggregation = originalAggregate.copy(
+        originalAggregate.getTraitSet()
+            .replace(RelCollationTraitDef.INSTANCE.canonize(originalSort.getCollation())),
         Collections.singletonList(newKuduEnumerable));
 
-    // Copy the existing sort but remove the offset. Keep the existing sort above the Aggregation
-    // because the order coming out of the Aggregation is not the sort order. The Aggregation will
-    // only see records that will match the sort and limit instructions but it will not output them
-    // in sorted order. Therefore, the original sort object must be above it with one caveat, the
-    // offset must be removed. The Offset will be passed into the KuduSortRel ensure the
-    // SortableEnumerable skips the records according to the offset in the query. Skipping records
-    // is no longer required of the sort that lives *above* the Aggregation.
-    final RelNode newSortAndLimit = originalSort.copy(originalSort.getTraitSet(), newAggregation,
-        originalSort.getCollation(), null, originalSort.fetch);
-
-    call.transformTo(newSortAndLimit);
+    call.transformTo(newAggregation);
   }
 }

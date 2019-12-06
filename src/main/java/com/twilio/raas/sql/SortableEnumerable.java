@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.function.Function0;
@@ -17,6 +18,7 @@ import java.util.stream.Collectors;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -336,7 +338,6 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     }
 
     int uniqueGroupCount = 0;
-    final Map<TKey, TAccumulate> map = new HashMap<>();
     TKey lastKey = null;
 
     // groupFetchLimit calculates it's size based on offset. When offset is present, it needs to
@@ -348,7 +349,10 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     else {
       groupFetchLimit = limit;
     }
+    final Queue<TResult> sortedResults = new LinkedList<TResult>();
+
     try (Enumerator<Object[]> os = getThis().enumerator()) {
+      TAccumulate accumulator = null;
       while (os.moveNext()) {
         Object[] o = os.current();
         TKey key = keySelector.apply(o);
@@ -362,64 +366,32 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
           if (uniqueGroupCount > groupFetchLimit) {
             break;
           }
+          if (accumulator != null &&
+              (offset <= 0 || uniqueGroupCount > offset)) {
+            sortedResults.offer(resultSelector.apply(key, accumulator));
+            accumulator = null;
+          }
         }
 
         // When we are still skipping group by keys.
         if (offset > 0 && uniqueGroupCount <= offset) {
           continue;
         }
-
-        TAccumulate accumulator = map.get(key);
         if (accumulator == null) {
           accumulator = accumulatorInitializer.apply();
-          accumulator = accumulatorAdder.apply(accumulator, o);
-          map.put(key, accumulator);
         }
-        else {
-          TAccumulate originalAccumulate = accumulator;
-          accumulator = accumulatorAdder.apply(accumulator, o);
-          if (originalAccumulate != accumulator) {
-            map.put(key, accumulator);
-          }
-        }
+        accumulator = accumulatorAdder.apply(accumulator, o);
+      }
+      if (lastKey != null && accumulator != null &&
+          (offset <= 0 || uniqueGroupCount > offset)) {
+        sortedResults.offer(resultSelector.apply(lastKey, accumulator));
       }
     }
-    return new LookupResultEnumerable<>(map, resultSelector);
-  }
-
-  /** Reads a populated map, applying a selector function.
-   *
-   * @param <TResult> result type
-   * @param <TKey> key type
-   * @param <TAccumulate> accumulator type */
-  private static class LookupResultEnumerable<TResult, TKey, TAccumulate>
-    extends AbstractEnumerable2<TResult> {
-    private final Map<TKey, TAccumulate> map;
-    private final Function2<TKey, TAccumulate, TResult> resultSelector;
-
-    LookupResultEnumerable(Map<TKey, TAccumulate> map,
-        Function2<TKey, TAccumulate, TResult> resultSelector) {
-      this.map = map;
-      this.resultSelector = resultSelector;
-    }
-
-    public Iterator<TResult> iterator() {
-      final Iterator<Map.Entry<TKey, TAccumulate>> iterator =
-        map.entrySet().iterator();
-      return new Iterator<TResult>() {
-        public boolean hasNext() {
-          return iterator.hasNext();
-        }
-
-        public TResult next() {
-          final Map.Entry<TKey, TAccumulate> entry = iterator.next();
-          return resultSelector.apply(entry.getKey(), entry.getValue());
-        }
-
-        public void remove() {
-          throw new UnsupportedOperationException();
-        }
-      };
-    }
+    return new AbstractEnumerable2<TResult>() {
+      @Override
+      public Iterator<TResult> iterator() {
+        return sortedResults.iterator();
+      }
+    };
   }
 }
