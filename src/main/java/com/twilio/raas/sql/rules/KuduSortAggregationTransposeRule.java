@@ -12,6 +12,7 @@ import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
+import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.Filter;
@@ -40,6 +41,35 @@ public class KuduSortAggregationTransposeRule extends KuduSortRule {
 
     if (!canApply(originalSort, query, query.openedTable, Optional.of(input))) {
       return;
+    }
+
+    /**
+     * This rule should checks that the columns being grouped by are also present in sort.
+     *
+     * For table with PK(A,B)
+     * A, B, C,
+     * 1, 1, 1,
+     * 1, 2, 2,
+     * 1, 3, 1,
+     * For a query that does group by A, C and an order by A the rule cannot apply the sort.
+     */
+    for (Integer groupedOrdinal: originalAggregate.getGroupSet()) {
+      if (groupedOrdinal < query.openedTable.getSchema().getPrimaryKeyColumnCount()) {
+        boolean found = false;
+        for (RelFieldCollation fieldCollation: originalSort.getCollation().getFieldCollations()) {
+          if(fieldCollation.getFieldIndex() == groupedOrdinal) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          return;
+        }
+      }
+      else {
+        // group by field is not a member of the primary key. Order cannot be exploited for group keys.
+        return;
+      }
     }
 
     final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRel.CONVENTION);

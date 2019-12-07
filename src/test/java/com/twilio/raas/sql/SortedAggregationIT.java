@@ -219,4 +219,30 @@ public final class SortedAggregationIT {
           queryResult.next());
     }
   }
+
+  @Test
+  public void aggregatedResultsGroupedByOutOfOrder() throws Exception {
+    final String sql = String.format(
+        "SELECT account_sid, sum(reverse_long_field) FROM %s WHERE account_sid = '%s' GROUP BY account_sid, reverse_int_field ORDER BY account_sid ASC limit 1",
+        descendingSortTableName, JDBCQueryRunnerIT.ACCOUNT_SID);
+
+    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      final String expectedPlan =
+        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], EXPR$1=[$t2])\n" +
+        "  EnumerableLimit(fetch=[1])\n" +
+        "    EnumerableSort(sort0=[$0], dir0=[ASC])\n" +
+        "      EnumerableAggregate(group=[{0, 3}], EXPR$1=[$SUM0($4)])\n" +
+        "        KuduToEnumerableRel\n" +
+        "          KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+        "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+
+      assertFalse(String.format("Plan should not contain KuduSortRel. It is\n%s", plan),
+          plan.contains("KuduSortRel"));
+      assertEquals("Full SQL plan has changed\n",
+          expectedPlan, plan);
+    }
+  }
 }
