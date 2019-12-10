@@ -6,7 +6,6 @@ import org.apache.calcite.linq4j.EnumerableDefaults;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;
-import java.util.Map;
 import java.util.Queue;
 
 import org.apache.calcite.linq4j.Enumerator;
@@ -16,7 +15,6 @@ import org.apache.calcite.linq4j.function.Function2;
 
 import java.util.stream.Collectors;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.concurrent.BlockingQueue;

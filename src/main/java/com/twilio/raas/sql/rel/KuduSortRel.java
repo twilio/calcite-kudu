@@ -22,7 +22,7 @@ import org.slf4j.Logger;
 public class KuduSortRel extends Sort implements KuduRel {
 
     public static final Logger LOGGER = CalciteTrace.getPlannerTracer();
-        public final boolean belowAggregate;
+    public final boolean groupByLimited;
 
     public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet,
                          RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
@@ -30,23 +30,23 @@ public class KuduSortRel extends Sort implements KuduRel {
     }
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet,
-      RelNode child, RelCollation collation, RexNode offset, RexNode fetch, boolean belowAggregate) {
+      RelNode child, RelCollation collation, RexNode offset, RexNode fetch, boolean groupByLimited) {
       super(cluster, traitSet, child, collation, offset, fetch);
       assert getConvention() == KuduRel.CONVENTION;
       assert getConvention() == child.getConvention();
-      this.belowAggregate = belowAggregate;
+      this.groupByLimited = groupByLimited;
     }
 
     @Override
     public Sort copy(RelTraitSet traitSet, RelNode input,
                                RelCollation newCollation, RexNode offset, RexNode fetch) {
-      return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, belowAggregate);
+      return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, groupByLimited);
     }
 
     @Override
     public RelWriter explainTerms(RelWriter pw) {
       super.explainTerms(pw);
-      pw.item("groupByLimited", belowAggregate);
+      pw.item("groupByLimited", groupByLimited);
       return pw;
     }
 
@@ -74,6 +74,6 @@ public class KuduSortRel extends Sort implements KuduRel {
             implementor.limit = properFetch;
         }
 
-        implementor.groupByLimited = belowAggregate;
+        implementor.groupByLimited = groupByLimited;
     }
 }
