@@ -20,7 +20,7 @@ public final class KuduSchemaFactory implements SchemaFactory {
                          Map<String, Object> operand) {
         final String connectString = (String) operand.get("connect");
         final Map<String, KuduTableConfig> kuduTableConfigMap = new HashMap<>();
-        Optional.of((List<Map<String, Object>>)operand.get("kuduTableConfigs"))
+        Optional.ofNullable((List<Map<String, Object>>)operand.get("kuduTableConfigs"))
                 .orElse(Collections.<Map<String, Object>>emptyList())
                 .forEach(tableConfig ->
                     kuduTableConfigMap.put((String)tableConfig.get("tableName"),
