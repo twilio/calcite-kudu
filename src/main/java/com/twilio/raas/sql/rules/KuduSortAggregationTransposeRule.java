@@ -1,6 +1,9 @@
 package com.twilio.raas.sql.rules;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import com.twilio.raas.sql.KuduQuery;
@@ -8,8 +11,10 @@ import com.twilio.raas.sql.KuduRel;
 import com.twilio.raas.sql.rel.KuduSortRel;
 import com.twilio.raas.sql.rel.KuduToEnumerableRel;
 
+import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -39,10 +44,6 @@ public class KuduSortAggregationTransposeRule extends KuduSortRule {
     final Filter input = (Filter) call.getRelList().get(3);
     final KuduQuery query = (KuduQuery) call.getRelList().get(4);
 
-    if (!canApply(originalSort, query, query.openedTable, Optional.of(input))) {
-      return;
-    }
-
     /**
      * This rule should checks that the columns being grouped by are also present in sort.
      *
@@ -53,43 +54,43 @@ public class KuduSortAggregationTransposeRule extends KuduSortRule {
      * 1, 3, 1,
      * For a query that does group by A, C and an order by A the rule cannot apply the sort.
      */
-    for (Integer groupedOrdinal: originalAggregate.getGroupSet()) {
-      if (groupedOrdinal < query.openedTable.getSchema().getPrimaryKeyColumnCount()) {
-        boolean found = false;
-        for (RelFieldCollation fieldCollation: originalSort.getCollation().getFieldCollations()) {
-          if(fieldCollation.getFieldIndex() == groupedOrdinal) {
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          return;
-        }
-      }
-      else {
-        // group by field is not a member of the primary key. Order cannot be exploited for group keys.
-        return;
-      }
+    // Take the sorted fields and remap them through the group ordinals. This maps directly to the
+    // Kudu field indexes. The Map is between originalSort ordinal -> Kudu Field index.
+    final Map<Integer, Integer> remappingOrdinals = new HashMap<>();
+
+    final List<Integer> groupSet = originalAggregate.getGroupSet().asList();
+    for (RelFieldCollation fieldCollation: originalSort.getCollation().getFieldCollations()) {
+      remappingOrdinals.put(fieldCollation.getFieldIndex(),
+          groupSet.get(fieldCollation.getFieldIndex()));
     }
 
-    final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRel.CONVENTION);
+    RelCollation newCollation = RelCollationTraitDef.INSTANCE.canonize(
+        RelCollations.permute(originalSort.getCollation(), remappingOrdinals));
+    final RelTraitSet traitSet = originalSort.getTraitSet()
+      .plus(newCollation)
+      .plus(Convention.NONE);
+
+    // Check the new trait set to see if we can apply the sort against this.
+    if (!canApply(traitSet, query, query.openedTable, Optional.of(input))) {
+      return;
+    }
 
     final KuduSortRel newSort = new KuduSortRel(
         input.getCluster(),
-        traitSet,
-        convert(input, traitSet.replace(RelCollations.EMPTY)),
-        originalSort.getCollation(),
+        traitSet.replace(KuduRel.CONVENTION),
+        convert(input, input.getTraitSet().replace(RelCollations.EMPTY)),
+        newCollation,
         originalSort.offset,
         originalSort.fetch,
         true);
 
     final RelNode newKuduEnumerable = new KuduToEnumerableRel(originalSort.getCluster(),
-        originalSort.getTraitSet(), newSort);
+        traitSet, newSort);
 
     // Create a the aggregation relation and indicate it is sorted based on result.
     final RelNode newAggregation = originalAggregate.copy(
         originalAggregate.getTraitSet()
-            .replace(RelCollationTraitDef.INSTANCE.canonize(originalSort.getCollation())),
+        .replace(traitSet.getTrait(RelCollationTraitDef.INSTANCE)),
         Collections.singletonList(newKuduEnumerable));
 
     call.transformTo(newAggregation);

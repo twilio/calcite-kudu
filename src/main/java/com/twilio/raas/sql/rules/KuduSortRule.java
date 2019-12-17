@@ -12,6 +12,8 @@ import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptRuleOperand;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
@@ -48,20 +50,23 @@ public abstract class KuduSortRule extends RelOptRule {
   }
 
 
-  public boolean canApply (final Sort originalSort, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
+  public boolean canApply (final RelTraitSet sortTraits, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
     // If there is no sort -- i.e. there is only a limit
     // don't pay the cost of returning rows in sorted order.
-    if (originalSort.getCollation().getFieldCollations().isEmpty()) {
+    final RelCollation collation = sortTraits.getTrait(RelCollationTraitDef.INSTANCE);
+
+    if (collation.getFieldCollations().isEmpty()) {
       return false;
     }
 
-    if (originalSort.getTraitSet().contains(KuduRel.CONVENTION)) {
+    if (sortTraits.contains(KuduRel.CONVENTION)) {
       return false;
     }
+
 
     int mustMatch = 0;
 
-    for (final RelFieldCollation sortField: originalSort.getCollation().getFieldCollations()) {
+    for (final RelFieldCollation sortField: collation.getFieldCollations()) {
       // Reject for descending sorted fields if sort direction is not Descending
       if ((query.descendingSortedFieldIndices.contains(sortField.getFieldIndex()) &&
               sortField.direction != RelFieldCollation.Direction.DESCENDING &&
@@ -91,7 +96,6 @@ public abstract class KuduSortRule extends RelOptRule {
           return false;
         }
       }
-
       mustMatch++;
     }
     return true;
@@ -99,7 +103,7 @@ public abstract class KuduSortRule extends RelOptRule {
 
 
   public void perform(final RelOptRuleCall call, final Sort originalSort, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
-    if (canApply(originalSort, query, openedTable, filter)) {
+    if (canApply(originalSort.getTraitSet(), query, openedTable, filter)) {
       final RelNode input = originalSort.getInput();
       final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRel.CONVENTION)
         .replace(originalSort.getCollation());
