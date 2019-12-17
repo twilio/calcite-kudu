@@ -351,12 +351,20 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
 
     try (Enumerator<Object[]> os = getThis().enumerator()) {
       TAccumulate accumulator = null;
+      TKey key = null;
       while (os.moveNext()) {
         Object[] o = os.current();
-        TKey key = keySelector.apply(o);
+        key = keySelector.apply(o);
 
+        // If there hasn't been a key yet or if there is a new key
         if (lastKey == null || !key.equals(lastKey)) {
-          lastKey = key;
+          // If there is an accumulator, save the results into the queue and reset accumulator.
+          if (accumulator != null &&
+              (offset <= 0 || uniqueGroupCount > offset)) {
+            sortedResults.offer(resultSelector.apply(lastKey, accumulator));
+            accumulator = null;
+          }
+
           uniqueGroupCount++;
 
           // When we have seen limit + 1 unique group by keys, exit.
@@ -364,25 +372,27 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
           if (uniqueGroupCount > groupFetchLimit) {
             break;
           }
-          if (accumulator != null &&
-              (offset <= 0 || uniqueGroupCount > offset)) {
-            sortedResults.offer(resultSelector.apply(key, accumulator));
-            accumulator = null;
-          }
+
+          lastKey = key;
         }
 
         // When we are still skipping group by keys.
         if (offset > 0 && uniqueGroupCount <= offset) {
           continue;
         }
+
+        // First Kudu record matching key. Init the accumulator function.
         if (accumulator == null) {
           accumulator = accumulatorInitializer.apply();
         }
         accumulator = accumulatorAdder.apply(accumulator, o);
       }
-      if (lastKey != null && accumulator != null &&
+
+      // If the source Enumerator -- os -- runs out of rows and we have an accumulator in progress
+      // Apply it and save it.
+      if (key != null && accumulator != null &&
           (offset <= 0 || uniqueGroupCount > offset)) {
-        sortedResults.offer(resultSelector.apply(lastKey, accumulator));
+        sortedResults.offer(resultSelector.apply(key, accumulator));
       }
     }
     return new AbstractEnumerable2<TResult>() {
