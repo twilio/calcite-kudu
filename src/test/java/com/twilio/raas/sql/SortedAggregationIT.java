@@ -103,7 +103,9 @@ public final class SortedAggregationIT {
   @Test
   public void aggregateSortedResultsByAccount() throws Exception {
     final String sql = String.format(
-        "SELECT account_sid, sum(reverse_long_field), sum(reverse_int_field) FROM %s WHERE resource_type = 'message-body' GROUP BY account_sid ORDER BY account_sid ASC limit 1",
+        "SELECT account_sid, sum(reverse_long_field), sum(reverse_int_field) FROM %s WHERE " +
+                "resource_type = 'message-body' GROUP BY account_sid ORDER BY account_sid ASC " +
+                "limit 1",
         descendingSortTableName);
 
     String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
@@ -113,11 +115,12 @@ public final class SortedAggregationIT {
       String plan = SqlUtil.getExplainPlan(rs);
 
       final String expectedPlan =
-        "EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($4)], EXPR$2=[$SUM0($3)])\n" +
+        "EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($1)], EXPR$2=[$SUM0($2)])\n" +
         "  KuduToEnumerableRel\n" +
         "    KuduSortRel(sort0=[$0], dir0=[ASC], fetch=[1], groupByLimited=[true])\n" +
-        "      KuduFilterRel(Scan 1=[resource_type EQUAL message-body])\n" +
-        "        KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "      KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_LONG_FIELD=[$4], REVERSE_INT_FIELD=[$3])\n" +
+        "        KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
+        "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       assertTrue("Should have results to iterate over",
           queryResult.next());
@@ -146,12 +149,16 @@ public final class SortedAggregationIT {
       String plan = SqlUtil.getExplainPlan(rs);
 
       final String expectedPlan =
-        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], reverse_long_field=[$t2], REVERSE_BYTE_FIELD=[$t1])\n" +
-        "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($4)])\n" +
+        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], reverse_long_field=[$t2], " +
+                "REVERSE_BYTE_FIELD=[$t1])\n" +
+        "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($2)])\n" +
         "    KuduToEnumerableRel\n" +
-        "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[1], groupByLimited=[true])\n" +
-        "        KuduFilterRel(Scan 1=[resource_type EQUAL message-body])\n" +
-        "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[1], " +
+                "groupByLimited=[true])\n" +
+        "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], " +
+                "REVERSE_LONG_FIELD=[$4], RESOURCE_TYPE=[$5])\n" +
+        "          KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
+        "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -183,10 +190,11 @@ public final class SortedAggregationIT {
       final String expectedPlan =
         "EnumerableLimit(fetch=[1])\n" +
         "  EnumerableSort(sort0=[$0], dir0=[DESC])\n" +
-        "    EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($4)])\n" +
+        "    EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($1)])\n" +
         "      KuduToEnumerableRel\n" +
-        "        KuduFilterRel(Scan 1=[resource_type EQUAL message-body])\n" +
-        "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_LONG_FIELD=[$4])\n" +
+        "          KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
+        "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -214,12 +222,16 @@ public final class SortedAggregationIT {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       final String expectedPlan =
-        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], reverse_long_field=[$t2], REVERSE_BYTE_FIELD=[$t1])\n" +
-        "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($4)])\n" +
+        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], reverse_long_field=[$t2], " +
+                "REVERSE_BYTE_FIELD=[$t1])\n" +
+        "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($2)])\n" +
         "    KuduToEnumerableRel\n" +
-        "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], offset=[1], fetch=[1], groupByLimited=[true])\n" +
-        "        KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
-        "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], offset=[1], " +
+                "fetch=[1], groupByLimited=[true])\n" +
+        "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], " +
+                "REVERSE_LONG_FIELD=[$4])\n" +
+        "          KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+        "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -241,7 +253,9 @@ public final class SortedAggregationIT {
   @Test
   public void aggregatedResultsGroupedByOutOfOrder() throws Exception {
     final String sql = String.format(
-        "SELECT account_sid, sum(reverse_long_field) FROM %s WHERE resource_type = 'message-body' GROUP BY account_sid, reverse_int_field ORDER BY account_sid ASC, reverse_int_field ASC limit 1",
+        "SELECT account_sid, sum(reverse_long_field) FROM %s WHERE resource_type = 'message-body'" +
+                " GROUP BY account_sid, reverse_int_field ORDER BY account_sid ASC, " +
+                "reverse_int_field ASC limit 1",
         descendingSortTableName);
 
     String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
@@ -249,13 +263,16 @@ public final class SortedAggregationIT {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       final String expectedPlan =
-        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], EXPR$1=[$t2], REVERSE_INT_FIELD=[$t1])\n" +
+        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], EXPR$1=[$t2], " +
+                "REVERSE_INT_FIELD=[$t1])\n" +
         "  EnumerableLimit(fetch=[1])\n" +
         "    EnumerableSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
-        "      EnumerableAggregate(group=[{0, 3}], EXPR$1=[$SUM0($4)])\n" +
+        "      EnumerableAggregate(group=[{0, 1}], EXPR$1=[$SUM0($2)])\n" +
         "        KuduToEnumerableRel\n" +
-        "          KuduFilterRel(Scan 1=[resource_type EQUAL message-body])\n" +
-        "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "          KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_INT_FIELD=[$3], " +
+                "REVERSE_LONG_FIELD=[$4])\n" +
+        "            KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
+        "              KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       assertFalse(String.format("Plan should not contain KuduSortRel. It is\n%s", plan),
           plan.contains("KuduSortRel"));
@@ -277,11 +294,12 @@ public final class SortedAggregationIT {
       String plan = SqlUtil.getExplainPlan(rs);
 
       final String expectedPlan =
-        "EnumerableAggregate(group=[{0, 1}], EXPR$2=[$SUM0($4)], EXPR$3=[$SUM0($3)])\n" +
+        "EnumerableAggregate(group=[{0, 1}], EXPR$2=[$SUM0($2)], EXPR$3=[$SUM0($3)])\n" +
         "  KuduToEnumerableRel\n" +
         "    KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[4], groupByLimited=[true])\n" +
-        "      KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
-        "        KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "      KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], REVERSE_LONG_FIELD=[$4], REVERSE_INT_FIELD=[$3])\n" +
+        "        KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+        "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       assertTrue("Should have results to iterate over",
           queryResult.next());

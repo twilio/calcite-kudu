@@ -271,7 +271,7 @@ public final class DescendingSortedOnDatetimeIT {
         String plan = SqlUtil.getExplainPlan(rs);
         String expectedPlanFormat = "KuduToEnumerableRel\n"
             +"  KuduSortRel(sort0=[$1], sort1=[$0], dir0=[DESC], dir1=[ASC], groupByLimited=[false])\n"
-            +"    KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n"
+            +"    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
             +"      KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
         String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
         assertEquals("Unexpected plan ", expectedPlan, plan);
@@ -303,7 +303,7 @@ public final class DescendingSortedOnDatetimeIT {
         String plan = SqlUtil.getExplainPlan(rs);
         String expectedPlanFormat = "EnumerableSort(sort0=[$1], dir0=[ASC])\n" +
             "  KuduToEnumerableRel\n" +
-            "    KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+            "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
             "      KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
         String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
         assertEquals("Unexpected plan ", expectedPlan, plan);
@@ -334,11 +334,11 @@ public final class DescendingSortedOnDatetimeIT {
         // verify plan
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
         String plan = SqlUtil.getExplainPlan(rs);
-        String expectedPlanFormat = "EnumerableLimit(fetch=[1])\n" +
-            "  KuduToEnumerableRel\n" +
-            "    KuduSortRel(sort0=[$1], dir0=[DESC], groupByLimited=[false])\n" +
-            "      KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567 , event_date LESS_EQUAL 1546387200000000])\n" +
-            "        KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
+        String expectedPlanFormat = "KuduToEnumerableRel\n" +
+                "  KuduLimitRel(limit=[1])\n" +
+                "    KuduSortRel(sort0=[$1], dir0=[DESC], groupByLimited=[false])\n" +
+                "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, event_date LESS_EQUAL 1546387200000000])\n" +
+                "        KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
         String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
         assertEquals("Unexpected plan ", expectedPlan, plan);
         rs = conn.createStatement().executeQuery(firstBatchSql);
@@ -365,7 +365,7 @@ public final class DescendingSortedOnDatetimeIT {
         String plan = SqlUtil.getExplainPlan(rs);
         String expectedPlanFormat = "EnumerableSort(sort0=[$1], sort1=[$3], dir0=[DESC], dir1=[ASC])\n" +
             "  KuduToEnumerableRel\n" +
-            "    KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+            "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
             "      KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
         String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
         assertEquals("Unexpected plan ", expectedPlan, plan);

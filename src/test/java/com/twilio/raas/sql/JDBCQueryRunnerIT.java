@@ -1,5 +1,6 @@
 package com.twilio.raas.sql;
 
+import com.google.common.collect.Sets;
 import org.apache.kudu.client.Upsert;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.PartialRow;
@@ -8,6 +9,10 @@ import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.test.KuduTestHarness;
 import org.slf4j.Logger;
 
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.Timestamp;
 import org.junit.runners.JUnit4;
 import org.apache.kudu.Type;
@@ -28,6 +33,11 @@ import java.sql.SQLException;
 import com.twilio.dataEngine.protocol.ExecuteQueryLog;
 import com.twilio.dataEngine.protocol.ExecuteQueryRequest;
 import java.util.Collections;
+import java.util.Set;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
 public final class JDBCQueryRunnerIT {
@@ -49,7 +59,10 @@ public final class JDBCQueryRunnerIT {
     final List<ColumnSchema> columns = Arrays.asList(
         new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).key(true).build(),
         new ColumnSchema.ColumnSchemaBuilder("date_created", Type.UNIXTIME_MICROS).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("sid", Type.STRING).key(true).build());
+        new ColumnSchema.ColumnSchemaBuilder("sid", Type.STRING).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("mcc", Type.STRING).key(false).build(),
+        new ColumnSchema.ColumnSchemaBuilder("mnc", Type.STRING).key(false).build(),
+        new ColumnSchema.ColumnSchemaBuilder("error_code", Type.INT32).key(false).build());
 
     testHarness.getClient().createTable(BASE_TABLE_NAME, new Schema(columns),
         new org.apache.kudu.client.CreateTableOptions()
@@ -64,13 +77,19 @@ public final class JDBCQueryRunnerIT {
     firstRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
     firstRowWrite.addString("sid", JDBCQueryRunnerIT.FIRST_SID);
     firstRowWrite.addTimestamp("date_created", new Timestamp(System.currentTimeMillis()));
+    firstRowWrite.addString("mcc", "mcc1");
+    firstRowWrite.addString("mnc", "mnc1");
+    firstRowWrite.addInt("error_code", 1);
     insertSession.apply(firstRowOp).join();
 
     final Upsert secondRowOp = TABLE.newUpsert();
     final PartialRow secondRowWrite = secondRowOp.getRow();
     secondRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    secondRowWrite.addString("sid", "SM123485789");
+    secondRowWrite.addString("sid", JDBCQueryRunnerIT.SECOND_SID);
     secondRowWrite.addTimestamp("date_created", new Timestamp(System.currentTimeMillis()));
+    secondRowWrite.addString("mcc", "mcc2");
+    secondRowWrite.addString("mnc", "mnc2");
+    secondRowWrite.addInt("error_code", 2);
     insertSession.apply(secondRowOp).join();
   }
 
@@ -114,4 +133,191 @@ public final class JDBCQueryRunnerIT {
             ACCOUNT_SID, records.get(1).get("account_sid"));
       }
     }
+
+    @Test
+    public void testProjectionWithFilter() throws Exception {
+        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        try (Connection conn = DriverManager.getConnection(url)) {
+            String sqlFormat = "SELECT sid FROM kudu.\"ReportCenter.DeliveredMessages\" WHERE " +
+                    "account_sid = '%s'";
+            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String expectedPlan = "KuduToEnumerableRel\n" +
+                    "  KuduProjectRel(SID=[$2])\n" +
+                    "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+                    "      KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+            String plan = SqlUtil.getExplainPlan(rs);
+            assertEquals("Unexpected plan ", expectedPlan, plan);
+
+            // since the rows are not ordered just assert that we get the expected number of rows
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(rs.getString("sid"), JDBCQueryRunnerIT.FIRST_SID);
+            assertTrue(rs.next());
+            assertEquals(rs.getString("sid"), JDBCQueryRunnerIT.SECOND_SID);
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testProjectionWithFunctions() throws Exception {
+        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        try (Connection conn = DriverManager.getConnection(url)) {
+            String sqlFormat = "SELECT mcc||mnc, mcc, mnc, mnc||mcc FROM kudu.\"ReportCenter" +
+                    ".DeliveredMessages\" WHERE account_sid = '%s'";
+            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], expr#3=[||($t1, $t2)], " +
+                    "expr#4=[||($t2, $t1)], EXPR$0=[$t3], MCC=[$t1], MNC=[$t2], EXPR$3=[$t4])\n" +
+                    "  KuduToEnumerableRel\n" +
+                    "    KuduProjectRel(ACCOUNT_SID=[$0], MCC=[$3], MNC=[$4])\n" +
+                    "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+                    "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+            String plan = SqlUtil.getExplainPlan(rs);
+            assertEquals("Unexpected plan ", expectedPlan, plan);
+
+            // since the rows are not ordered just assert that we get the expected number of rows
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals("mcc1mnc1", rs.getString(1));
+            assertEquals("mcc1", rs.getString(2));
+            assertEquals("mnc1", rs.getString(3));
+            assertEquals("mnc1mcc1", rs.getString(4));
+            assertTrue(rs.next());
+            assertEquals("mcc2mnc2", rs.getString(1));
+            assertEquals("mcc2", rs.getString(2));
+            assertEquals("mnc2", rs.getString(3));
+            assertEquals("mnc2mcc2", rs.getString(4));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testProjectionWithCountStar() throws Exception {
+        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        try (Connection conn = DriverManager.getConnection(url)) {
+            String sqlFormat = "SELECT count(*) FROM kudu.\"ReportCenter.DeliveredMessages\" WHERE account_sid = '%s'";
+            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String expectedPlan = "EnumerableAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
+                    "  KuduToEnumerableRel\n" +
+                    "    KuduProjectRel(ACCOUNT_SID=[$0])\n" +
+                    "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+                    "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+            String plan = SqlUtil.getExplainPlan(rs);
+            assertEquals("Unexpected plan ", expectedPlan, plan);
+
+            // since the rows are not ordered just assert that we get the expected number of rows
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSortByPrimaryKey() throws Exception {
+        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        try (Connection conn = DriverManager.getConnection(url)) {
+
+            String sqlFormat = "SELECT sid FROM kudu.\"ReportCenter.DeliveredMessages\" " +
+                    "WHERE account_sid = '%s' ORDER BY account_sid, date_created, sid";
+            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String expectedPlan = "KuduToEnumerableRel\n" +
+                    "  KuduProjectRel(SID=[$2], ACCOUNT_SID=[$0], DATE_CREATED=[$1])\n" +
+                    "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[ASC], " +
+                    "dir2=[ASC], groupByLimited=[false])\n" +
+                    "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+                    "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+            String plan = SqlUtil.getExplainPlan(rs);
+            assertEquals("Unexpected plan ", expectedPlan, plan);
+
+            // since the table has two rows each with a unique date, we expect two rows sorted by
+            // date
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(FIRST_SID, rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(SECOND_SID, rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSortOnAllGroupByColumns() throws Exception {
+        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        try (Connection conn = DriverManager.getConnection(url)) {
+
+            String sqlFormat = "SELECT account_sid, date_created , count(*) FROM kudu" +
+                    ".\"ReportCenter.DeliveredMessages\" " +
+                    "WHERE account_sid = '%s' GROUP BY account_sid, date_created ORDER BY " +
+                    "account_sid, date_created LIMIT 51";
+            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String expectedPlan = "EnumerableAggregate(group=[{0, 1}], EXPR$2=[COUNT()])\n" +
+                    "  KuduToEnumerableRel\n" +
+                    "    KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC], fetch=[51], " +
+                    "groupByLimited=[true])\n" +
+                    "      KuduProjectRel(ACCOUNT_SID=[$0], DATE_CREATED=[$1])\n" +
+                    "        KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+                    "          KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+            String plan = SqlUtil.getExplainPlan(rs);
+            assertEquals("Unexpected plan ", expectedPlan, plan);
+
+            // since the table has two rows each with a unique date, we expect two rows sorted by
+            // date
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(ACCOUNT_SID, rs.getString(1));
+            Date d1 = rs.getDate(2);
+            assertEquals(1, rs.getInt(3));
+            assertTrue(rs.next());
+            assertEquals(ACCOUNT_SID, rs.getString(1));
+            Date d2 = rs.getDate(2);
+            assertEquals(1, rs.getInt(3));
+            assertFalse(rs.next());
+            assertTrue (d1.before(d2));
+        }
+    }
+
+    @Test
+    public void testSortOnSubsetOfGroupByColumns() throws Exception {
+        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        try (Connection conn = DriverManager.getConnection(url)) {
+
+            String sqlFormat = "SELECT account_sid, sid , count(*) FROM kudu" +
+                    ".\"ReportCenter.DeliveredMessages\" " +
+                    "WHERE account_sid = '%s' GROUP BY account_sid, sid ORDER BY " +
+                    "account_sid  LIMIT 51";
+            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String expectedPlan = "EnumerableLimit(fetch=[51])\n" +
+                    "  EnumerableSort(sort0=[$0], dir0=[ASC])\n" +
+                    "    EnumerableAggregate(group=[{0, 1}], EXPR$2=[COUNT()])\n" +
+                    "      KuduToEnumerableRel\n" +
+                    "        KuduProjectRel(ACCOUNT_SID=[$0], SID=[$2])\n" +
+                    "          KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+                    "            KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+            String plan = SqlUtil.getExplainPlan(rs);
+            assertEquals("Unexpected plan ", expectedPlan, plan);
+
+            Set<String> expectedSimSids = Sets.newHashSet(FIRST_SID, SECOND_SID);
+            Set<String> actualSimSids = Sets.newHashSetWithExpectedSize(2);
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(ACCOUNT_SID, rs.getString(1));
+            actualSimSids.add(rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertTrue(rs.next());
+            assertEquals(ACCOUNT_SID, rs.getString(1));
+            actualSimSids.add(rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertFalse(rs.next());
+            // the rows will not be returned in any order so just assert that we see all the
+            // expected rows
+            assertEquals(expectedSimSids, actualSimSids);
+        }
+    }
+
 }

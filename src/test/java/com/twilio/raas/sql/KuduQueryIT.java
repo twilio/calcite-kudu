@@ -88,13 +88,13 @@ public class KuduQueryIT {
     // @TODO: we have the columnSchema in the setup, we don't need to grab the table.
     final KuduPredicate filterToSid = KuduPredicate
       .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn("sid"), KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
-    final Enumerable<Object[]> results =
-      relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, -1, false, false);
-    Iterator<Object[]> resultIter = results.iterator();
+    final Enumerable<Object> results =
+            relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, -1, false, false);
+    Iterator<Object> resultIter = results.iterator();
     Assert.assertTrue("Should have something to iterate over",
 		      resultIter.hasNext());
     Assert.assertEquals("Message sid should match",
-     			KuduQueryIT.FIRST_SID, resultIter.next()[0]);
+     			KuduQueryIT.FIRST_SID, resultIter.next());
     Assert.assertFalse("Should only have one row",
 		       resultIter.hasNext());
   }
@@ -107,17 +107,17 @@ public class KuduQueryIT {
     // @TODO: we have the columnSchema in the setup, we don't need to grab the table.
     final KuduPredicate filterToAccountSid = KuduPredicate
       .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn("account_sid"), KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.ACCOUNT_SID);
-    final Enumerable<Object[]> results = relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToAccountSid)),
+    final Enumerable<Object> results = relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToAccountSid)),
         Arrays.asList(2, 0), -1, -1, false, false);
-    Iterator<Object[]> resultIter = results.iterator();
+    Iterator<Object> resultIter = results.iterator();
     Assert.assertTrue("Should have something to iterate over",
 		      resultIter.hasNext());
-    final Object[] firstRow = resultIter.next();
+    final Object[] firstRow = (Object[])resultIter.next();
     Assert.assertEquals("Message sid should match first sid",
      			KuduQueryIT.FIRST_SID, firstRow[0]);
     Assert.assertTrue("Should have a second row",
 		      resultIter.hasNext());
-    final Object[] secondRow = resultIter.next();
+    final Object[] secondRow = (Object[])resultIter.next();
     Assert.assertEquals("Message sid should match second sid",
      			KuduQueryIT.SECOND_SID, secondRow[0]);
 
@@ -144,15 +144,15 @@ public class KuduQueryIT {
     final List<List<KuduPredicate>> predicateQuery = new ArrayList<>();
     predicateQuery.add(Arrays.asList(firstSid));
     predicateQuery.add(Arrays.asList(secondSid));
-    final Enumerable<Object[]> results = relTable.executeQuery(predicateQuery,
+    final Enumerable<Object> results = relTable.executeQuery(predicateQuery,
         Collections.singletonList(2), -1, -1, false, false);
-    Enumerator<Object[]> resultIter = results.enumerator();
+    Enumerator<Object> resultIter = results.enumerator();
     Assert.assertTrue("Should have something to iterate over",
         resultIter.moveNext());
     final List<String> resultCollection = new LinkedList<String>();
 
     do {
-        resultCollection.add(resultIter.current()[0].toString());
+        resultCollection.add(resultIter.current().toString());
     } while(resultIter.moveNext());
     Assert.assertEquals(String.format("Should return two rows from the Kudu Table: %s", resultCollection),
         2, resultCollection.size());

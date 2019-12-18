@@ -47,11 +47,11 @@ public final class CalciteKuduEnumerableTest {
         queue.add(CalciteScannerMessage.<CalciteRow>createEndMessage());
         assertTrue("Should signal there are messages",
             enumerable.moveNext());
-        assertArrayEquals("Row should match",
-            singleRow, enumerable.current().rowData);
+        assertEquals("Row should match",
+            singleRow[0], enumerable.current().getRowData());
         assertFalse("Should be no more rows",
             enumerable.moveNext());
-        assertArrayEquals("current() should still be the previous row",
-            singleRow, enumerable.current().rowData);
+        assertEquals("current() should still be the previous row",
+            singleRow[0], enumerable.current().getRowData());
     }
 }

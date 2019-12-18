@@ -64,7 +64,7 @@ public abstract class KuduSortRule extends RelOptRule {
     }
 
 
-    int mustMatch = 0;
+    int pkColumnIndex = 0;
 
     for (final RelFieldCollation sortField: collation.getFieldCollations()) {
       // Reject for descending sorted fields if sort direction is not Descending
@@ -78,25 +78,26 @@ public abstract class KuduSortRule extends RelOptRule {
         {
           return false;
         }
+      // the sort columns must be a prefix of the primary key columns
       if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount() ||
-          sortField.getFieldIndex() != mustMatch) {
+          sortField.getFieldIndex() != pkColumnIndex) {
         // This field is not in the primary key columns. If there is a condition lets see if it is there
         if (filter.isPresent()) {
           final RexNode originalCondition = filter.get().getCondition();
-          while (mustMatch < sortField.getFieldIndex()) {
-            final KuduFilterVisitor visitor = new KuduFilterVisitor(mustMatch);
+          while (pkColumnIndex < sortField.getFieldIndex()) {
+            final KuduFilterVisitor visitor = new KuduFilterVisitor(pkColumnIndex);
             final Boolean foundFieldInCondition = originalCondition.accept(visitor);
             if (foundFieldInCondition == Boolean.FALSE) {
               return false;
             }
-            mustMatch++;
+            pkColumnIndex++;
           }
         }
         else {
           return false;
         }
       }
-      mustMatch++;
+      pkColumnIndex++;
     }
     return true;
   }

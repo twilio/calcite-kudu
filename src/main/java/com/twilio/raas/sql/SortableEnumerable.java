@@ -41,7 +41,7 @@ import org.apache.kudu.Schema;
  * Enumerable will return in unsorted order unless
  * {@link SortableEnumerable#setSorted} is called.
  */
-public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
+public final class SortableEnumerable extends AbstractEnumerable<Object> {
   private static final Logger logger = LoggerFactory.getLogger(SortableEnumerable.class);
 
   private final List<AsyncKuduScanner> scanners;
@@ -90,9 +90,14 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     // in a predictible order
     this.sort = offset>0 || sort;
     this.descendingSortedFieldIndices = descendingSortedFieldIndices;
-    if (groupByLimited && !this.sort) {
-      throw new IllegalArgumentException(
-          "Cannot apply limit on group by without sorting the results first");
+    if (groupByLimited) {
+      if (!this.sort) {
+          throw new IllegalArgumentException(
+                  "Cannot apply limit on group by without sorting the results first");
+      } else if (limit == -1) {
+          throw new IllegalArgumentException(
+                  "Group by without sorting needs to have a limit specified");
+      }
     }
     this.groupByLimited = groupByLimited;
   }
@@ -112,11 +117,11 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     return false;
   }
 
-  public Enumerator<Object[]> unsortedEnumerator(final int numScanners,
+  public Enumerator<Object> unsortedEnumerator(final int numScanners,
       final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages) {
-    return new Enumerator<Object[]>() {
+    return new Enumerator<Object>() {
       private int finishedScanners = 0;
-      private Object[] next = null;
+      private Object next = null;
       private boolean finished = false;
       private int totalMoves = 0;
       private boolean movedToOffset = false;
@@ -158,7 +163,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
 
         } while(fetched == null ||
             fetched.type != CalciteScannerMessage.MessageType.ROW);
-        next = fetched.row.get().rowData;
+        next = fetched.row.get().getRowData();
         totalMoves++;
         boolean limitReached = checkLimitReached(totalMoves);
         if (limitReached) {
@@ -168,7 +173,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
       }
 
       @Override
-      public Object[] current() {
+      public Object current() {
         return next;
       }
 
@@ -184,10 +189,10 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     };
   }
 
-  public Enumerator<Object[]> sortedEnumerator(final List<Enumerator<CalciteRow>> subEnumerables) {
+  public Enumerator<Object> sortedEnumerator(final List<Enumerator<CalciteRow>> subEnumerables) {
 
-    return new Enumerator<Object[]>() {
-      private Object[] next = null;
+    return new Enumerator<Object>() {
+      private Object next = null;
       private List<Boolean> enumerablesWithRows = new ArrayList<>(subEnumerables.size());
       private int totalMoves = 0;
 
@@ -217,19 +222,19 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
           if (enumerablesWithRows.get(idx)) {
             final CalciteRow enumerablesNext = subEnumerables.get(idx).current();
             if (smallest == null) {
-              logger.trace("smallest isn't set setting to {}", enumerablesNext.rowData);
+              logger.trace("smallest isn't set setting to {}", enumerablesNext.getRowData());
               smallest = enumerablesNext;
               chosenEnumerable = idx;
             }
             else if (enumerablesNext.compareTo(smallest) < 0) {
               logger.trace("{} is smaller then {}",
-                  enumerablesNext.rowData, smallest.rowData);
+                  enumerablesNext.getRowData(), smallest.getRowData());
               smallest = enumerablesNext;
               chosenEnumerable = idx;
             }
             else {
               logger.trace("{} is larger then {}",
-                  enumerablesNext.rowData, smallest.rowData);
+                  enumerablesNext.getRowData(), smallest.getRowData());
             }
           }
           else {
@@ -239,7 +244,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
         if (smallest == null) {
           return false;
         }
-        next = smallest.rowData;
+        next = smallest.getRowData();
         // Move the chosen one forward. The others have their smallest
         // already in the front of their queues.
         logger.trace("Chosen idx {} to move next", chosenEnumerable);
@@ -255,7 +260,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
       }
 
       @Override
-      public Object[] current() {
+      public Object current() {
         return next;
       }
 
@@ -275,7 +280,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
   }
 
   @Override
-  public Enumerator<Object[]> enumerator() {
+  public Enumerator<Object> enumerator() {
     if (sort) {
       return sortedEnumerator(
           scanners
@@ -323,9 +328,9 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
 
   @Override
   public <TKey, TAccumulate, TResult> Enumerable<TResult> groupBy(
-      Function1<Object[], TKey> keySelector,
+      Function1<Object, TKey> keySelector,
       Function0<TAccumulate> accumulatorInitializer,
-      Function2<TAccumulate, Object[], TAccumulate> accumulatorAdder,
+      Function2<TAccumulate, Object, TAccumulate> accumulatorAdder,
       Function2<TKey, TAccumulate, TResult> resultSelector) {
     // When Grouping rows but the aggregation is not sorted by primary key direction or there is no
     // limit to the grouping, read every single matching row for this query.
@@ -349,11 +354,11 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
     }
     final Queue<TResult> sortedResults = new LinkedList<TResult>();
 
-    try (Enumerator<Object[]> os = getThis().enumerator()) {
+    try (Enumerator<Object> os = getThis().enumerator()) {
       TAccumulate accumulator = null;
 
       while (os.moveNext()) {
-        Object[] o = os.current();
+        Object o = os.current();
         final TKey key = keySelector.apply(o);
 
         // If there hasn't been a key yet or if there is a new key

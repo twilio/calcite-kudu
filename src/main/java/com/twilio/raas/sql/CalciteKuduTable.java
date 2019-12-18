@@ -206,7 +206,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      *
      * @return Enumeration on the objects, Fields conform to {@link CalciteKuduTable#getRowType}.
      */
-    public Enumerable<Object[]> executeQuery(final List<List<KuduPredicate>> predicates,
+    public Enumerable<Object> executeQuery(final List<List<KuduPredicate>> predicates,
                                              List<Integer> columnIndices, final long limit,
         final long offset, final boolean sorted, final boolean groupByLimited) {
         // Here all the results from all the scans are collected. This is consumed
@@ -316,7 +316,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
          * This is the method that is called by Code generation to run the query.
          * Code generation happens in {@link KuduToEnumerableConverter}
          */
-        public Enumerable<Object[]> query(List<List<CalciteKuduPredicate>> predicates,
+        public Enumerable<Object> query(List<List<CalciteKuduPredicate>> predicates,
                                           List<Integer> fieldsIndices,
             long limit, long offset, boolean sorted, boolean groupByLimited) {
             return getTable().executeQuery(predicates

@@ -2,8 +2,9 @@ package com.twilio.raas.sql;
 
 import com.twilio.raas.sql.rel.metadata.KuduRelMetadataProvider;
 import com.twilio.raas.sql.rules.KuduRules;
-import com.twilio.raas.sql.rules.KuduSortJoinTransposeRule;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
+import org.apache.calcite.adapter.enumerable.EnumerableLimit;
+import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -12,9 +13,11 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
-import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.rel.rules.AbstractMaterializedViewRule;
+import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
 import org.apache.calcite.rel.rules.FilterJoinRule;
+import org.apache.calcite.rel.rules.SortRemoveConstantKeysRule;
 import org.apache.calcite.rel.rules.SortRemoveRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.kudu.client.KuduTable;
@@ -71,13 +74,13 @@ public final class KuduQuery extends TableScan implements KuduRel {
             planner.addRule(rule);
         }
         planner.addRule(KuduToEnumerableConverter.INSTANCE);
-        // this rule tries to convert a left/right outer join into an inner join, which causes
-        // the SortJoinTransposeRule not get matches
+        // FilterJoinRule tries to convert a left/right outer join into an inner join, which causes
+        // the SortJoinTransposeRule to not match.
         // SortJoinTransposeRule pushes down a sort past a join for outer joins only, so we
-        // disable the rule and enable the dumb rule which does not transform an outer to inner join
+        // disable the rule and enable the dumb rule which does not transform an outer to inner
+        // join.
         planner.removeRule(FilterJoinRule.FILTER_ON_JOIN);
         planner.addRule(FilterJoinRule.DUMB_FILTER_ON_JOIN);
-
         // we include our own metadata provider that overrides calcite's default filter
         // selectivity information in order to ensure that limits are pushed down into kudu
         JaninoRelMetadataProvider relMetadataProvider =

@@ -1,5 +1,6 @@
 package com.twilio.raas.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.RowResult;
 import org.apache.kudu.ColumnSchema;
@@ -14,8 +15,8 @@ import java.math.BigDecimal;
  * sort on scans.
  */
 public final class CalciteRow implements Comparable<CalciteRow> {
+    private final Object[] rowData;
     public final Schema rowSchema;
-    public final Object[] rowData;
     public final List<Integer> primaryKeyColumnsInProjection;
     public final List<Integer> descendingSortedFieldIndices;
 
@@ -81,6 +82,7 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
      * @param descendingSortedFieldIndices  Index of the descending sorted fields in the rowSchema projection
      */
+    @VisibleForTesting
     public CalciteRow(final Schema rowSchema,
                       final Object[] rowData,
                       final List<Integer> primaryKeyColumnsInProjection,
@@ -102,8 +104,8 @@ public final class CalciteRow implements Comparable<CalciteRow> {
                       final List<Integer> primaryKeyColumnsInProjection,
                       final List<Integer> descendingSortedFieldIndices) {
 
-        final int rowCount = rowFromKudu.getColumnProjection().getColumns().size();
-        this.rowData = new Object[rowCount];
+        final int columnCount = rowFromKudu.getColumnProjection().getColumns().size();
+        this.rowData = new Object[columnCount];
         this.rowSchema = rowFromKudu.getSchema();
         this.primaryKeyColumnsInProjection = primaryKeyColumnsInProjection;
         this.descendingSortedFieldIndices = descendingSortedFieldIndices;
@@ -263,5 +265,9 @@ public final class CalciteRow implements Comparable<CalciteRow> {
             }
         }
         return 0;
+    }
+
+    public Object getRowData() {
+        return rowData.length==1 ? rowData[0] : rowData;
     }
 }

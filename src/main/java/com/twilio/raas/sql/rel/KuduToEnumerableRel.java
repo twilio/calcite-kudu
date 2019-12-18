@@ -13,7 +13,6 @@ import org.apache.calcite.adapter.enumerable.PhysTypeImpl;
 import org.apache.calcite.linq4j.tree.BlockBuilder;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
-import org.apache.calcite.linq4j.tree.MethodCallExpression;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
@@ -24,10 +23,7 @@ import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.runtime.Hook;
-import org.apache.calcite.util.BuiltInMethod;
-import org.apache.kudu.client.KuduPredicate;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
