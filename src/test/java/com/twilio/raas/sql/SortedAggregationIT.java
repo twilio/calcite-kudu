@@ -267,7 +267,7 @@ public final class SortedAggregationIT {
   @Test
   public void aggregateSortedResultsByAccountWithLimitOfFour() throws Exception {
     final String sql = String.format(
-        "SELECT account_sid, sum(reverse_long_field), sum(reverse_int_field) FROM %s WHERE account_sid = '%s' GROUP BY account_sid, reverse_byte_field ORDER BY account_sid ASC, reverse_byte_field DESC limit 4",
+        "SELECT account_sid, reverse_byte_field, sum(reverse_long_field), sum(reverse_int_field) FROM %s WHERE account_sid = '%s' GROUP BY account_sid, reverse_byte_field ORDER BY account_sid ASC, reverse_byte_field DESC limit 4",
         descendingSortTableName, JDBCQueryRunnerIT.ACCOUNT_SID);
 
     String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
@@ -277,12 +277,11 @@ public final class SortedAggregationIT {
       String plan = SqlUtil.getExplainPlan(rs);
 
       final String expectedPlan =
-        "EnumerableCalc(expr#0..3=[{inputs}], ACCOUNT_SID=[$t0], EXPR$1=[$t2], EXPR$2=[$t3], REVERSE_BYTE_FIELD=[$t1])\n" +
-        "  EnumerableAggregate(group=[{0, 1}], EXPR$1=[$SUM0($4)], EXPR$2=[$SUM0($3)])\n" +
-        "    KuduToEnumerableRel\n" +
-        "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[4], groupByLimited=[true])\n" +
-        "        KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
-        "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "EnumerableAggregate(group=[{0, 1}], EXPR$2=[$SUM0($4)], EXPR$3=[$SUM0($3)])\n" +
+        "  KuduToEnumerableRel\n" +
+        "    KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[4], groupByLimited=[true])\n" +
+        "      KuduFilterRel(Scan 1=[account_sid EQUAL AC1234567])\n" +
+        "        KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       assertTrue("Should have results to iterate over",
           queryResult.next());
@@ -291,16 +290,15 @@ public final class SortedAggregationIT {
       assertTrue(String.format("KuduSortRel should have groupByLimited set to true. It doesn't\n%s", plan),
           plan.contains("groupByLimited=[true]"));
 
-      // Doesn't seem to pull out the Byte properly today.
-      // assertEquals("Should be grouped first by Byte of 4",
-      //      new Byte("4"), Byte.valueOf(queryResult.getByte(2)));
+      assertEquals("Should be grouped second by Byte of 6",
+          new Byte("6"), Byte.valueOf(queryResult.getByte(2)));
 
       assertTrue("Should have any more results",
           queryResult.next());
 
-      // Doesn't seem to pull out the Byte properly today.
-      // assertEquals("Should be grouped second by Byte of 6",
-      //     new Byte("6"), Byte.valueOf(queryResult.getByte(2)));
+      assertEquals("Should be grouped first by Byte of 4",
+          new Byte("4"), Byte.valueOf(queryResult.getByte(2)));
+
 
       assertFalse("Should only have two results",
           queryResult.next());
