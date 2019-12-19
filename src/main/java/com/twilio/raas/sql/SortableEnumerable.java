@@ -351,16 +351,15 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
 
     try (Enumerator<Object[]> os = getThis().enumerator()) {
       TAccumulate accumulator = null;
-      TKey key = null;
+
       while (os.moveNext()) {
         Object[] o = os.current();
-        key = keySelector.apply(o);
+        final TKey key = keySelector.apply(o);
 
         // If there hasn't been a key yet or if there is a new key
         if (lastKey == null || !key.equals(lastKey)) {
           // If there is an accumulator, save the results into the queue and reset accumulator.
-          if (accumulator != null &&
-              (offset <= 0 || uniqueGroupCount > offset)) {
+          if (accumulator != null) {
             sortedResults.offer(resultSelector.apply(lastKey, accumulator));
             accumulator = null;
           }
@@ -390,9 +389,8 @@ public final class SortableEnumerable extends AbstractEnumerable<Object[]> {
 
       // If the source Enumerator -- os -- runs out of rows and we have an accumulator in progress
       // Apply it and save it.
-      if (key != null && accumulator != null &&
-          (offset <= 0 || uniqueGroupCount > offset)) {
-        sortedResults.offer(resultSelector.apply(key, accumulator));
+      if (accumulator != null) {
+        sortedResults.offer(resultSelector.apply(lastKey, accumulator));
       }
     }
     return new AbstractEnumerable2<TResult>() {
