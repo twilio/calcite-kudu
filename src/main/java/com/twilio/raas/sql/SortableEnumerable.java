@@ -51,7 +51,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
   private final Schema tableSchema;
 
   public final boolean sort;
-  public final boolean groupByLimited;
+  public final boolean groupBySorted;
   public final long limit;
   public final long offset;
   public final List<Integer> descendingSortedFieldIndices;
@@ -66,7 +66,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
    * @param offset the number of rows from kudu to skip prior to returning rows
    * @param sort whether or not have Kudu RPCs come back in sorted by primary key
    * @param descendingSortedFieldIndices is a list of column indices that are sorted in reverse
-   * @param groupByLimited when sorted, and {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)
+   * @param groupBySorted when sorted, and {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)
    *
    * @throws IllegalArgumentException when groupByLimited is true but sorted is false
    */
@@ -79,7 +79,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       final long offset,
       final boolean sort,
       final List<Integer> descendingSortedFieldIndices,
-      final boolean groupByLimited) {
+      final boolean groupBySorted) {
     this.scanners = scanners;
     this.scansShouldStop = scansShouldStop;
     this.projectedSchema = projectedSchema;
@@ -90,16 +90,11 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
     // in a predictible order
     this.sort = offset>0 || sort;
     this.descendingSortedFieldIndices = descendingSortedFieldIndices;
-    if (groupByLimited) {
-      if (!this.sort) {
-          throw new IllegalArgumentException(
-                  "Cannot apply limit on group by without sorting the results first");
-      } else if (limit == -1) {
-          throw new IllegalArgumentException(
-                  "Group by without sorting needs to have a limit specified");
-      }
+    if (groupBySorted && !this.sort) {
+      throw new IllegalArgumentException("If groupBySorted is true the results must need to be " +
+          "sorted");
     }
-    this.groupByLimited = groupByLimited;
+    this.groupBySorted = groupBySorted;
   }
 
   @VisibleForTesting
@@ -108,7 +103,8 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
   }
 
   private boolean checkLimitReached(int totalMoves) {
-    if (limit > 0 && !groupByLimited) {
+    // handling of limit and/or offset for groupBySorted is done in the groupBy method
+    if (limit > 0 && !groupBySorted) {
       long moveOffset = offset > 0 ? offset : 0;
       if (totalMoves - moveOffset > limit) {
         return true;
@@ -197,7 +193,8 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       private int totalMoves = 0;
 
       private void moveToOffset() {
-        if (offset > 0 && !groupByLimited) {
+        // handling of limit and/or offset for groupBySorted is done in the groupBy method
+        if (offset > 0 && !groupBySorted) {
           while(totalMoves < offset && moveNext());
         }
       }
@@ -335,7 +332,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
     // When Grouping rows but the aggregation is not sorted by primary key direction or there is no
     // limit to the grouping, read every single matching row for this query.
     // This implies sorted = false.
-    if (!groupByLimited) {
+    if (!groupBySorted) {
       return EnumerableDefaults.groupBy(getThis(), keySelector,
           accumulatorInitializer, accumulatorAdder, resultSelector);
     }
@@ -345,20 +342,23 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
 
     // groupFetchLimit calculates it's size based on offset. When offset is present, it needs to
     // skip an equalivent  number of unique group keys
-    final long groupFetchLimit;
-    if (offset > 0) {
+    long groupFetchLimit = Long.MAX_VALUE;
+    if (offset > 0 && limit>0) {
       groupFetchLimit = limit + offset;
     }
-    else {
+    else if (offset > 0) {
+      groupFetchLimit = offset;
+    }
+    else if (limit > 0) {
       groupFetchLimit = limit;
     }
     final Queue<TResult> sortedResults = new LinkedList<TResult>();
 
-    try (Enumerator<Object> os = getThis().enumerator()) {
+    try (Enumerator<Object> objectEnumeration = getThis().enumerator()) {
       TAccumulate accumulator = null;
 
-      while (os.moveNext()) {
-        Object o = os.current();
+      while (objectEnumeration.moveNext()) {
+        Object o = objectEnumeration.current();
         final TKey key = keySelector.apply(o);
 
         // If there hasn't been a key yet or if there is a new key
@@ -392,7 +392,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
         accumulator = accumulatorAdder.apply(accumulator, o);
       }
 
-      // If the source Enumerator -- os -- runs out of rows and we have an accumulator in progress
+      // If the source Enumerator -- objectEnumeration -- runs out of rows and we have an accumulator in progress
       // Apply it and save it.
       if (accumulator != null) {
         sortedResults.offer(resultSelector.apply(lastKey, accumulator));

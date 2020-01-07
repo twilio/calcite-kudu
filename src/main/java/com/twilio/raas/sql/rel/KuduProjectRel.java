@@ -72,10 +72,7 @@ public class KuduProjectRel extends Project implements KuduRel {
         projectedColumnsIndexes
             .addAll(getNamedProjects()
                 .stream()
-                .map(expressionNamePair -> {
-                    List<Integer> columnIndexes = expressionNamePair.left.accept(visitor);
-                    return columnIndexes != null ? columnIndexes : Collections.<Integer>emptyList();
-                    })
+                .map(expressionNamePair -> expressionNamePair.left.accept(visitor))
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList()));
         // Since KuduProjectRel has a cost of zero, if we have a KuduProjectRel that wraps
@@ -97,31 +94,67 @@ public class KuduProjectRel extends Project implements KuduRel {
     }
 
     public static class KuduColumnVisitor extends RexVisitorImpl<List<Integer>> {
-        public KuduColumnVisitor() {
+
+      public KuduColumnVisitor() {
             super(true);
         }
 
-        @Override
-        public List<Integer> visitInputRef(RexInputRef inputRef) {
-            return Lists.newArrayList(inputRef.getIndex());
-        }
+      @Override
+      public List<Integer> visitInputRef(RexInputRef inputRef) {
+          return Lists.newArrayList(inputRef.getIndex());
+      }
 
-        /**
-         * Extact the columns used an inputs to functions
-         * @param call function call
-         * @return list of column indexes
-         */
-        @Override
-        public List<Integer> visitCall(RexCall call) {
-            List<Integer> columnIndexes = Lists.newArrayList();
-            for (RexNode operand : call.operands) {
-                List<Integer> operandColumnIndexes = operand.accept(this);
-                if (operandColumnIndexes !=null) {
-                    columnIndexes.addAll(operandColumnIndexes);
-                }
-            }
-            return columnIndexes;
-        }
+      /**
+       * Extact the columns used an inputs to functions
+       * @param call function call
+       * @return list of column indexes
+       */
+      @Override
+      public List<Integer> visitCall(RexCall call) {
+          List<Integer> columnIndexes = Lists.newArrayList();
+          for (RexNode operand : call.operands) {
+              List<Integer> operandColumnIndexes = operand.accept(this);
+              if (operandColumnIndexes !=null) {
+                  columnIndexes.addAll(operandColumnIndexes);
+              }
+          }
+          return columnIndexes;
+      }
+
+      @Override
+      public List<Integer> visitLocalRef(RexLocalRef localRef) {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public List<Integer> visitLiteral(RexLiteral literal) {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public List<Integer> visitCorrelVariable(RexCorrelVariable correlVariable) {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public List<Integer> visitDynamicParam(RexDynamicParam dynamicParam) {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public List<Integer> visitRangeRef(RexRangeRef rangeRef) {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public List<Integer> visitTableInputRef(RexTableInputRef ref) {
+        return Collections.emptyList();
+      }
+
+      @Override
+      public List<Integer> visitPatternFieldRef(RexPatternFieldRef fieldRef) {
+        return Collections.emptyList();
+      }
     }
 
     /**
@@ -135,7 +168,7 @@ public class KuduProjectRel extends Project implements KuduRel {
 
         public KuduProjectTransformer() {
             super(true);
-            projectedColumnTpRedDataTypeFieldMap = Maps.newLinkedHashMap();
+            projectedColumnTpRedDataTypeFieldMap = new LinkedHashMap<>();
         }
 
         public LinkedHashMap<Integer, RelDataTypeField> getProjectedColumnToRelDataTypeFieldMap() {
@@ -146,8 +179,9 @@ public class KuduProjectRel extends Project implements KuduRel {
             Iterator<Integer> iter = projectedColumnTpRedDataTypeFieldMap.keySet().iterator();
             int kuduProjectionColumnIndex = 0;
             while (iter.hasNext()) {
-                if (iter.next() == colIndex)
-                    return kuduProjectionColumnIndex;
+                if (iter.next() == colIndex) {
+                  return kuduProjectionColumnIndex;
+                }
                 ++kuduProjectionColumnIndex;
             }
             throw new IllegalArgumentException("Unable to find column index " + colIndex + " in " +

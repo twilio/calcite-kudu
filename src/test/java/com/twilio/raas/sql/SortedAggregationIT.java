@@ -117,7 +117,7 @@ public final class SortedAggregationIT {
       final String expectedPlan =
         "EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($1)], EXPR$2=[$SUM0($2)])\n" +
         "  KuduToEnumerableRel\n" +
-        "    KuduSortRel(sort0=[$0], dir0=[ASC], fetch=[1], groupByLimited=[true])\n" +
+        "    KuduSortRel(sort0=[$0], dir0=[ASC], fetch=[1], groupBySorted=[true])\n" +
         "      KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_LONG_FIELD=[$4], REVERSE_INT_FIELD=[$3])\n" +
         "        KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
         "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
@@ -126,8 +126,8 @@ public final class SortedAggregationIT {
           queryResult.next());
       assertTrue(String.format("Plan should contain KuduSortRel. It is\n%s", plan),
           plan.contains("KuduSortRel"));
-      assertTrue(String.format("KuduSortRel should have groupByLimited set to true. It doesn't\n%s", plan),
-          plan.contains("groupByLimited=[true]"));
+      assertTrue(String.format("KuduSortRel should have groupBySorted set to true. It doesn't\n%s", plan),
+          plan.contains("groupBySorted=[true]"));
       assertEquals("Full SQL plan has changed\n",
           expectedPlan, plan);
       assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
@@ -154,7 +154,7 @@ public final class SortedAggregationIT {
         "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($2)])\n" +
         "    KuduToEnumerableRel\n" +
         "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[1], " +
-                "groupByLimited=[true])\n" +
+                "groupBySorted=[true])\n" +
         "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], " +
                 "REVERSE_LONG_FIELD=[$4], RESOURCE_TYPE=[$5])\n" +
         "          KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
@@ -166,8 +166,8 @@ public final class SortedAggregationIT {
           queryResult.next());
       assertTrue(String.format("Plan should contain KuduSortRel. It is\n%s", plan),
           plan.contains("KuduSortRel"));
-      assertTrue(String.format("KuduSortRel should have groupByLimited set to true. It doesn't\n%s", plan),
-          plan.contains("groupByLimited=[true]"));
+      assertTrue(String.format("KuduSortRel should have groupBySorted set to true. It doesn't\n%s", plan),
+          plan.contains("groupBySorted=[true]"));
       assertEquals("Full SQL plan has changed\n",
           expectedPlan, plan);
       assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
@@ -227,7 +227,7 @@ public final class SortedAggregationIT {
         "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($2)])\n" +
         "    KuduToEnumerableRel\n" +
         "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], offset=[1], " +
-                "fetch=[1], groupByLimited=[true])\n" +
+                "fetch=[1], groupBySorted=[true])\n" +
         "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], " +
                 "REVERSE_LONG_FIELD=[$4])\n" +
         "          KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
@@ -239,8 +239,8 @@ public final class SortedAggregationIT {
           queryResult.next());
       assertTrue(String.format("Plan should contain KuduSortRel. It is\n%s", plan),
           plan.contains("KuduSortRel"));
-      assertTrue(String.format("KuduSortRel should have groupByLimited set to true. It doesn't\n%s", plan),
-          plan.contains("groupByLimited=[true]"));
+      assertTrue(String.format("KuduSortRel should have groupBySorted set to true. It doesn't\n%s", plan),
+          plan.contains("groupBySorted=[true]"));
       assertEquals("Full SQL plan has changed\n",
           expectedPlan, plan);
       assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
@@ -296,7 +296,7 @@ public final class SortedAggregationIT {
       final String expectedPlan =
         "EnumerableAggregate(group=[{0, 1}], EXPR$2=[$SUM0($2)], EXPR$3=[$SUM0($3)])\n" +
         "  KuduToEnumerableRel\n" +
-        "    KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[4], groupByLimited=[true])\n" +
+        "    KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[4], groupBySorted=[true])\n" +
         "      KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], REVERSE_LONG_FIELD=[$4], REVERSE_INT_FIELD=[$3])\n" +
         "        KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
         "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
@@ -305,8 +305,8 @@ public final class SortedAggregationIT {
           queryResult.next());
       assertTrue(String.format("Plan should contain KuduSortRel. It is\n%s", plan),
           plan.contains("KuduSortRel"));
-      assertTrue(String.format("KuduSortRel should have groupByLimited set to true. It doesn't\n%s", plan),
-          plan.contains("groupByLimited=[true]"));
+      assertTrue(String.format("KuduSortRel should have groupBySorted set to true. It doesn't\n%s", plan),
+          plan.contains("groupBySorted=[true]"));
 
       assertEquals("Should be grouped second by Byte of 6",
           new Byte("6"), Byte.valueOf(queryResult.getByte(2)));

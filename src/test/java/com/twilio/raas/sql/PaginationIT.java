@@ -253,7 +253,7 @@ public class PaginationIT {
             String expectedPlanFormat = "KuduToEnumerableRel\n" +
                     "  KuduLimitRel(offset=[7], limit=[6])\n" +
                     "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[ASC], " +
-                    "dir2=[ASC], groupByLimited=[false])\n" +
+                    "dir2=[ASC], groupBySorted=[false])\n" +
                     "      KuduFilterRel(ScanToken 1=[usage_account_sid EQUAL %s])\n" +
                     "        KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
             String expectedPlan = String.format(expectedPlanFormat, ACCOUNT1);
@@ -295,7 +295,7 @@ public class PaginationIT {
             String expectedPlanFormat = "KuduToEnumerableRel\n" +
                     "  KuduLimitRel(limit=[4])\n" +
                     "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[ASC], dir1=[ASC], " +
-                    "groupByLimited=[false])\n" +
+                    "groupBySorted=[false])\n" +
                     "      KuduFilterRel(ScanToken 1=[usage_account_sid EQUAL %s, " +
                     "date_initiated GREATER_EQUAL %d, date_initiated LESS %d])\n" +
                     "        KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
@@ -330,7 +330,7 @@ public class PaginationIT {
             expectedPlanFormat = "KuduToEnumerableRel\n" +
                     "  KuduLimitRel(limit=[4])\n" +
                     "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[ASC], dir1=[ASC], " +
-                    "groupByLimited=[false])\n" +
+                    "groupBySorted=[false])\n" +
                     "      KuduFilterRel(ScanToken 1=[usage_account_sid EQUAL %s, " +
                     "date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000, " +
                     "date_initiated GREATER %d], ScanToken 2=[usage_account_sid EQUAL %s, " +
