@@ -55,7 +55,7 @@ public final class SortedTest {
             .map(e -> e.enumerator())
             .collect(Collectors.toList());
 
-       final Enumerator<Object[]> results = new SortableEnumerable(
+       final Enumerator<Object> results = new SortableEnumerable(
            Collections.emptyList(),
            new AtomicBoolean(),
            rowSchema,
@@ -71,22 +71,22 @@ public final class SortedTest {
         assertTrue("Should have at least one result",
             results.moveNext());
         assertArrayEquals("Should return the smallest record in the enumerables",
-            smallestRow, results.current());
+            smallestRow, (Object[])results.current());
 
         assertTrue("Should have second result",
             results.moveNext());
         assertArrayEquals("Should return the largest record in the enumerables",
-            middleRow, results.current());
+            middleRow, (Object[])results.current());
 
         assertTrue("Should have third result",
             results.moveNext());
         assertArrayEquals("Should return the largest record in the enumerables",
-            largestRow, results.current());
+            largestRow, (Object[])results.current());
 
         assertFalse("Should have no more results",
             results.moveNext());
         assertArrayEquals("Should return still largest record -- even though it is done",
-            largestRow, results.current());
+            largestRow, (Object[])results.current());
     }
 
     @Test

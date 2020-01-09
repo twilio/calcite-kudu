@@ -12,7 +12,7 @@ public class TestUtil {
         boolean printedColNames = false;
         while (rs.next()) {
             if (!printedColNames) {
-                for (int i = 1; i < columnCount; ++i) {
+                for (int i = 1; i <= columnCount; ++i) {
                     if (i > 1) {
                         System.out.print(", ");
                     }
@@ -21,7 +21,7 @@ public class TestUtil {
                 System.out.println();
                 printedColNames = true;
             }
-            for (int i = 1; i < columnCount; ++i) {
+            for (int i = 1; i <= columnCount; ++i) {
                 if (i > 1) {
                     System.out.print(", ");
                 }

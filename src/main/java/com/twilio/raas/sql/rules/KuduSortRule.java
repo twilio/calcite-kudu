@@ -12,6 +12,8 @@ import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptRuleOperand;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
@@ -48,20 +50,23 @@ public abstract class KuduSortRule extends RelOptRule {
   }
 
 
-  public boolean canApply (final Sort originalSort, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
+  public boolean canApply (final RelTraitSet sortTraits, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
     // If there is no sort -- i.e. there is only a limit
     // don't pay the cost of returning rows in sorted order.
-    if (originalSort.getCollation().getFieldCollations().isEmpty()) {
+    final RelCollation collation = sortTraits.getTrait(RelCollationTraitDef.INSTANCE);
+
+    if (collation.getFieldCollations().isEmpty()) {
       return false;
     }
 
-    if (originalSort.getTraitSet().contains(KuduRel.CONVENTION)) {
+    if (sortTraits.contains(KuduRel.CONVENTION)) {
       return false;
     }
 
-    int mustMatch = 0;
 
-    for (final RelFieldCollation sortField: originalSort.getCollation().getFieldCollations()) {
+    int pkColumnIndex = 0;
+
+    for (final RelFieldCollation sortField: collation.getFieldCollations()) {
       // Reject for descending sorted fields if sort direction is not Descending
       if ((query.descendingSortedFieldIndices.contains(sortField.getFieldIndex()) &&
               sortField.direction != RelFieldCollation.Direction.DESCENDING &&
@@ -73,33 +78,33 @@ public abstract class KuduSortRule extends RelOptRule {
         {
           return false;
         }
+      // the sort columns must be a prefix of the primary key columns
       if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount() ||
-          sortField.getFieldIndex() != mustMatch) {
+          sortField.getFieldIndex() != pkColumnIndex) {
         // This field is not in the primary key columns. If there is a condition lets see if it is there
         if (filter.isPresent()) {
           final RexNode originalCondition = filter.get().getCondition();
-          while (mustMatch < sortField.getFieldIndex()) {
-            final KuduFilterVisitor visitor = new KuduFilterVisitor(mustMatch);
+          while (pkColumnIndex < sortField.getFieldIndex()) {
+            final KuduFilterVisitor visitor = new KuduFilterVisitor(pkColumnIndex);
             final Boolean foundFieldInCondition = originalCondition.accept(visitor);
             if (foundFieldInCondition == Boolean.FALSE) {
               return false;
             }
-            mustMatch++;
+            pkColumnIndex++;
           }
         }
         else {
           return false;
         }
       }
-
-      mustMatch++;
+      pkColumnIndex++;
     }
     return true;
   }
 
 
   public void perform(final RelOptRuleCall call, final Sort originalSort, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
-    if (canApply(originalSort, query, openedTable, filter)) {
+    if (canApply(originalSort.getTraitSet(), query, openedTable, filter)) {
       final RelNode input = originalSort.getInput();
       final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRel.CONVENTION)
         .replace(originalSort.getCollation());

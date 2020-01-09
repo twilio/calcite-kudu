@@ -61,11 +61,11 @@ public class KuduFilterRel extends Filter implements KuduRel {
                     first =false;
                 }
                 else {
-                    sb.append(" , ");
+                    sb.append(", ");
                 }
                 sb.append(predicate.columnName + " " + optionalComparator + " " + predicate.rightHandValue);
             }
-            pw.item("Scan " + scanCount++, sb.toString());
+            pw.item("ScanToken " + scanCount++, sb.toString());
         }
         return pw;
     }

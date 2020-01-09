@@ -12,8 +12,7 @@ import org.apache.calcite.rel.RelNode;
 public class KuduLimitRule extends RelOptRule {
 
     public KuduLimitRule() {
-        super(operand(EnumerableLimit.class, operand(KuduToEnumerableRel.class, any())),
-                "KuduLimitRule");
+        super(operand(EnumerableLimit.class, any()), "KuduLimitRule");
     }
 
     public RelNode convert(EnumerableLimit limit) {
