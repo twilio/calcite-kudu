@@ -300,7 +300,8 @@ public final class JDBCQueryRunnerIT {
             Boolean.toString(limit));
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
         String plan = SqlUtil.getExplainPlan(rs);
-        assertEquals("Unexpected plan ", expectedPlan, plan);
+        assertEquals(String.format("Unexpected plan\n%s", plan),
+            expectedPlan, plan);
 
         // since the table has three rows each with a unique date, we expect three rows
         // sorted by date
