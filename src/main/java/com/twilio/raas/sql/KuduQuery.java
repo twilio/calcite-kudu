@@ -3,10 +3,7 @@ package com.twilio.raas.sql;
 import com.twilio.raas.sql.rel.metadata.KuduRelMetadataProvider;
 import com.twilio.raas.sql.rules.KuduRules;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
-import com.twilio.raas.sql.rules.SortRemoveRule;
 
-import org.apache.calcite.adapter.enumerable.EnumerableLimit;
-import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -16,10 +13,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
-import org.apache.calcite.rel.rules.AbstractMaterializedViewRule;
-import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
 import org.apache.calcite.rel.rules.FilterJoinRule;
-import org.apache.calcite.rel.rules.SortRemoveConstantKeysRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.kudu.client.KuduTable;
 
