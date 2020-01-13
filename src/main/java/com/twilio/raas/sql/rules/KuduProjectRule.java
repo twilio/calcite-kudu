@@ -24,30 +24,23 @@ public class KuduProjectRule extends RelOptRule {
 
     public KuduProjectRule(RelBuilderFactory relBuilderFactory) {
         super(convertOperand(LogicalProject.class,
-            (java.util.function.Predicate<RelNode>) r -> true, Convention.NONE),
+                (java.util.function.Predicate<RelNode>) r -> canConvertNode(r), Convention.NONE),
             relBuilderFactory, "KuduProjection");
     }
 
-    /**
-     * If the LogicalProject wraps a {@link KuduProjectRel} that means this rule was already
-     * matched
-     * @return false if this rule was already matched, or else true
-     */
-    public boolean matches(RelOptRuleCall call) {
-      for (RelNode relNode : call.getRelList()) {
-        if (relNode instanceof Project) {
-          RelNode input = ((Project) relNode).getInput();
-          if (input instanceof RelSubset) {
-            for (RelNode rel : ((RelSubset) input).getRelList()) {
-              if (rel instanceof KuduProjectRel) {
-                return false;
-              }
-            }
+  public static boolean canConvertNode(RelNode relNode) {
+    if (relNode instanceof Project) {
+      RelNode input = ((Project) relNode).getInput();
+      if (input instanceof RelSubset) {
+        for (RelNode rel : ((RelSubset) input).getRelList()) {
+          if (rel instanceof KuduProjectRel) {
+            return false;
           }
         }
       }
-      return true;
     }
+    return true;
+  }
 
   @Override
   public void onMatch(RelOptRuleCall call) {
