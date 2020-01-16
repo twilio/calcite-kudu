@@ -125,10 +125,15 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
       originalLimit.isPresent() ? originalLimit.get().fetch : originalSort.fetch,
       true);
 
+    // Copy in the new collation because! this new rel is now coming out Sorted.
     final RelNode newkuduToEnumerableRel =
-        kuduToEnumerableRel.copy(kuduToEnumerableRel.getTraitSet(), Lists.newArrayList(newSort));
+        kuduToEnumerableRel.copy(
+            kuduToEnumerableRel.getTraitSet()
+                .replace(newCollation), Lists.newArrayList(newSort));
 
     // Create a the aggregation relation and indicate it is sorted based on result.
+    // Add in our sorted collation into the aggregation as the input: kuduToEnumerable
+    // is coming out sorted because the kudu sorted rel is enabling it.
     final RelNode newAggregation = originalAggregate.copy(
         originalAggregate.getTraitSet()
             .replace(traitSet.getTrait(RelCollationTraitDef.INSTANCE)),

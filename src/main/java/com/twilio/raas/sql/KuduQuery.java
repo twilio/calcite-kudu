@@ -81,9 +81,6 @@ public final class KuduQuery extends TableScan implements KuduRel {
         // join.
         planner.removeRule(FilterJoinRule.FILTER_ON_JOIN);
         planner.addRule(FilterJoinRule.DUMB_FILTER_ON_JOIN);
-        // TODO figure out how SortRemoveRule is supposed to work
-        // https://lists.apache.org/thread.html/b1bf2a3c4e1143fa77b8912d3bfb3a068b829000127913067bbff4ac%40%3Cdev.calcite.apache.org%3E
-        planner.removeRule(SortRemoveRule.INSTANCE);
         // we include our own metadata provider that overrides calcite's default filter
         // selectivity information in order to ensure that limits are pushed down into kudu
         JaninoRelMetadataProvider relMetadataProvider =
