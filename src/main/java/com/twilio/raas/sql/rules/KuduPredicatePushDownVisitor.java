@@ -34,8 +34,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * KuduPredicatePushDownVisitor returns a List of a List of CalciteKuduPredicates. The inner list represents
- * a {@link org.apache.kudu.client.AsyncKuduScanner} that can be executed independently of each other. The outer 
- * list therefore represents a List of {@code AsyncKuduScanner}s that will satifisy the 
+ * a {@link org.apache.kudu.client.AsyncKuduScanner} that can be executed independently of each other. The outer
+ * list therefore represents a List of {@code AsyncKuduScanner}s that will satifisy the
  * provided filters.
  *
  * It is expected that it is called with {@link RexNode} that represent the filters
@@ -52,7 +52,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     }
 
     /**
-     * @return true if we can push down all filters to kudu 
+     * @return true if we can push down all filters to kudu
      */
     public boolean areAllFiltersApplied() {
         return allExpressionsConverted;
@@ -117,7 +117,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     }
 
     /**
-     * A sql function call, process it. Including handling boolean 
+     * A sql function call, process it. Including handling boolean
      * calls.
      *
      * @param call  this is the relational call object to process
@@ -183,7 +183,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     }
 
     /**
-     * This visit method adds a predicate. this is the leaf of a tree so it 
+     * This visit method adds a predicate. this is the leaf of a tree so it
      * gets to create a fresh list of list
      */
     public List<List<CalciteKuduPredicate>> visitLiteral(RexLiteral literal, RexCall parent) {
@@ -195,39 +195,77 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                 switch(literal.getType().getSqlTypeName()) {
                 case NULL:
                     // maybeOp should be empty. but this is explicit.
-                    return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), null, null)));
+                    return Collections.singletonList(
+                        Collections.singletonList(
+                            new CalciteKuduPredicate(columnSchema.getName(), null, null)));
                 case BOOLEAN:
-                    return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), (Boolean) literal.getValue2())));
+                  return Collections.singletonList(
+                      Collections.singletonList(
+                          new CalciteKuduPredicate(
+                              columnSchema.getName(),
+                              maybeOp.get(),
+                              RexLiteral.booleanValue(literal))));
                 case DECIMAL:
-                    // Ok so an long is coming into this spot.
-                    if (literal.getValue2() instanceof BigDecimal) {
-                        return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), (BigDecimal) literal.getValue2())));
-                    }
-                    else if (literal.getValue2() instanceof Long ||literal.getValue2() instanceof Double) {
-                        return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), BigDecimal.valueOf(((Number)literal.getValue2()).doubleValue()))));
-                    }
-                    break;
+                  return Collections.singletonList(
+                      Collections.singletonList(
+                          new CalciteKuduPredicate(
+                              columnSchema.getName(),
+                              maybeOp.get(),
+                              literal.getValueAs(BigDecimal.class))));
                 case DOUBLE:
-                    return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), ((Number) literal.getValue2()).doubleValue())));
+                  return Collections.singletonList(
+                      Collections.singletonList(
+                          new CalciteKuduPredicate(
+                              columnSchema.getName(),
+                              maybeOp.get(),
+                              literal.getValueAs(Double.class))));
                 case FLOAT:
-                    return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), ((Number) literal.getValue2()).floatValue())));
+                  return Collections.singletonList(
+                      Collections.singletonList(
+                          new CalciteKuduPredicate(
+                              columnSchema.getName(),
+                              maybeOp.get(),
+                              literal.getValueAs(Float.class))));
                 case TIMESTAMP:
                     // multiplied by 1000 as TIMESTAMP is in milliseconds and Kudu want's microseconds.
-                    return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), ((Number) literal.getValue2()).longValue() * 1000)));
+                    return Collections.singletonList(
+                      Collections.singletonList(
+                          new CalciteKuduPredicate(
+                              columnSchema.getName(),
+                              maybeOp.get(),
+                              literal.getValueAs(Long.class) * 1000)));
                 case CHAR:
                 case VARCHAR:
-                    return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), (String) literal.getValue2())));
+                  return Collections.singletonList(
+                      Collections.singletonList(
+                          new CalciteKuduPredicate(
+                              columnSchema.getName(),
+                              maybeOp.get(),
+                              literal.getValueAs(String.class))));
                 case TINYINT:
                 case SMALLINT:
                 case INTEGER:
-                    return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), ((Number) literal.getValue2()).intValue())));
+                    return Collections.singletonList(
+                      Collections.singletonList(
+                          new CalciteKuduPredicate(
+                              columnSchema.getName(),
+                              maybeOp.get(),
+                              literal.getValueAs(Integer.class))));
                 case BIGINT:
-                    return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), ((Number) literal.getValue2()).longValue())));
+                    return Collections.singletonList(
+                      Collections.singletonList(
+                          new CalciteKuduPredicate(
+                              columnSchema.getName(),
+                              maybeOp.get(),
+                              literal.getValueAs(Long.class))));
                 case BINARY:
-                    return Collections.singletonList(Collections.singletonList(new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(), (((ByteBuffer) literal.getValue2()).array()))));
-                    
+                    return Collections.singletonList(
+                        Collections.singletonList(
+                            new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(),
+                                (((ByteBuffer) literal.getValue4()).array()))));
+
                 }
-            }	
+            }
         }
         return setEmpty();
     }
