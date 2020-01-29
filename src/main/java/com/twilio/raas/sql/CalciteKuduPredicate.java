@@ -25,7 +25,7 @@ public final class CalciteKuduPredicate {
      * _otherwise_ it is a is Null Predicate
      *
      * @TODO: there is a way to create a comparison predicate in
-     * such a way that is equivalent to isNullPredicate and 
+     * such a way that is equivalent to isNullPredicate and
      * isNotNullPredicate.
      */
     public final Optional<KuduPredicate.ComparisonOp> operation;
@@ -46,6 +46,7 @@ public final class CalciteKuduPredicate {
      */
     public KuduPredicate toPredicate(Schema tableSchema, List<Integer> descendingSortedFieldIndices) {
         final ColumnSchema columnsSchema = tableSchema.getColumn(columnName);
+        final boolean invertValue = descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName));
         return this.operation
             .map(op -> {
                     if (rightHandValue instanceof Boolean) {
@@ -65,7 +66,7 @@ public final class CalciteKuduPredicate {
                             .newComparisonPredicate(columnsSchema, op, (Float) rightHandValue);
                     }
                     else if (rightHandValue instanceof Timestamp) {
-                      return (descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName))) ?
+                      return invertValue ?
                           KuduPredicate
                               .newComparisonPredicate(columnsSchema, invertComparisonOp(op),
                                   new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - ((Timestamp)rightHandValue).toInstant().toEpochMilli())) :
@@ -77,14 +78,14 @@ public final class CalciteKuduPredicate {
                             .newComparisonPredicate(columnsSchema, op, (String) rightHandValue);
                     }
                     else if (rightHandValue instanceof Byte) {
-                      return (descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName))) ?
+                      return invertValue ?
                           KuduPredicate
                               .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Byte.MAX_VALUE - (Byte)rightHandValue) :
                           KuduPredicate
                               .newComparisonPredicate(columnsSchema, op, (Byte) rightHandValue);
                     }
                     else if (rightHandValue instanceof Short) {
-                      return (descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName))) ?
+                      return invertValue ?
                           KuduPredicate
                               .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Short.MAX_VALUE - (Short)rightHandValue) :
                           KuduPredicate
@@ -92,27 +93,29 @@ public final class CalciteKuduPredicate {
                     }
                     else if (rightHandValue instanceof Integer) {
                       switch(tableSchema.getColumn(columnName).getType()) {
-                        case INT8: return (descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName))) ?
+                        case INT8: return invertValue ?
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Byte.MAX_VALUE - new Byte(rightHandValue.toString())) :
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, op, new Byte(rightHandValue.toString()));
-                        case INT16: return (descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName))) ?
+                        case INT16: return invertValue ?
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Short.MAX_VALUE - new Short(rightHandValue.toString())) :
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, op, new Short(rightHandValue.toString()));
-                        case INT32: return (descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName))) ?
+                        case INT32: return invertValue ?
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Integer.MAX_VALUE - (Integer)rightHandValue) :
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, op, (Integer) rightHandValue);
-                        case INT64: return (descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName))) ?
+                        case INT64: return invertValue ?
                             // UNIXTIME_MICROS wont come in as an Integer. So safe to ignore
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Long.MAX_VALUE - (Long)rightHandValue) :
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, op, (Long) rightHandValue);
+                        case DECIMAL: return KuduPredicate
+                                .newComparisonPredicate(columnsSchema, op, BigDecimal.valueOf(((Number) rightHandValue).longValue()));
                         default: throw new IllegalArgumentException(
                             String.format("Passed in predicate value:%s is incompatible with table datatype:%s",
                                           rightHandValue.toString(),
@@ -120,7 +123,7 @@ public final class CalciteKuduPredicate {
                       }
                     }
                     else if (rightHandValue instanceof Long) {
-                      if(descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName))) {
+                      if (invertValue) {
                         // Long as well as UNIXTIME_MICROS return Long value
                         return (tableSchema.getColumn(columnName).getType() == Type.UNIXTIME_MICROS) ?
                             KuduPredicate
@@ -129,6 +132,10 @@ public final class CalciteKuduPredicate {
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, invertComparisonOp(op),
                                     Long.MAX_VALUE - (Long)rightHandValue);
+                      }
+                      else if (tableSchema.getColumn(columnName).getType() == Type.DECIMAL) {
+                        return KuduPredicate
+                          .newComparisonPredicate(columnsSchema, op, BigDecimal.valueOf(((Number) rightHandValue).longValue()));
                       }
                       return KuduPredicate.newComparisonPredicate(columnsSchema, op, (Long) rightHandValue);
                     }
