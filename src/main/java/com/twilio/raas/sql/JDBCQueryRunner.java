@@ -27,7 +27,11 @@ import com.codahale.metrics.MetricRegistry;
  * Executes Sql queries asynchronously. By providing a thread pool size,
  * the code will create a set of jdbc connections equal to that size and
  * issue sql queries over those connections.
+ *
+ * @deprecated
+ * Used originally as an example with a JDBC connection Pool.
  */
+@Deprecated
 public final class JDBCQueryRunner implements AutoCloseable {
     public static String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'ReportCenter.AuditEvents', descendingSortedFields:['event_date']}, {tableName: 'AuditEvents-DailyIndex-Aggregation', descendingSortedFields:['event_date']}]}}]};caseSensitive=false;timeZone=UTC";
     private static int POOL_COUNTER = 0;

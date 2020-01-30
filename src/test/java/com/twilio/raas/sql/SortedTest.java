@@ -64,7 +64,8 @@ public final class SortedTest {
            -1,
             false,
            Collections.<Integer>emptyList(),
-           false)
+           false,
+           new KuduScanStats())
            .sortedEnumerator(subEnumerables);
 
         assertTrue("Should have at least one result",

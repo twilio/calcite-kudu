@@ -31,30 +31,36 @@ final public class ScannerCallback
 
     private static final Logger logger = LoggerFactory.getLogger(ScannerCallback.class);
     private static final CalciteScannerMessage<CalciteRow> CLOSE_MESSAGE = CalciteScannerMessage.<CalciteRow>createEndMessage();
-    private static long OFFER_TIMEOUT_MS = 350;
 
     final AsyncKuduScanner scanner;
     final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults;
     final AtomicBoolean scansShouldStop;
     final List<Integer> primaryKeyColumnsInProjection;
     final List<Integer> descendingSortedFieldIndices;
+  final KuduScanStats scanStats;
     public ScannerCallback(final AsyncKuduScanner scanner,
                            final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults,
                            final AtomicBoolean scansShouldStop,
                            final Schema tableSchema,
                            final Schema projectedSchema,
-                           final List<Integer> descendingSortedFieldIndices) {
+        final List<Integer> descendingSortedFieldIndices,
+        final KuduScanStats scanStats) {
         this.scanner = scanner;
         this.rowResults = rowResults;
         this.scansShouldStop = scansShouldStop;
         this.primaryKeyColumnsInProjection = CalciteRow.findPrimaryKeyColumnsInProjection(projectedSchema, tableSchema);
         this.descendingSortedFieldIndices = CalciteRow.findColumnsIndicesInProjection(projectedSchema, descendingSortedFieldIndices, tableSchema);
+        this.scanStats = scanStats;
         logger.debug("ScannerCallback created for scanner" + scanner);
     }
 
     @Override
     public Deferred<Void> call(final RowResultIterator nextBatch) {
         boolean earlyExit = false;
+        scanStats.incrementRpcCount(1L);
+        if (nextBatch != null) {
+          scanStats.incrementRowCount(nextBatch.getNumRows());
+        }
         try {
             while (nextBatch != null && nextBatch.hasNext()) {
                 final RowResult row = nextBatch.next();

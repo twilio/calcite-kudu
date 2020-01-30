@@ -3,8 +3,7 @@ package com.twilio.raas.sql;
 import com.twilio.raas.sql.rel.metadata.KuduRelMetadataProvider;
 import com.twilio.raas.sql.rules.KuduRules;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
-import org.apache.calcite.adapter.enumerable.EnumerableLimit;
-import org.apache.calcite.adapter.enumerable.EnumerableRules;
+
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -14,11 +13,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
-import org.apache.calcite.rel.rules.AbstractMaterializedViewRule;
-import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
 import org.apache.calcite.rel.rules.FilterJoinRule;
-import org.apache.calcite.rel.rules.SortRemoveConstantKeysRule;
-import org.apache.calcite.rel.rules.SortRemoveRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.kudu.client.KuduTable;
 
@@ -81,6 +76,7 @@ public final class KuduQuery extends TableScan implements KuduRel {
         // join.
         planner.removeRule(FilterJoinRule.FILTER_ON_JOIN);
         planner.addRule(FilterJoinRule.DUMB_FILTER_ON_JOIN);
+
         // we include our own metadata provider that overrides calcite's default filter
         // selectivity information in order to ensure that limits are pushed down into kudu
         JaninoRelMetadataProvider relMetadataProvider =

@@ -197,18 +197,19 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      * filters to apply to the query, {@link kuduFields} are the columns to return in the
      * response and finally {@link limit} is used to limit the results that come back.
      *
-     * @param predicates    each member in the first list represents a single scan.
-     * @param columnIndices the fields ordinals to select out of Kudu
-     * @param limit         process the results until limit is reached. If less then 0,
-     *                       no limit is enforced
-     * @param offset        skip offset number of rows before returning results
-     * @paran sorted        whether to return rows in sorted order
+     * @param predicates     each member in the first list represents a single scan.
+     * @param columnIndices  the fields ordinals to select out of Kudu
+     * @param limit          process the results until limit is reached. If less then 0,
+     *                        no limit is enforced
+     * @param offset         skip offset number of rows before returning results
+     * @param sorted         whether to return rows in sorted order
+     * @param groupByLimited indicates if the groupBy method should be counting unique keys
      *
      * @return Enumeration on the objects, Fields conform to {@link CalciteKuduTable#getRowType}.
      */
     public Enumerable<Object> executeQuery(final List<List<KuduPredicate>> predicates,
                                              List<Integer> columnIndices, final long limit,
-        final long offset, final boolean sorted, final boolean groupByLimited) {
+        final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats) {
         // Here all the results from all the scans are collected. This is consumed
         // by the Enumerable.enumerator() that this method returns.
         // Set when the enumerator is told to close().
@@ -278,8 +279,10 @@ public final class CalciteKuduTable extends AbstractQueryableTable
             projectedSchema = openedTable.getSchema();
         }
 
+        scanStats.setNumScanners(numScanners);
         return new SortableEnumerable(scanners, scansShouldStop, projectedSchema,
-            openedTable.getSchema(), limit, offset, sorted, descendingSortedFieldIndices, groupByLimited);
+            openedTable.getSchema(), limit, offset, sorted, descendingSortedFieldIndices,
+            groupByLimited, scanStats);
     }
 
     @Override
@@ -302,7 +305,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
             //noinspection unchecked
             final Enumerable<T> enumerable =
                 (Enumerable<T>) getTable().executeQuery(Collections.emptyList(),
-                    Collections.emptyList(), -1, -1, false, false);
+                    Collections.emptyList(), -1, -1, false, false, new KuduScanStats());
             return enumerable.enumerator();
         }
 
@@ -318,7 +321,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
          */
         public Enumerable<Object> query(List<List<CalciteKuduPredicate>> predicates,
                                           List<Integer> fieldsIndices,
-            long limit, long offset, boolean sorted, boolean groupByLimited) {
+            long limit, long offset, boolean sorted, boolean groupByLimited, KuduScanStats scanStats) {
             return getTable().executeQuery(predicates
                                            .stream()
                                            .map(subList -> {
@@ -327,7 +330,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                                        .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedFieldIndices))
                                                        .collect(Collectors.toList());
                                                })
-                .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted, groupByLimited);
+                .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted, groupByLimited, scanStats);
         }
     }
 

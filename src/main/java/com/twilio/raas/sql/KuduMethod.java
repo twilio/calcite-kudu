@@ -11,7 +11,7 @@ import java.util.List;
  */
 public enum KuduMethod {
     KUDU_QUERY_METHOD(CalciteKuduTable.KuduQueryable.class, "query", List.class,
-          List.class, int.class, int.class, boolean.class, boolean.class);
+          List.class, int.class, int.class, boolean.class, boolean.class, KuduScanStats.class);
 
     public final Method method;
 

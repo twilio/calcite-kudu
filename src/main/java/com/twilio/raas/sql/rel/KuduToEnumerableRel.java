@@ -4,6 +4,7 @@ import com.twilio.raas.sql.CalciteKuduPredicate;
 import com.twilio.raas.sql.CalciteKuduTable;
 import com.twilio.raas.sql.KuduMethod;
 import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.KuduScanStats;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
@@ -99,11 +100,15 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
             list.append("table",
                     kuduImplementor.table.getExpression(CalciteKuduTable.KuduQueryable.class));
 
+        final Expression scanStats =
+            list.append("scanStats", implementor.stash(new KuduScanStats(), KuduScanStats.class));
+
         Expression enumerable = list.append("enumerable",
                 Expressions.call(table,
                         KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit,
                         offset, sorted,
-                        Expressions.constant(kuduImplementor.groupByLimited)));
+                        Expressions.constant(kuduImplementor.groupByLimited),
+                        scanStats));
 
         Hook.QUERY_PLAN.run(predicates);
         list.add(

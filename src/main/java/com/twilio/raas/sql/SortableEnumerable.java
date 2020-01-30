@@ -55,6 +55,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
   public final long limit;
   public final long offset;
   public final List<Integer> descendingSortedFieldIndices;
+  public final KuduScanStats scanStats;
 
   /**
    * A SortableEnumerable is an {@link Enumerable} for Kudu that can be configured to be sorted.
@@ -67,6 +68,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
    * @param sort whether or not have Kudu RPCs come back in sorted by primary key
    * @param descendingSortedFieldIndices is a list of column indices that are sorted in reverse
    * @param groupBySorted when sorted, and {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)
+   * @param scanStats a container of scan stats that should be updated as the scan executes.
    *
    * @throws IllegalArgumentException when groupByLimited is true but sorted is false
    */
@@ -79,14 +81,15 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       final long offset,
       final boolean sort,
       final List<Integer> descendingSortedFieldIndices,
-      final boolean groupBySorted) {
+      final boolean groupBySorted,
+      final KuduScanStats scanStats) {
     this.scanners = scanners;
     this.scansShouldStop = scansShouldStop;
     this.projectedSchema = projectedSchema;
     this.tableSchema = tableSchema;
     this.limit = limit;
     this.offset = offset;
-    // if we have an offset always sort by the primary key to ensure the rows are returned
+        // if we have an offset always sort by the primary key to ensure the rows are returned
     // in a predictible order
     this.sort = offset>0 || sort;
     this.descendingSortedFieldIndices = descendingSortedFieldIndices;
@@ -95,6 +98,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
           "sorted");
     }
     this.groupBySorted = groupBySorted;
+    this.scanStats = scanStats;
   }
 
   @VisibleForTesting
@@ -159,6 +163,10 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
 
         } while(fetched == null ||
             fetched.type != CalciteScannerMessage.MessageType.ROW);
+        // Indicates this is the first move.
+        if (next == null) {
+          scanStats.setFirstRow();
+        }
         next = fetched.row.get().getRowData();
         totalMoves++;
         boolean limitReached = checkLimitReached(totalMoves);
@@ -181,6 +189,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       @Override
       public void close() {
         scansShouldStop.set(true);
+        scanStats.setTotalTime();
       }
     };
   }
@@ -241,7 +250,13 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
         if (smallest == null) {
           return false;
         }
+        // Indicates this is the first move.
+        if (next == null) {
+          scanStats.setFirstRow();
+        }
+        scanStats.incrementRowCount(1L);
         next = smallest.getRowData();
+
         // Move the chosen one forward. The others have their smallest
         // already in the front of their queues.
         logger.trace("Chosen idx {} to move next", chosenEnumerable);
@@ -272,6 +287,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       public void close() {
         subEnumerables.stream()
           .forEach(enumerable -> enumerable.close());
+        scanStats.setTotalTime();
       }
     };
   }
@@ -289,12 +305,14 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
                 // callback and the CalciteKuduEnumerable need to both share
                 // queue.
                 scanner.nextRows()
-                  .addBothDeferring(new ScannerCallback(scanner,
+                  .addBothDeferring(
+                      new ScannerCallback(scanner,
                           rowResults,
                           scansShouldStop,
                           tableSchema,
                           projectedSchema,
-                          descendingSortedFieldIndices));
+                          descendingSortedFieldIndices,
+                          scanStats));
                 // Limit is not required here. do not use it.
                 return new CalciteKuduEnumerable(
                     rowResults,
@@ -316,7 +334,8 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
                       scansShouldStop,
                       tableSchema,
                       projectedSchema,
-                      descendingSortedFieldIndices));
+                      descendingSortedFieldIndices,
+                      scanStats));
           });
     final int numScanners = scanners.size();
 

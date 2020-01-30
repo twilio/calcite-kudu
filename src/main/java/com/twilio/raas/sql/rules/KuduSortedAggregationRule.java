@@ -129,7 +129,7 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
     final RelNode newkuduToEnumerableRel =
         kuduToEnumerableRel.copy(
             kuduToEnumerableRel.getTraitSet()
-                .replace(newCollation), Lists.newArrayList(newSort));
+            .replace(newCollation), Lists.newArrayList(newSort));
 
     // Create a the aggregation relation and indicate it is sorted based on result.
     // Add in our sorted collation into the aggregation as the input: kuduToEnumerable
