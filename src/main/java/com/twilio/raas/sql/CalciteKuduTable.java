@@ -3,6 +3,7 @@ package com.twilio.raas.sql;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.linq4j.Enumerable;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 
@@ -12,6 +13,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.kudu.client.KuduTable;
+import org.apache.kudu.util.TimestampUtil;
 import org.apache.kudu.Schema;
 import org.apache.kudu.ColumnSchema;
 import org.apache.calcite.schema.TranslatableTable;
@@ -54,7 +56,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
 
     public static final Instant EPOCH_DAY_FOR_REVERSE_SORT = Instant.parse("9999-12-31T00:00:00.000000Z");
     public static final Long EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS = EPOCH_DAY_FOR_REVERSE_SORT.toEpochMilli();
-    public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = org.apache.kudu.util.TimestampUtil.timestampToMicros(new java.sql.Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
+    public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = TimestampUtil.timestampToMicros(
+        new Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
 
     private final static Double DIMENSION_TABLE_ROW_COUNT = 1000.0;
     private final static Double CUBE_TABLE_ROW_COUNT = 2000000.0;
@@ -211,84 +214,11 @@ public final class CalciteKuduTable extends AbstractQueryableTable
     public Enumerable<Object> executeQuery(final List<List<KuduPredicate>> predicates,
                                              List<Integer> columnIndices, final long limit,
         final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats) {
-        // Here all the results from all the scans are collected. This is consumed
-        // by the Enumerable.enumerator() that this method returns.
-        // Set when the enumerator is told to close().
-        final AtomicBoolean scansShouldStop = new AtomicBoolean(false);
-        // if we have an offset always sort by the primary key to ensure the rows are returned
-        // in a predictible order
-        final boolean sortByPK = offset>0 || sorted;
-
-        // This  builds a List AsyncKuduScanners.
-        // Each member of this list represents an OR query on a given partition
-        // in Kudu Table
-        List<AsyncKuduScanner> scanners = predicates
-            .stream()
-            .map(subScan -> {
-                    KuduScanToken.KuduScanTokenBuilder tokenBuilder = this.client.syncClient().newScanTokenBuilder(openedTable);
-                    if (sorted) {
-                        // Allows for consistent row order in reads as it puts in ORDERED by Pk when faultTolerant is set to true
-                        tokenBuilder.setFaultTolerant(true);
-                    }
-                    if (!columnIndices.isEmpty()) {
-                        tokenBuilder.setProjectedColumnIndexes(columnIndices);
-                    }
-                    // we can only push down the limit if  we are ordering by the pk columns
-                    // and if there is no offset
-                    if (sortByPK && offset==-1 && limit!=-1 && !groupByLimited) {
-                        tokenBuilder.limit(limit);
-                    }
-                    subScan
-                        .stream()
-                        .forEach(predicate -> {
-                                tokenBuilder.addPredicate(predicate);
-                            });
-                    return tokenBuilder.build();
-                })
-            .flatMap(tokens -> {
-                    return tokens
-                        .stream()
-                        .map(token -> {
-                                try {
-                                    return KuduScannerUtil.deserializeIntoAsyncScanner(token.serialize(), client, openedTable);
-                                }
-                                catch (java.io.IOException ioe) {
-                                    throw new RuntimeException("Failed to setup scanner from token.", ioe);
-                                }
-                            });
-                })
-            .collect(Collectors.toList());
 
 
-        if (predicates.isEmpty()) {
-            // if there are no predicates that means we are doing a full table scan
-            final AsyncKuduScanner.AsyncKuduScannerBuilder allBuilder = this.client.newScannerBuilder(this.openedTable);
-            if (!columnIndices.isEmpty()) {
-                allBuilder.setProjectedColumnIndexes(columnIndices);
-            }
-            scanners = Collections.singletonList(allBuilder.build());
-        }
-        else if (scanners.isEmpty()) {
-            // if there are predicates but they result in an empty scan list that means this query
-            // returns no rows (for eg. querying for dates which don't match any partitions)
-            return Linq4j.emptyEnumerable();
-        }
-
-        // Shared integers between the scanners and the consumer of the rowResults
-        // queue. The consumer of the rowResults will attempt to poll from
-        // rowResults, and process different message types.
-        final int numScanners = scanners.size();
-        final Schema projectedSchema;
-        if (scanners.size() > 0) {
-            projectedSchema = scanners.get(0).getProjectionSchema();
-        }
-        else {
-            projectedSchema = openedTable.getSchema();
-        }
-
-        scanStats.setNumScanners(numScanners);
-        return new SortableEnumerable(scanners, scansShouldStop, projectedSchema,
-            openedTable.getSchema(), limit, offset, sorted, descendingSortedFieldIndices,
+        return new SortableEnumerable(
+            predicates, columnIndices, this.client, this.openedTable,
+            limit, offset, sorted, descendingSortedFieldIndices,
             groupByLimited, scanStats);
     }
 
@@ -330,13 +260,13 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                                           List<Integer> fieldsIndices,
             long limit, long offset, boolean sorted, boolean groupByLimited, KuduScanStats scanStats) {
             return getTable().executeQuery(predicates
-                                           .stream()
-                                           .map(subList -> {
-                                                   return subList
-                                                       .stream()
-                                                       .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedFieldIndices))
-                                                       .collect(Collectors.toList());
-                                               })
+                .stream()
+                .map(subList -> {
+                        return subList
+                            .stream()
+                            .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedFieldIndices))
+                            .collect(Collectors.toList());
+                    })
                 .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted, groupByLimited, scanStats);
         }
     }

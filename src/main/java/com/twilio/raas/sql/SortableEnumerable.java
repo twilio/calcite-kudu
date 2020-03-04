@@ -1,6 +1,8 @@
 package com.twilio.raas.sql;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.twilio.raas.sql.rules.KuduPredicatePushDownVisitor;
+
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.EnumerableDefaults;
 import org.slf4j.Logger;
@@ -9,12 +11,15 @@ import java.util.List;
 import java.util.Queue;
 
 import org.apache.calcite.linq4j.Enumerator;
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Function2;
+import org.apache.calcite.rex.RexNode;
 
 import java.util.stream.Collectors;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.concurrent.BlockingQueue;
@@ -25,8 +30,16 @@ import org.apache.calcite.linq4j.AbstractEnumerable;
 import org.apache.calcite.linq4j.AbstractEnumerable2;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.AsyncKuduScanner;
+import org.apache.kudu.client.KuduPredicate;
+import org.apache.kudu.client.KuduScanToken;
+import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.Schema;
+
+// This class resides in this project under the org.apache namespace
+import org.apache.kudu.client.KuduScannerUtil;
 
 /**
  * An {@link Enumerable} that *can* returns Kudu records in Ascending order on
@@ -44,11 +57,7 @@ import org.apache.kudu.Schema;
 public final class SortableEnumerable extends AbstractEnumerable<Object> {
   private static final Logger logger = LoggerFactory.getLogger(SortableEnumerable.class);
 
-  private final List<AsyncKuduScanner> scanners;
-
   private final AtomicBoolean scansShouldStop;
-  private final Schema projectedSchema;
-  private final Schema tableSchema;
 
   public final boolean sort;
   public final boolean groupBySorted;
@@ -56,6 +65,11 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
   public final long offset;
   public final List<Integer> descendingSortedFieldIndices;
   public final KuduScanStats scanStats;
+
+  private final List<List<KuduPredicate>> predicates;
+  private final List<Integer> columnIndices;
+  private final AsyncKuduClient client;
+  private final KuduTable openedTable;
 
   /**
    * A SortableEnumerable is an {@link Enumerable} for Kudu that can be configured to be sorted.
@@ -73,24 +87,21 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
    * @throws IllegalArgumentException when groupByLimited is true but sorted is false
    */
   public SortableEnumerable(
-      List<AsyncKuduScanner> scanners,
-      final AtomicBoolean scansShouldStop,
-      final Schema projectedSchema,
-      final Schema tableSchema,
+      final List<List<KuduPredicate>> predicates,
+      final List<Integer> columnIndices,
+      final AsyncKuduClient client,
+      final KuduTable openedTable,
       final long limit,
       final long offset,
       final boolean sort,
       final List<Integer> descendingSortedFieldIndices,
       final boolean groupBySorted,
       final KuduScanStats scanStats) {
-    this.scanners = scanners;
-    this.scansShouldStop = scansShouldStop;
-    this.projectedSchema = projectedSchema;
-    this.tableSchema = tableSchema;
+    this.scansShouldStop = new AtomicBoolean(false);
     this.limit = limit;
     this.offset = offset;
-        // if we have an offset always sort by the primary key to ensure the rows are returned
-    // in a predictible order
+    // if we have an offset always sort by the primary key to ensure the rows are returned
+    // in a predictable order
     this.sort = offset>0 || sort;
     this.descendingSortedFieldIndices = descendingSortedFieldIndices;
     if (groupBySorted && !this.sort) {
@@ -99,11 +110,16 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
     }
     this.groupBySorted = groupBySorted;
     this.scanStats = scanStats;
+
+    this.predicates = predicates;
+    this.columnIndices = columnIndices;
+    this.client = client;
+    this.openedTable = openedTable;
   }
 
   @VisibleForTesting
   List<AsyncKuduScanner> getScanners() {
-    return scanners;
+    return createScanners();
   }
 
   private boolean checkLimitReached(int totalMoves) {
@@ -292,8 +308,30 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
     };
   }
 
+  public Schema getTableSchema() {
+    return this.openedTable.getSchema();
+  }
+
   @Override
   public Enumerator<Object> enumerator() {
+    final List<AsyncKuduScanner> scanners = createScanners();
+    final int numScanners = scanners.size();
+    final Schema projectedSchema;
+
+    if (scanners.isEmpty()) {
+        // if there are predicates but they result in an empty scan list that means this query
+        // returns no rows (for eg. querying for dates which don't match any partitions)
+        return Linq4j.emptyEnumerator();
+    }
+
+    if (scanners.size() > 0) {
+      projectedSchema = scanners.get(0).getProjectionSchema();
+    } else {
+      projectedSchema = openedTable.getSchema();
+    }
+    final Schema tableSchema = openedTable.getSchema();
+
+    scanStats.setNumScanners(numScanners);
     if (sort) {
       return sortedEnumerator(
           scanners
@@ -337,7 +375,6 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
                       descendingSortedFieldIndices,
                       scanStats));
           });
-    final int numScanners = scanners.size();
 
     return unsortedEnumerator(numScanners, messages);
   }
@@ -423,5 +460,91 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
         return sortedResults.iterator();
       }
     };
+  }
+
+  private List<AsyncKuduScanner> createScanners() {
+    // This builds a List AsyncKuduScanners.
+    // Each member of this list represents an OR query on a given partition
+    // in Kudu Table
+    List<AsyncKuduScanner> scanners = predicates.stream().map(subScan -> {
+      KuduScanToken.KuduScanTokenBuilder tokenBuilder = client.syncClient().newScanTokenBuilder(openedTable);
+      if (sort) {
+        // Allows for consistent row order in reads as it puts in ORDERED by Pk when
+        // faultTolerant is set to true
+        tokenBuilder.setFaultTolerant(true);
+      }
+      if (!columnIndices.isEmpty()) {
+        tokenBuilder.setProjectedColumnIndexes(columnIndices);
+      }
+      // we can only push down the limit if we are ordering by the pk columns
+      // and if there is no offset
+      if (sort  && offset == -1 && limit != -1 && !groupBySorted) {
+        tokenBuilder.limit(limit);
+      }
+      subScan.stream().forEach(predicate -> {
+        tokenBuilder.addPredicate(predicate);
+      });
+      return tokenBuilder.build();
+    }).flatMap(tokens -> {
+      return tokens.stream().map(token -> {
+        try {
+          return KuduScannerUtil.deserializeIntoAsyncScanner(token.serialize(), client, openedTable);
+        } catch (java.io.IOException ioe) {
+          throw new RuntimeException("Failed to setup scanner from token.", ioe);
+        }
+      });
+    }).collect(Collectors.toList());
+
+    if (predicates.isEmpty()) {
+      // Scan the whole table !
+      final AsyncKuduScanner.AsyncKuduScannerBuilder allBuilder = client.newScannerBuilder(openedTable);
+      if (!columnIndices.isEmpty()) {
+        allBuilder.setProjectedColumnIndexes(columnIndices);
+      }
+      scanners = Collections.singletonList(allBuilder.build());
+    }
+    return scanners;
+  }
+
+  public List<List<KuduPredicate>> conditionToPredicate(final RexNode condition) {
+    /**
+     * @TODO: need to use {@link RowValueExpressionConverter}
+     */
+    final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor(
+        openedTable.getSchema());
+    List<List<CalciteKuduPredicate>> predicates = condition.accept(predicateParser, null);
+
+    return predicates
+      .stream()
+      .map(subList -> {
+            return subList
+              .stream()
+              .map(p ->  p.toPredicate(openedTable.getSchema(), descendingSortedFieldIndices))
+              .collect(Collectors.toList());
+          })
+      .collect(Collectors.toList());
+  }
+
+  public SortableEnumerable clone(final List<KuduPredicate> conjunctions) {
+    return new SortableEnumerable(
+        predicates
+        .stream()
+        .map(subscan -> {
+              final ArrayList<KuduPredicate> newPredicates = new ArrayList<>();
+              newPredicates.addAll(subscan);
+              newPredicates.addAll(conjunctions);
+              return newPredicates;
+            })
+        .collect(Collectors.toList()),
+        columnIndices,
+        client,
+        openedTable,
+        limit,
+        offset,
+        sort,
+        descendingSortedFieldIndices,
+        groupBySorted,
+        scanStats
+    );
   }
 }
