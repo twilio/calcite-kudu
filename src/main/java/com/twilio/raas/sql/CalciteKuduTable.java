@@ -211,7 +211,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      *
      * @return Enumeration on the objects, Fields conform to {@link CalciteKuduTable#getRowType}.
      */
-    public Enumerable<Object> executeQuery(final List<List<KuduPredicate>> predicates,
+    public Enumerable<Object> executeQuery(final List<List<CalciteKuduPredicate>> predicates,
                                              List<Integer> columnIndices, final long limit,
         final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats) {
 
@@ -259,15 +259,15 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         public Enumerable<Object> query(List<List<CalciteKuduPredicate>> predicates,
                                           List<Integer> fieldsIndices,
             long limit, long offset, boolean sorted, boolean groupByLimited, KuduScanStats scanStats) {
-            return getTable().executeQuery(predicates
-                .stream()
-                .map(subList -> {
-                        return subList
-                            .stream()
-                            .map(p ->  p.toPredicate(getTable().openedTable.getSchema(), getTable().descendingSortedFieldIndices))
-                            .collect(Collectors.toList());
-                    })
-                .collect(Collectors.toList()), fieldsIndices, limit, offset, sorted, groupByLimited, scanStats);
+            return getTable()
+                .executeQuery(
+                predicates,
+                fieldsIndices,
+                limit,
+                offset,
+                sorted,
+                groupByLimited,
+                scanStats);
         }
     }
 

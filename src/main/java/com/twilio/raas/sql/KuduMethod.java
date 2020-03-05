@@ -2,6 +2,7 @@ package com.twilio.raas.sql;
 
 import com.google.common.collect.ImmutableMap;
 import java.lang.reflect.Method;
+import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.linq4j.tree.Types;
 import java.util.List;
 
@@ -11,7 +12,8 @@ import java.util.List;
  */
 public enum KuduMethod {
     KUDU_QUERY_METHOD(CalciteKuduTable.KuduQueryable.class, "query", List.class,
-          List.class, int.class, int.class, boolean.class, boolean.class, KuduScanStats.class);
+        List.class, int.class, int.class, boolean.class, boolean.class, KuduScanStats.class),
+    NESTED_JOIN_PREDICATES(SortableEnumerable.class, "nestedJoinPredicates", Join.class);
 
     public final Method method;
 

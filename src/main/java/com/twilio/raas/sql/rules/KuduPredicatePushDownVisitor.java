@@ -58,13 +58,10 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
         return allExpressionsConverted;
     }
 
-    private List<List<CalciteKuduPredicate>> mergeBoolean(SqlKind booleanOp,
-                                                          List<List<CalciteKuduPredicate>> left,
-                                                          List<List<CalciteKuduPredicate>> right) {
-        // happens only on the reduce call at the start.
-        if (left == null) {
-            return right;
-        }
+    public static List<List<CalciteKuduPredicate>> mergePredicateLists(
+        SqlKind booleanOp,
+        List<List<CalciteKuduPredicate>>left,
+        List<List<CalciteKuduPredicate>> right) {
         switch(booleanOp) {
         case AND:
             if (left.isEmpty()) {
@@ -90,12 +87,10 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
             // the entire scan tokens into Kudu. We cannot apply the right either in that case
             // so need to create an empty scan.
             if (left.isEmpty()) {
-                // @TODO: mark this as un-filter-able
-                return setEmpty();
+                return Collections.emptyList();
             }
             if (right.isEmpty()) {
-                // @TODO: mark this as un-filter-able
-                return setEmpty();
+                return Collections.emptyList();
             }
 
             // In this case, we have a set of predicates on the left, that will map to one
@@ -114,6 +109,24 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
             throw new IllegalArgumentException(String.format("Passed in a SqlKind operation that isn't supported: %s",
                                                              booleanOp));
         }
+    }
+
+    private List<List<CalciteKuduPredicate>> mergeBoolean(SqlKind booleanOp,
+                                                          List<List<CalciteKuduPredicate>> left,
+                                                          List<List<CalciteKuduPredicate>> right) {
+        // happens only on the reduce call at the start.
+        if (left == null) {
+            return right;
+        }
+        final List<List<CalciteKuduPredicate>> combined = mergePredicateLists(
+            booleanOp, left, right);
+
+        // If there is no predicates in Left or Right, that means we are unable to push down
+        // the entire scan tokens into Kudu.
+        if (booleanOp == SqlKind.OR && combined.isEmpty()) {
+            return setEmpty();
+        }
+        return combined;
     }
 
     /**

@@ -15,7 +15,9 @@ import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Function2;
+import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlKind;
 
 import java.util.stream.Collectors;
 import java.util.ArrayList;
@@ -66,7 +68,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
   public final List<Integer> descendingSortedFieldIndices;
   public final KuduScanStats scanStats;
 
-  private final List<List<KuduPredicate>> predicates;
+  private final List<List<CalciteKuduPredicate>> predicates;
   private final List<Integer> columnIndices;
   private final AsyncKuduClient client;
   private final KuduTable openedTable;
@@ -87,7 +89,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
    * @throws IllegalArgumentException when groupByLimited is true but sorted is false
    */
   public SortableEnumerable(
-      final List<List<KuduPredicate>> predicates,
+      final List<List<CalciteKuduPredicate>> predicates,
       final List<Integer> columnIndices,
       final AsyncKuduClient client,
       final KuduTable openedTable,
@@ -482,7 +484,11 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
         tokenBuilder.limit(limit);
       }
       subScan.stream().forEach(predicate -> {
-        tokenBuilder.addPredicate(predicate);
+            tokenBuilder.addPredicate(predicate
+                .toPredicate(
+                    getTableSchema(),
+                    descendingSortedFieldIndices
+                ));
       });
       return tokenBuilder.build();
     }).flatMap(tokens -> {
@@ -525,26 +531,54 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       .collect(Collectors.toList());
   }
 
-  public SortableEnumerable clone(final List<KuduPredicate> conjunctions) {
-    return new SortableEnumerable(
-        predicates
-        .stream()
-        .map(subscan -> {
-              final ArrayList<KuduPredicate> newPredicates = new ArrayList<>();
-              newPredicates.addAll(subscan);
-              newPredicates.addAll(conjunctions);
-              return newPredicates;
-            })
-        .collect(Collectors.toList()),
-        columnIndices,
-        client,
-        openedTable,
-        limit,
-        offset,
-        sort,
-        descendingSortedFieldIndices,
-        groupBySorted,
-        scanStats
-    );
+  public SortableEnumerable clone(final List<List<CalciteKuduPredicate>> conjunctions) {
+      // The result of the merge can be an empty list. That means we are scanning everything.
+      // @TODO: can we generate unique predicates? What happens when it contains the same one.
+      final List<List<CalciteKuduPredicate>> merged = KuduPredicatePushDownVisitor
+          .mergePredicateLists(
+              SqlKind.AND,
+              this.predicates,
+              conjunctions
+          );
+      return new SortableEnumerable(
+          merged,
+          columnIndices,
+          client,
+          openedTable,
+          limit,
+          offset,
+          sort,
+          descendingSortedFieldIndices,
+          groupBySorted,
+          scanStats
+      );
   }
+
+    public Function1<List<Object>, Enumerable<Object>> nestedJoinPredicates(final Join joinNode) {
+        final List<TranslationPredicate> rowTranslators = joinNode
+            .getCondition()
+            .accept(new TranslationPredicate
+                .ConditionTranslationVisitor(
+                    joinNode.getLeft().getRowType().getFieldCount(),
+                    this.getTableSchema()
+                ));
+        final SortableEnumerable rootEnumerable = this;
+        return new Function1<List<Object>, Enumerable<Object>>() {
+            @Override
+            public Enumerable<Object> apply(final List<Object> batch) {
+                final List<List<CalciteKuduPredicate>> pushDownPredicates = batch
+                    .stream()
+                    .map(s -> {
+                            return rowTranslators
+                                .stream()
+                                // @TODO: give the toPredicate method a row count.
+                                .map(t -> t.toPredicate((Object[])s))
+                                .collect(Collectors.toList());
+                        })
+                    .collect(Collectors.toList());
+                return rootEnumerable.clone(pushDownPredicates);
+            }
+        };
+
+    }
 }
