@@ -126,7 +126,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      * Builds a mapping from Kudu Schema into relational schema names
      */
     @Override
-    public RelDataType getRowType(RelDataTypeFactory typeFactory) {
+    public RelDataType getRowType(final RelDataTypeFactory typeFactory) {
         final RelDataTypeFactory.Builder builder = new RelDataTypeFactory.Builder(typeFactory);
         final Schema kuduSchema = this.openedTable.getSchema();
 
@@ -184,8 +184,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
     }
 
     @Override
-    public RelNode toRel(RelOptTable.ToRelContext context,
-                         RelOptTable relOptTable) {
+    public RelNode toRel(final RelOptTable.ToRelContext context,
+                         final RelOptTable relOptTable) {
 
         final RelOptCluster cluster = context.getCluster();
         return new KuduQuery(cluster,
@@ -211,8 +211,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      *
      * @return Enumeration on the objects, Fields conform to {@link CalciteKuduTable#getRowType}.
      */
-    public Enumerable<Object> executeQuery(final List<List<CalciteKuduPredicate>> predicates,
-                                             List<Integer> columnIndices, final long limit,
+    public SortableEnumerable executeQuery(final List<List<CalciteKuduPredicate>> predicates,
+                                             final List<Integer> columnIndices, final long limit,
         final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats) {
 
 
@@ -223,8 +223,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
     }
 
     @Override
-    public <T> Queryable<T> asQueryable(QueryProvider queryProvider,
-                                        SchemaPlus schema, String tableName) {
+    public <T> Queryable<T> asQueryable(final QueryProvider queryProvider,
+                                        final SchemaPlus schema, final String tableName) {
         return new KuduQueryable<>(queryProvider, schema, this, tableName);
     }
 
@@ -233,8 +233,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      *
      * @param <T> element type */
     public static class KuduQueryable<T> extends AbstractTableQueryable<T> {
-        public KuduQueryable(QueryProvider queryProvider, SchemaPlus schema,
-                             CalciteKuduTable table, String tableName) {
+        public KuduQueryable(final QueryProvider queryProvider, final SchemaPlus schema,
+                             final CalciteKuduTable table, final String tableName) {
             super(queryProvider, schema, table, tableName);
         }
 
@@ -256,9 +256,9 @@ public final class CalciteKuduTable extends AbstractQueryableTable
          * This is the method that is called by Code generation to run the query.
          * Code generation happens in {@link KuduToEnumerableConverter}
          */
-        public Enumerable<Object> query(List<List<CalciteKuduPredicate>> predicates,
-                                          List<Integer> fieldsIndices,
-            long limit, long offset, boolean sorted, boolean groupByLimited, KuduScanStats scanStats) {
+        public Enumerable<Object> query(final List<List<CalciteKuduPredicate>> predicates,
+                                          final List<Integer> fieldsIndices,
+            final long limit, final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats) {
             return getTable()
                 .executeQuery(
                 predicates,

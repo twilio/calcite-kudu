@@ -37,6 +37,7 @@ public final class CalciteKuduPredicate {
         this.rightHandValue = rightHandValue;
     }
 
+
     /**
      * Transforms this POJO into a proper {@link KuduPredicate}
      *
@@ -156,5 +157,42 @@ public final class CalciteKuduPredicate {
         default: throw new IllegalArgumentException(
             String.format("Passed in an Operator that doesn't make sense for Kudu Predicates: %s", currentOp));
       }
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((columnName == null) ? 0 : columnName.hashCode());
+        result = prime * result + ((operation == null) ? 0 : operation.hashCode());
+        result = prime * result + ((rightHandValue == null) ? 0 : rightHandValue.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        CalciteKuduPredicate other = (CalciteKuduPredicate) obj;
+        if (columnName == null) {
+            if (other.columnName != null)
+                return false;
+        } else if (!columnName.equals(other.columnName))
+            return false;
+        if (operation == null) {
+            if (other.operation != null)
+                return false;
+        } else if (!operation.equals(other.operation))
+            return false;
+        if (rightHandValue == null) {
+            if (other.rightHandValue != null)
+                return false;
+        } else if (!rightHandValue.equals(other.rightHandValue))
+            return false;
+        return true;
     }
 }

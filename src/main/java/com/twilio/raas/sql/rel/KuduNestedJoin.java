@@ -53,23 +53,28 @@ import java.util.Set;
  * {@link org.apache.calcite.adapter.enumerable.EnumerableConvention enumerable calling convention}. */
 public class KuduNestedJoin extends Join implements EnumerableRel {
 
+    final int batchSize;
   protected KuduNestedJoin(
       final RelOptCluster cluster,
       final RelTraitSet traits,
       final RelNode left,
       final RelNode right,
       final RexNode condition,
-      final JoinRelType joinType) {
+      final JoinRelType joinType,
+      final int batchSize) {
     super(cluster, traits, left, right, condition, Collections.emptySet(), joinType);
+    this.batchSize = batchSize;
   }
 
   public static KuduNestedJoin create(
       final RelNode left,
       final RelNode right,
       final RexNode condition,
-      final JoinRelType joinType) {
+      final JoinRelType joinType,
+      final int batchSize) {
     final RelOptCluster cluster = left.getCluster();
     final RelMetadataQuery mq = cluster.getMetadataQuery();
+    // Sets Enumerable trait and *IF* left is sorted, preserve that sort.
     final RelTraitSet traitSet =
         cluster.traitSetOf(EnumerableConvention.INSTANCE)
             .replaceIfs(RelCollationTraitDef.INSTANCE,
@@ -80,14 +85,15 @@ public class KuduNestedJoin extends Join implements EnumerableRel {
         left,
         right,
         condition,
-        joinType);
+        joinType,
+        batchSize);
   }
 
   @Override public KuduNestedJoin copy(final RelTraitSet traitSet,
       final RexNode condition, final RelNode left, final RelNode right, final JoinRelType joinType,
       final boolean semiJoinDone) {
     return new KuduNestedJoin(getCluster(), traitSet,
-        left, right, condition, joinType);
+        left, right, condition, joinType, this.batchSize);
   }
 
   @Override public RelOptCost computeSelfCost(
@@ -101,20 +107,18 @@ public class KuduNestedJoin extends Join implements EnumerableRel {
       return planner.getCostFactory().makeInfiniteCost();
     }
 
-    final Double restartCount = mq.getRowCount(getLeft()) / variablesSet.size();
+    final Double restartCount = mq.getRowCount(getLeft()) / batchSize;
 
     final RelOptCost rightCost = planner.getCost(getRight(), mq);
     final RelOptCost rescanCost =
         rightCost.multiplyBy(Math.max(1.0, restartCount - 1));
 
-    // TODO Add cost of last loop (the one that looks for the match)
-    return planner.getCostFactory().makeCost(
-        rowCount + leftRowCount, 0, 0).plus(rescanCost);
+    return planner.getCostFactory().makeZeroCost();
   }
 
   @Override public RelWriter explainTerms(final RelWriter pw) {
     super.explainTerms(pw);
-    return pw.item("batchSize", variablesSet.size());
+    return pw.item("batchSize", batchSize);
   }
 
   @Override public Result implement(final EnumerableRelImplementor implementor, final Prefer pref) {
@@ -127,6 +131,8 @@ public class KuduNestedJoin extends Join implements EnumerableRel {
 
     final Result rightResult =
         implementor.visitChild(this, 1, (EnumerableRel) right, pref);
+
+    final Expression rightExpression = builder.append("right", rightResult.block);
 
     final PhysType physType =
         PhysTypeImpl.of(
@@ -143,16 +149,18 @@ public class KuduNestedJoin extends Join implements EnumerableRel {
             leftResult.physType, rightResult.physType, condition);
 
     builder.append(
-        Expressions.call(BuiltInMethod.CORRELATE_BATCH_JOIN.method,
+        Expressions.call(KuduMethod.CORRELATE_BATCH_JOIN.method,
             Expressions.constant(toLinq4jJoinType(joinType)),
             leftExpression,
             Expressions.call(
+                Expressions.convert_(
+                    rightExpression,
+                    SortableEnumerable.class),
                 KuduMethod.NESTED_JOIN_PREDICATES.method,
-                Expressions.constant(this)
-            ),
+                implementor.stash(this, Join.class)),
             selector,
             predicate,
-            Expressions.constant(variablesSet.size())));
+            Expressions.constant(batchSize)));
     return implementor.result(physType, builder.toBlock());
   }
 

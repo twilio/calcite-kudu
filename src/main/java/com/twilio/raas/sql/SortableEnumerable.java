@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.Linq4j;
@@ -566,7 +567,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
         return new Function1<List<Object>, Enumerable<Object>>() {
             @Override
             public Enumerable<Object> apply(final List<Object> batch) {
-                final List<List<CalciteKuduPredicate>> pushDownPredicates = batch
+                final Set<List<CalciteKuduPredicate>> pushDownPredicates = batch
                     .stream()
                     .map(s -> {
                             return rowTranslators
@@ -575,8 +576,9 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
                                 .map(t -> t.toPredicate((Object[])s))
                                 .collect(Collectors.toList());
                         })
-                    .collect(Collectors.toList());
-                return rootEnumerable.clone(pushDownPredicates);
+                    .collect(Collectors.toSet());
+                // @TODO: refactor all of this to use Set<List<>> instead of List<List<>>>.
+                return rootEnumerable.clone(new LinkedList<>(pushDownPredicates));
             }
         };
 

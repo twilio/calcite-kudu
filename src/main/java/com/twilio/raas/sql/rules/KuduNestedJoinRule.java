@@ -1,33 +1,26 @@
 package com.twilio.raas.sql.rules;
 
-import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 import com.twilio.raas.sql.KuduRel;
 import com.twilio.raas.sql.rel.KuduNestedJoin;
+import com.twilio.raas.sql.rel.KuduToEnumerableRel;
 
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
-import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.CorrelationId;
+import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.rex.RexShuttle;
 import org.apache.calcite.rex.RexVisitor;
 import org.apache.calcite.rex.RexVisitorImpl;
+import org.apache.calcite.sql.SqlExplainFormat;
+import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.tools.RelBuilderFactory;
-import org.apache.calcite.util.ImmutableBitSet;
 
 public class KuduNestedJoinRule extends RelOptRule {
     public final static EnumSet<SqlKind> VALID_CALL_TYPES = EnumSet.of(SqlKind.EQUALS, SqlKind.GREATER_THAN,
@@ -37,7 +30,9 @@ public class KuduNestedJoinRule extends RelOptRule {
     private int batchSize;
 
     public KuduNestedJoinRule(RelBuilderFactory relBuilderFactory) {
-        super(operand(Join.class, operand(KuduRel.class, any())),
+        super(operand(Join.class, some(
+                    operand(KuduToEnumerableRel.class, any()),
+                    operand(KuduToEnumerableRel.class, any()))),
             relBuilderFactory, "KuduNestedJoin");
         this.batchSize = DEFAULT_BATCH_SIZE;
     }
@@ -45,6 +40,10 @@ public class KuduNestedJoinRule extends RelOptRule {
     @Override
     public boolean matches(final RelOptRuleCall call) {
         final Join join = call.rel(0);
+        if (join.getJoinType() != JoinRelType.INNER
+            && join.getJoinType() != JoinRelType.LEFT) {
+            return false;
+        }
         final RexNode condition = join.getCondition();
         final RexVisitor<Boolean> validateJoinCondition = new RexVisitorImpl<Boolean>(true) {
             @Override
@@ -52,14 +51,16 @@ public class KuduNestedJoinRule extends RelOptRule {
                 final SqlKind callType = rexCall.getOperator().getKind();
                 if (callType == SqlKind.OR) {
                     return Boolean.FALSE;
-                } else if (callType == SqlKind.AND) {
+                }
+                else if (callType == SqlKind.AND) {
                     for (final RexNode operand : rexCall.operands) {
                         final Boolean opResult = operand.accept(this);
                         if (opResult == null || opResult == Boolean.FALSE) {
                             return Boolean.FALSE;
                         }
                     }
-                } else if (!VALID_CALL_TYPES.contains(callType)) {
+                }
+                else if (!VALID_CALL_TYPES.contains(callType)) {
                     return Boolean.FALSE;
                 }
                 return Boolean.TRUE;
@@ -71,23 +72,22 @@ public class KuduNestedJoinRule extends RelOptRule {
             }
         };
 
-        return condition.accept(validateJoinCondition);
+        final Boolean isValid = condition.accept(validateJoinCondition);
+        return isValid;
     }
 
     @Override
     public void onMatch(final RelOptRuleCall call) {
         final Join join = call.rel(0);
 
-        final Set<CorrelationId> correlationIds = new HashSet<>();
-
-        final ImmutableBitSet.Builder requiredColumns = ImmutableBitSet.builder();
-
         final JoinRelType joinType = join.getJoinType();
 
-        call.transformTo(KuduNestedJoin.create(
-                convert(join.getLeft(), join.getLeft().getTraitSet().replace(EnumerableConvention.INSTANCE)),
-                convert(join.getRight(), join.getRight().getTraitSet().replace(EnumerableConvention.INSTANCE)),
+        call.transformTo(
+            KuduNestedJoin.create(
+                join.getLeft(),
+                join.getRight(),
                 join.getCondition(),
-                requiredColumns.build(), correlationIds, joinType));
+                joinType,
+                this.batchSize));
     }
 }
