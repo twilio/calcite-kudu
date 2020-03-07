@@ -1,6 +1,7 @@
 package com.twilio.raas.sql;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.twilio.raas.sql.rel.KuduProjectRel;
 import com.twilio.raas.sql.rules.KuduPredicatePushDownVisitor;
 
 import org.apache.calcite.linq4j.Enumerable;
@@ -17,6 +18,7 @@ import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Function2;
 import org.apache.calcite.rel.core.Join;
+import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
 
@@ -329,7 +331,8 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
 
     if (scanners.size() > 0) {
       projectedSchema = scanners.get(0).getProjectionSchema();
-    } else {
+    }
+    else {
       projectedSchema = openedTable.getSchema();
     }
     final Schema tableSchema = openedTable.getSchema();
@@ -469,38 +472,46 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
     // This builds a List AsyncKuduScanners.
     // Each member of this list represents an OR query on a given partition
     // in Kudu Table
-    List<AsyncKuduScanner> scanners = predicates.stream().map(subScan -> {
-      KuduScanToken.KuduScanTokenBuilder tokenBuilder = client.syncClient().newScanTokenBuilder(openedTable);
-      if (sort) {
-        // Allows for consistent row order in reads as it puts in ORDERED by Pk when
-        // faultTolerant is set to true
-        tokenBuilder.setFaultTolerant(true);
-      }
-      if (!columnIndices.isEmpty()) {
-        tokenBuilder.setProjectedColumnIndexes(columnIndices);
-      }
-      // we can only push down the limit if we are ordering by the pk columns
-      // and if there is no offset
-      if (sort  && offset == -1 && limit != -1 && !groupBySorted) {
-        tokenBuilder.limit(limit);
-      }
-      subScan.stream().forEach(predicate -> {
-            tokenBuilder.addPredicate(predicate
-                .toPredicate(
-                    getTableSchema(),
-                    descendingSortedFieldIndices
-                ));
-      });
-      return tokenBuilder.build();
-    }).flatMap(tokens -> {
-      return tokens.stream().map(token -> {
-        try {
-          return KuduScannerUtil.deserializeIntoAsyncScanner(token.serialize(), client, openedTable);
-        } catch (java.io.IOException ioe) {
-          throw new RuntimeException("Failed to setup scanner from token.", ioe);
-        }
-      });
-    }).collect(Collectors.toList());
+    List<AsyncKuduScanner> scanners = predicates
+        .stream()
+        .map(subScan -> {
+                KuduScanToken.KuduScanTokenBuilder tokenBuilder = client.syncClient()
+                    .newScanTokenBuilder(openedTable);
+                if (sort) {
+                    // Allows for consistent row order in reads as it puts in ORDERED by Pk when
+                    // faultTolerant is set to true
+                    tokenBuilder.setFaultTolerant(true);
+                }
+                if (!columnIndices.isEmpty()) {
+                    tokenBuilder.setProjectedColumnIndexes(columnIndices);
+                }
+                // we can only push down the limit if we are ordering by the pk columns
+                // and if there is no offset
+                if (sort  && offset == -1 && limit != -1 && !groupBySorted) {
+                    tokenBuilder.limit(limit);
+                }
+                subScan.stream().forEach(predicate -> {
+                        tokenBuilder.addPredicate(predicate
+                            .toPredicate(
+                                getTableSchema(),
+                                descendingSortedFieldIndices
+                            ));
+                    });
+                return tokenBuilder.build();
+            })
+        .flatMap(tokens -> {
+                return tokens
+                    .stream()
+                    .map(token -> {
+                            try {
+                                return KuduScannerUtil.deserializeIntoAsyncScanner(
+                                    token.serialize(), client, openedTable);
+                            } catch (java.io.IOException ioe) {
+                                throw new RuntimeException("Failed to setup scanner from token.", ioe);
+                            }
+                        });
+            })
+        .collect(Collectors.toList());
 
     if (predicates.isEmpty()) {
       // Scan the whole table !
@@ -555,32 +566,46 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       );
   }
 
-    public Function1<List<Object>, Enumerable<Object>> nestedJoinPredicates(final Join joinNode) {
-        final List<TranslationPredicate> rowTranslators = joinNode
-            .getCondition()
-            .accept(new TranslationPredicate
-                .ConditionTranslationVisitor(
-                    joinNode.getLeft().getRowType().getFieldCount(),
-                    this.getTableSchema()
-                ));
-        final SortableEnumerable rootEnumerable = this;
-        return new Function1<List<Object>, Enumerable<Object>>() {
-            @Override
-            public Enumerable<Object> apply(final List<Object> batch) {
-                final Set<List<CalciteKuduPredicate>> pushDownPredicates = batch
-                    .stream()
-                    .map(s -> {
-                            return rowTranslators
-                                .stream()
-                                // @TODO: give the toPredicate method a row count.
-                                .map(t -> t.toPredicate((Object[])s))
-                                .collect(Collectors.toList());
-                        })
-                    .collect(Collectors.toSet());
-                // @TODO: refactor all of this to use Set<List<>> instead of List<List<>>>.
-                return rootEnumerable.clone(new LinkedList<>(pushDownPredicates));
-            }
-        };
-
+  /**
+   * Return a function that accepts the Left hand sides rows and creates a new
+   * {@code SortableEnumerable} that will match the batch of rows.
+   *
+   * @param joinNode The {@link Join} relation for this nest join.
+   *
+   * @return a function that produces another {@code SortableEnumerable} that matches the batches passed in.
+   */
+  public Function1<List<Object>, Enumerable<Object>> nestedJoinPredicates(final Join joinNode) {
+    final Project rightSideProjection;
+    if (joinNode.getRight().getInput(0) instanceof KuduProjectRel) {
+      rightSideProjection = (KuduProjectRel) joinNode.getRight().getInput(0);
     }
+    else {
+      rightSideProjection = null;
+    }
+    final List<TranslationPredicate> rowTranslators = joinNode
+      .getCondition()
+      .accept(new TranslationPredicate
+          .ConditionTranslationVisitor(
+              joinNode.getLeft().getRowType().getFieldCount(),
+              rightSideProjection,
+              this.getTableSchema()
+          ));
+    final SortableEnumerable rootEnumerable = this;
+    return new Function1<List<Object>, Enumerable<Object>>() {
+      @Override
+      public Enumerable<Object> apply(final List<Object> batch) {
+        final Set<List<CalciteKuduPredicate>> pushDownPredicates = batch
+          .stream()
+          .map(s -> {
+                return rowTranslators
+                  .stream()
+                  .map(t -> t.toPredicate((Object[])s))
+                  .collect(Collectors.toList());
+              })
+          .collect(Collectors.toSet());
+        // @TODO: refactor all of this to use Set<List<>> instead of List<List<>>>.
+        return rootEnumerable.clone(new LinkedList<>(pushDownPredicates));
+      }
+    };
+  }
 }

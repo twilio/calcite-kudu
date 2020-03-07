@@ -13,6 +13,7 @@ import org.apache.calcite.linq4j.JoinType;
 import org.apache.calcite.linq4j.function.Function2;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexVisitorImpl;
@@ -68,13 +69,17 @@ public class TranslationPredicate {
      * Computes the conjunction based on the join condition
      */
     public static class ConditionTranslationVisitor extends RexVisitorImpl<List<TranslationPredicate>> {
-        private int leftSize;
-        private Schema tableSchema;
+        private final int leftSize;
+        private final Schema tableSchema;
+        private final Project rightSideProjection;
 
-        public ConditionTranslationVisitor(final int leftSize, Schema tableSchema) {
+        public ConditionTranslationVisitor(final int leftSize, final Project rightSideProjection,
+            final Schema tableSchema) {
+
             super(true);
             this.leftSize = leftSize;
             this.tableSchema = tableSchema;
+            this.rightSideProjection = rightSideProjection;
         }
 
         public List<TranslationPredicate> visitCall(RexCall call) {
@@ -96,11 +101,30 @@ public class TranslationPredicate {
                         } else {
                             left = (RexInputRef) call.operands.get(1);
                             right = (RexInputRef) call.operands.get(0);
+
                         }
+
+                        final int rightPositionInEnumerable = right.getIndex() - leftSize;
+
+                        final int rightIndex;
+
+                        if (rightSideProjection != null &&
+                            rightSideProjection.getChildExps()
+                            .get(rightPositionInEnumerable)
+                            instanceof RexInputRef) {
+                            rightIndex = ((RexInputRef)rightSideProjection
+                                .getChildExps()
+                                .get(rightPositionInEnumerable))
+                                .getIndex();
+                        }
+                        else {
+                            rightIndex = rightPositionInEnumerable;
+                        }
+
                         return Collections.singletonList(
                             new TranslationPredicate(
                                 left.getIndex(),
-                                right.getIndex() - leftSize,
+                                rightIndex,
                                 call,
                                 tableSchema
                             ));

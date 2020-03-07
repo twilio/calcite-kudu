@@ -195,4 +195,11 @@ public final class CalciteKuduPredicate {
             return false;
         return true;
     }
+
+
+    @Override
+    public String toString() {
+        return "CalciteKuduPredicate [columnName=" + columnName + ", operation=" + operation + ", rightHandValue="
+            + rightHandValue + "]";
+    }
 }
