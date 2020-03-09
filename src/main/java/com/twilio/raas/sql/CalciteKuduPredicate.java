@@ -19,7 +19,7 @@ import org.apache.kudu.Schema;
  * generation so it is more readable
  */
 public final class CalciteKuduPredicate {
-    public final String columnName;
+    public final int columnIdx;
     /**
      * When present, use it for a comparison Predicate,
      * _otherwise_ it is a is Null Predicate
@@ -31,8 +31,8 @@ public final class CalciteKuduPredicate {
     public final Optional<KuduPredicate.ComparisonOp> operation;
     public final Object rightHandValue;
 
-    public CalciteKuduPredicate(final String columnName, final KuduPredicate.ComparisonOp operation, final Object rightHandValue) {
-        this.columnName = columnName;
+    public CalciteKuduPredicate(final int columnIdx, final KuduPredicate.ComparisonOp operation, final Object rightHandValue) {
+        this.columnIdx = columnIdx;
         this.operation = Optional.ofNullable(operation);
         this.rightHandValue = rightHandValue;
     }
@@ -46,8 +46,9 @@ public final class CalciteKuduPredicate {
      * @return {@code KuduPredicate} that represents this POJO
      */
     public KuduPredicate toPredicate(Schema tableSchema, List<Integer> descendingSortedFieldIndices) {
-        final ColumnSchema columnsSchema = tableSchema.getColumn(columnName);
-        final boolean invertValue = descendingSortedFieldIndices.contains(tableSchema.getColumnIndex(columnName));
+        final ColumnSchema columnsSchema = tableSchema.getColumnByIndex(columnIdx);
+        final boolean invertValue = descendingSortedFieldIndices.contains(
+            columnIdx);
         return this.operation
             .map(op -> {
                     if (rightHandValue instanceof Boolean) {
@@ -93,7 +94,7 @@ public final class CalciteKuduPredicate {
                               .newComparisonPredicate(columnsSchema, op, (Short) rightHandValue);
                     }
                     else if (rightHandValue instanceof Integer) {
-                      switch(tableSchema.getColumn(columnName).getType()) {
+                      switch(tableSchema.getColumnByIndex(columnIdx).getType()) {
                         case INT8: return invertValue ?
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Byte.MAX_VALUE - new Byte(rightHandValue.toString())) :
@@ -120,13 +121,13 @@ public final class CalciteKuduPredicate {
                         default: throw new IllegalArgumentException(
                             String.format("Passed in predicate value:%s is incompatible with table datatype:%s",
                                           rightHandValue.toString(),
-                                          tableSchema.getColumn(columnName).getType().getName()));
+                                          tableSchema.getColumnByIndex(columnIdx).getType().getName()));
                       }
                     }
                     else if (rightHandValue instanceof Long) {
                       if (invertValue) {
                         // Long as well as UNIXTIME_MICROS return Long value
-                        return (tableSchema.getColumn(columnName).getType() == Type.UNIXTIME_MICROS) ?
+                        return (tableSchema.getColumnByIndex(columnIdx).getType() == Type.UNIXTIME_MICROS) ?
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, invertComparisonOp(op),
                                     CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Long)rightHandValue) :
@@ -134,7 +135,7 @@ public final class CalciteKuduPredicate {
                                 .newComparisonPredicate(columnsSchema, invertComparisonOp(op),
                                     Long.MAX_VALUE - (Long)rightHandValue);
                       }
-                      else if (tableSchema.getColumn(columnName).getType() == Type.DECIMAL) {
+                      else if (tableSchema.getColumnByIndex(columnIdx).getType() == Type.DECIMAL) {
                         return KuduPredicate
                           .newComparisonPredicate(columnsSchema, op, BigDecimal.valueOf(((Number) rightHandValue).longValue()));
                       }
@@ -163,7 +164,7 @@ public final class CalciteKuduPredicate {
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + ((columnName == null) ? 0 : columnName.hashCode());
+        result = prime * result + columnIdx;
         result = prime * result + ((operation == null) ? 0 : operation.hashCode());
         result = prime * result + ((rightHandValue == null) ? 0 : rightHandValue.hashCode());
         return result;
@@ -178,10 +179,7 @@ public final class CalciteKuduPredicate {
         if (getClass() != obj.getClass())
             return false;
         CalciteKuduPredicate other = (CalciteKuduPredicate) obj;
-        if (columnName == null) {
-            if (other.columnName != null)
-                return false;
-        } else if (!columnName.equals(other.columnName))
+        if (columnIdx != other.columnIdx)
             return false;
         if (operation == null) {
             if (other.operation != null)
@@ -196,10 +194,9 @@ public final class CalciteKuduPredicate {
         return true;
     }
 
-
     @Override
     public String toString() {
-        return "CalciteKuduPredicate [columnName=" + columnName + ", operation=" + operation + ", rightHandValue="
-            + rightHandValue + "]";
+        return "CalciteKuduPredicate [columnIdx=" + columnIdx + ", operation=" + operation + ", rightHandValue="
+                + rightHandValue + "]";
     }
 }

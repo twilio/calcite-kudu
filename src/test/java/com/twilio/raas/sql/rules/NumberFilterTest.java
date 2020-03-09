@@ -40,15 +40,7 @@ public final class NumberFilterTest {
         SqlStdOperatorTable.LESS_THAN_OR_EQUAL,
         Arrays.asList(fieldRef, amountFilter));
 
-    final KuduPredicatePushDownVisitor visitor = new KuduPredicatePushDownVisitor(
-        new Schema(
-            Arrays.asList(
-                new ColumnSchema.ColumnSchemaBuilder("amount", Type.DECIMAL)
-                .typeAttributes(
-                    new ColumnTypeAttributes.ColumnTypeAttributesBuilder().scale(6).precision(22)
-                    .build())
-                .build()
-            )));
+    final KuduPredicatePushDownVisitor visitor = new KuduPredicatePushDownVisitor();
     Assert.assertEquals("The amount should match what was passed in",
         new BigDecimal("0.5"),
         visitor.visitLiteral(amountFilter, call)

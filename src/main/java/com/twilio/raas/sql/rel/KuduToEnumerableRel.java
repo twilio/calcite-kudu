@@ -66,19 +66,12 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
         // Now build the Java code that represents the Physical scan of a
         // Kudu Table.
         final Expression predicates = list.append("predicates",
-            implementor.stash(kuduImplementor.predicates
-                .stream()
-                .map(subscan -> {
-                        return subscan
-                            .stream()
-                            .map(p -> {
-                                    return new CalciteKuduPredicate(
-                                        p.columnName,
-                                        p.operation.get(),
-                                        p.rightHandValue);
-                                })
-                            .collect(Collectors.toList());
-                    }).collect(Collectors.toList()), List.class));
+            implementor.stash(kuduImplementor.predicates, List.class));
+
+        // @TODO: for correlation variables, for $batchSize,
+        // acquire the InputGetter("$cor" + i). Then for all fields, call
+        // the InputGetter.field() for that j.
+        // and turn those into CalciteKuduPredicates.
 
         final Expression fields =
             list.append("kuduFields",

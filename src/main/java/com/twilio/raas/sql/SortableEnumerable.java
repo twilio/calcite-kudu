@@ -528,8 +528,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
     /**
      * @TODO: need to use {@link RowValueExpressionConverter}
      */
-    final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor(
-        openedTable.getSchema());
+    final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor();
     List<List<CalciteKuduPredicate>> predicates = condition.accept(predicateParser, null);
 
     return predicates

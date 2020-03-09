@@ -5,8 +5,6 @@ import org.apache.kudu.client.AsyncKuduScanner;
 import org.junit.runners.JUnit4;
 import org.junit.ClassRule;
 import org.junit.runner.RunWith;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.kudu.test.KuduTestHarness;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -18,7 +16,6 @@ import org.apache.kudu.Schema;
 import org.junit.Test;
 import java.util.Collections;
 import org.junit.Assert;
-import java.util.Random;
 import org.apache.kudu.client.Upsert;
 import org.apache.kudu.client.PartialRow;
 import java.sql.Timestamp;
@@ -32,7 +29,6 @@ import org.apache.calcite.linq4j.Enumerator;
 
 @RunWith(JUnit4.class)
 public class KuduQueryIT {
-  private static final Logger logger = LoggerFactory.getLogger(KuduQueryIT.class);
 
   public static String FIRST_SID = "SM1234857";
   public static String SECOND_SID = "SM123485789";
@@ -85,7 +81,7 @@ public class KuduQueryIT {
     final CalciteKuduTable relTable = new CalciteKuduTable(KuduQueryIT.TABLE,
 							   testHarness.getAsyncClient());
 
-    final CalciteKuduPredicate filterToSid = new CalciteKuduPredicate("sid", KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
+    final CalciteKuduPredicate filterToSid = new CalciteKuduPredicate(2, KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
     final Enumerable<Object> results =
       relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, -1, false, false, new KuduScanStats());
     Iterator<Object> resultIter = results.iterator();
@@ -103,7 +99,7 @@ public class KuduQueryIT {
     final CalciteKuduTable relTable = new CalciteKuduTable(KuduQueryIT.TABLE,
 							   testHarness.getAsyncClient());
 
-    final CalciteKuduPredicate filterToAccountSid = new CalciteKuduPredicate("account_sid",
+    final CalciteKuduPredicate filterToAccountSid = new CalciteKuduPredicate(0,
             KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.ACCOUNT_SID);
     final Enumerable<Object> results = relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToAccountSid)),
         Arrays.asList(2, 0), -1, -1, false, false, new KuduScanStats());
@@ -137,13 +133,13 @@ public class KuduQueryIT {
 
     // @TODO: we have the columnSchema in the setup, we don't need to grab the table.
     // final KuduPredicate firstSid = KuduPredicate
-    //   .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn("sid"), KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.FIRST_SID);
+    //   .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn(2), KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.FIRST_SID);
     final CalciteKuduPredicate firstSid = new CalciteKuduPredicate(
-        "sid",
+        2,
         KuduPredicate.ComparisonOp.EQUAL,
         KuduQueryIT.FIRST_SID);
 
-    final CalciteKuduPredicate secondSid = new CalciteKuduPredicate("sid", KuduPredicate.ComparisonOp.EQUAL,
+    final CalciteKuduPredicate secondSid = new CalciteKuduPredicate(2, KuduPredicate.ComparisonOp.EQUAL,
             KuduQueryIT.SECOND_SID);
 
     final List<List<CalciteKuduPredicate>> predicateQuery = new ArrayList<>();
@@ -175,7 +171,7 @@ public class KuduQueryIT {
                 testHarness.getAsyncClient());
 
         final CalciteKuduPredicate filterToSid = new CalciteKuduPredicate(
-            "sid", KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
+            2, KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
 
         // since we are not sorting assert that the limit is not pushed down into the kudu scanner
         SortableEnumerable sortableEnumerable =

@@ -60,7 +60,7 @@ public class TranslationPredicate {
 
     public CalciteKuduPredicate toPredicate(final Object[] leftRow) {
         return new CalciteKuduPredicate(
-            tableSchema.getColumnByIndex(rightKuduIndex).getName(),
+            rightKuduIndex,
             operation,
             leftRow[leftKuduIndex]);
     }

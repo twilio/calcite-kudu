@@ -21,7 +21,7 @@ import org.junit.Test;
 public final class CalciteKuduPredicateCastTest {
   @Test
   public void integerToBigDecimal() throws Exception {
-    final CalciteKuduPredicate predicate = new CalciteKuduPredicate("amount",
+    final CalciteKuduPredicate predicate = new CalciteKuduPredicate(0,
         KuduPredicate.ComparisonOp.EQUAL, Integer.valueOf(7));
     final ColumnSchema columnSchema = new ColumnSchemaBuilder("amount", Type.DECIMAL)
       .typeAttributes(
@@ -43,7 +43,7 @@ public final class CalciteKuduPredicateCastTest {
 
   @Test
   public void longToBigDecimal() throws Exception {
-    final CalciteKuduPredicate predicate = new CalciteKuduPredicate("amount",
+    final CalciteKuduPredicate predicate = new CalciteKuduPredicate(0,
         KuduPredicate.ComparisonOp.EQUAL, Long.valueOf(7));
     final ColumnSchema columnSchema = new ColumnSchemaBuilder("amount", Type.DECIMAL)
       .typeAttributes(

@@ -49,7 +49,7 @@ public class KuduFilterRule extends RelOptRule {
             final RexBuilder rexBuilder = filter.getCluster().getRexBuilder();
             // expand row value expression into a series of OR-AND expressions
             final RexNode condition = transformRowValueExpressions(rexBuilder, filter.getCondition());
-            final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor(scan.openedTable.getSchema());
+            final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor();
             List<List<CalciteKuduPredicate>> predicates = condition.accept(predicateParser, null);
             if (predicates.isEmpty()) {
                 // if we could not handle all the filters in Kudu, just return and let Calcite
@@ -60,7 +60,8 @@ public class KuduFilterRule extends RelOptRule {
                                                         filter.getTraitSet().replace(KuduRel.CONVENTION),
                                                         convert(filter.getInput(), KuduRel.CONVENTION), // @TODO: what is this call
                                                         filter.getCondition(),
-                                                        predicates);
+                predicates,
+            scan.openedTable.getSchema());
 
             if (predicateParser.areAllFiltersApplied()) {
                 // if we can push down all filters to kudu then we don't need to filter rows in calcite

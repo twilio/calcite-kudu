@@ -45,11 +45,6 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
         .getLogger(KuduPredicatePushDownVisitor.class);
 
     private boolean allExpressionsConverted = true;
-    private Schema kuduTableSchema;
-
-    public KuduPredicatePushDownVisitor(Schema kuduTableSchema) {
-        this.kuduTableSchema = kuduTableSchema;
-    }
 
     /**
      * @return true if we can push down all filters to kudu
@@ -158,10 +153,10 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
         case NOT:
             if (call.operands.get(0) instanceof RexInputRef) {
                 RexInputRef falseColumn = (RexInputRef) call.operands.get(0);
-                final ColumnSchema columnSchema = this.kuduTableSchema.getColumnByIndex(falseColumn.getIndex());
                 return Collections
                     .singletonList(Collections
-                                   .singletonList(new CalciteKuduPredicate(columnSchema.getName(), KuduPredicate.ComparisonOp.EQUAL, Boolean.FALSE)));
+                                   .singletonList(new CalciteKuduPredicate(falseColumn.getIndex(),
+                                           KuduPredicate.ComparisonOp.EQUAL, Boolean.FALSE)));
             }
         }
         return setEmpty();
@@ -185,10 +180,10 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     }
 
     public List<List<CalciteKuduPredicate>> visitInputRef(RexInputRef inputRef, RexCall parent) {
-        final ColumnSchema columnSchema = this.kuduTableSchema.getColumnByIndex(inputRef.getIndex());
         return Collections
             .singletonList(Collections
-                           .singletonList(new CalciteKuduPredicate(columnSchema.getName(), KuduPredicate.ComparisonOp.EQUAL, Boolean.TRUE)));
+                           .singletonList(new CalciteKuduPredicate(
+                                inputRef.getIndex(), KuduPredicate.ComparisonOp.EQUAL, Boolean.TRUE)));
     }
 
     public List<List<CalciteKuduPredicate>> visitLocalRef(RexLocalRef localRef, RexCall parent) {
@@ -203,40 +198,40 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
         if (parent != null) {
             Optional<KuduPredicate.ComparisonOp> maybeOp = findKuduOp(parent);
             final RexNode left = parent.operands.get(0);
+            final int index = ((RexInputRef) left).getIndex();
             if (left.getKind() == SqlKind.INPUT_REF) {
-                final ColumnSchema columnSchema = this.kuduTableSchema.getColumnByIndex(((RexInputRef) left).getIndex());
                 switch(literal.getType().getSqlTypeName()) {
                 case NULL:
                     // maybeOp should be empty. but this is explicit.
                     return Collections.singletonList(
                         Collections.singletonList(
-                            new CalciteKuduPredicate(columnSchema.getName(), null, null)));
+                            new CalciteKuduPredicate(index, null, null)));
                 case BOOLEAN:
                   return Collections.singletonList(
                       Collections.singletonList(
                           new CalciteKuduPredicate(
-                              columnSchema.getName(),
+                              index,
                               maybeOp.get(),
                               RexLiteral.booleanValue(literal))));
                 case DECIMAL:
                   return Collections.singletonList(
                       Collections.singletonList(
                           new CalciteKuduPredicate(
-                              columnSchema.getName(),
+                              index,
                               maybeOp.get(),
                               literal.getValueAs(BigDecimal.class))));
                 case DOUBLE:
                   return Collections.singletonList(
                       Collections.singletonList(
                           new CalciteKuduPredicate(
-                              columnSchema.getName(),
+                              index,
                               maybeOp.get(),
                               literal.getValueAs(Double.class))));
                 case FLOAT:
                   return Collections.singletonList(
                       Collections.singletonList(
                           new CalciteKuduPredicate(
-                              columnSchema.getName(),
+                              index,
                               maybeOp.get(),
                               literal.getValueAs(Float.class))));
                 case TIMESTAMP:
@@ -244,7 +239,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                     return Collections.singletonList(
                       Collections.singletonList(
                           new CalciteKuduPredicate(
-                              columnSchema.getName(),
+                              index,
                               maybeOp.get(),
                               literal.getValueAs(Long.class) * 1000)));
                 case CHAR:
@@ -252,7 +247,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                   return Collections.singletonList(
                       Collections.singletonList(
                           new CalciteKuduPredicate(
-                              columnSchema.getName(),
+                              index,
                               maybeOp.get(),
                               literal.getValueAs(String.class))));
                 case TINYINT:
@@ -261,20 +256,20 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                     return Collections.singletonList(
                       Collections.singletonList(
                           new CalciteKuduPredicate(
-                              columnSchema.getName(),
+                              index,
                               maybeOp.get(),
                               literal.getValueAs(Integer.class))));
                 case BIGINT:
                     return Collections.singletonList(
                       Collections.singletonList(
                           new CalciteKuduPredicate(
-                              columnSchema.getName(),
+                              index,
                               maybeOp.get(),
                               literal.getValueAs(Long.class))));
                 case BINARY:
                     return Collections.singletonList(
                         Collections.singletonList(
-                            new CalciteKuduPredicate(columnSchema.getName(), maybeOp.get(),
+                            new CalciteKuduPredicate(index, maybeOp.get(),
                                 (((ByteBuffer) literal.getValue4()).array()))));
 
                 }
