@@ -142,6 +142,25 @@ public class PaginationIT {
     }
 
     @Test
+    public void testQueryNoRows() throws Exception {
+        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        try (Connection conn = DriverManager.getConnection(url)) {
+            TimestampString timestampString = TimestampString.fromMillisSinceEpoch(100);
+            String sqlFormat = "SELECT * FROM kudu.\"ReportCenter.UsageReportTransactions\" "
+                + "WHERE usage_account_sid = '%s' AND date_initiated < TIMESTAMP'%s'";
+            String sql = String.format(sqlFormat, ACCOUNT1, timestampString);
+            String expectedPlan = "KuduToEnumerableRel\n" +
+                "  KuduFilterRel(ScanToken 1=[usage_account_sid EQUAL AC3b1ebbfc4cd2fc2485ed634788370001, date_initiated LESS 100000])\n" +
+                "    KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+            String plan = SqlUtil.getExplainPlan(rs);
+            assertEquals("Unexpected plan ", expectedPlan, plan);
+            rs = conn.createStatement().executeQuery(sql);
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testLimit() throws Exception {
         String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {

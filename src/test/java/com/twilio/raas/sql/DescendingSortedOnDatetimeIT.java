@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
@@ -318,6 +319,27 @@ public final class DescendingSortedOnDatetimeIT {
       }
     }
   }
+
+    @Test
+    public void testQueryNoRows() throws Exception {
+        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        try (Connection conn = DriverManager.getConnection(url)) {
+            String sql = "SELECT * FROM kudu.\"ReportCenter.AuditEvents\" "
+                + "WHERE event_date < TIMESTAMP'2018-01-01 00:00:00'";
+
+            // verify plan
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+            String plan = SqlUtil.getExplainPlan(rs);
+            String expectedPlanFormat = "KuduToEnumerableRel\n" +
+                "  KuduFilterRel(ScanToken 1=[event_date LESS 1514764800000000])\n" +
+                "    KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
+            String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+            assertEquals("Unexpected plan ", expectedPlan, plan);
+
+            rs = conn.createStatement().executeQuery(sql);
+            assertFalse(rs.next());
+        }
+    }
 
   @Test
   public void testSortWithFilterAndLimit() throws Exception {

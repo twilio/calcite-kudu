@@ -33,7 +33,14 @@ import com.codahale.metrics.MetricRegistry;
  */
 @Deprecated
 public final class JDBCQueryRunner implements AutoCloseable {
-    public static String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'ReportCenter.AuditEvents', descendingSortedFields:['event_date']}, {tableName: 'AuditEvents-DailyIndex-Aggregation', descendingSortedFields:['event_date']}]}}]};caseSensitive=false;timeZone=UTC";
+    public static final String DESCENDING_COLUMNS = "kuduTableConfigs:[" +
+        "{tableName: 'ReportCenter.AuditEvents', descendingSortedFields:['event_date']}, " +
+        "{tableName: 'AuditEvents-DailyIndex-Aggregation', descendingSortedFields:['event_date']}," +
+        "{tableName: 'ReportCenter.MsgInsights', descendingSortedFields:['date_created']}, " +
+        "{tableName: 'MsgInsights-Carrier-Aggregation', descendingSortedFields:['date_created']}, " +
+        "{tableName: 'MsgInsights-Number-Aggregation', descendingSortedFields:['date_created']}" +
+        "]}";
+    public static String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s'," + DESCENDING_COLUMNS + "}]};caseSensitive=false;timeZone=UTC";
     private static int POOL_COUNTER = 0;
 
     private HikariDataSource dbPool;

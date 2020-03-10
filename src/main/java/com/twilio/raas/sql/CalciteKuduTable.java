@@ -6,6 +6,7 @@ import org.apache.calcite.linq4j.Enumerable;
 import java.time.Instant;
 import java.util.List;
 
+import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -258,13 +259,19 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                 })
             .collect(Collectors.toList());
 
-        if (scanners.isEmpty()) {
-            // Scan the whole table !
+
+        if (predicates.isEmpty()) {
+            // if there are no predicates that means we are doing a full table scan
             final AsyncKuduScanner.AsyncKuduScannerBuilder allBuilder = this.client.newScannerBuilder(this.openedTable);
             if (!columnIndices.isEmpty()) {
                 allBuilder.setProjectedColumnIndexes(columnIndices);
             }
             scanners = Collections.singletonList(allBuilder.build());
+        }
+        else if (scanners.isEmpty()) {
+            // if there are predicates but they result in an empty scan list that means this query
+            // returns no rows (for eg. querying for dates which don't match any partitions)
+            return Linq4j.emptyEnumerable();
         }
 
         // Shared integers between the scanners and the consumer of the rowResults
