@@ -20,8 +20,6 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 
@@ -30,7 +28,7 @@ import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
 public class DescendingSortedWithNonDateTimeFieldsIT {
-  private static final Logger logger = LoggerFactory.getLogger(JDBCQueryRunnerIT.class);
+  private static final Logger logger = LoggerFactory.getLogger(JDBCQueryIT.class);
 
   private static String ACCOUNT_SID = "AC1234567";
 
@@ -62,7 +60,7 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
 
     final Upsert firstRowOp = descendingSortTestTable.newUpsert();
     final PartialRow firstRowWrite = firstRowOp.getRow();
-    firstRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
+    firstRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
     firstRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("3")));
     firstRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("32")));
     firstRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 100);
@@ -72,7 +70,7 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
 
     final Upsert secondRowOp = descendingSortTestTable.newUpsert();
     final PartialRow secondRowWrite = secondRowOp.getRow();
-    secondRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
+    secondRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
     secondRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("4")));
     secondRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("33")));
     secondRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 101);
@@ -88,107 +86,101 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
 
   @Test
   public void testDescendingSortWithReverseSortedFields() throws Exception {
-    try (final JDBCQueryRunner runner = new JDBCQueryRunner(customTemplate, testHarness.getMasterAddressesAsString(), 1)) {
-      String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-      try (Connection conn = DriverManager.getConnection(url)) {
-        String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
-            + "WHERE account_sid = '%s' "
-            + "ORDER BY account_sid asc, reverse_byte_field desc, reverse_short_field desc, reverse_int_field desc, reverse_long_field desc";
-        String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
+          + "WHERE account_sid = '%s' "
+          + "ORDER BY account_sid asc, reverse_byte_field desc, reverse_short_field desc, reverse_int_field desc, reverse_long_field desc";
+      String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
 
-        // verify plan
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
-        String plan = SqlUtil.getExplainPlan(rs);
-        String expectedPlanFormat = "KuduToEnumerableRel\n" +
-            "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], " +
-                "dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC], " +
-                "groupBySorted=[false])\n" +
-            "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
-            "      KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
-        String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
-        assertEquals("Unexpected plan ", expectedPlan, plan);
-        rs = conn.createStatement().executeQuery(firstBatchSql);
+      // verify plan
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      String expectedPlanFormat = "KuduToEnumerableRel\n" +
+          "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], " +
+              "dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC], " +
+              "groupBySorted=[false])\n" +
+          "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+          "      KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+      assertEquals("Unexpected plan ", expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(firstBatchSql);
 
-        assertTrue(rs.next());
-        assertEquals("Mismatched byte", new Byte("4"), new Byte(rs.getByte("reverse_byte_field")));
-        assertEquals("Mismatched short", new Short("33"), new Short(rs.getShort("reverse_short_field")));
-        assertEquals("Mismatched int", 101, rs.getInt("reverse_int_field"));
-        assertEquals("Mismatched long", 1001L, rs.getLong("reverse_long_field"));
+      assertTrue(rs.next());
+      assertEquals("Mismatched byte", new Byte("4"), new Byte(rs.getByte("reverse_byte_field")));
+      assertEquals("Mismatched short", new Short("33"), new Short(rs.getShort("reverse_short_field")));
+      assertEquals("Mismatched int", 101, rs.getInt("reverse_int_field"));
+      assertEquals("Mismatched long", 1001L, rs.getLong("reverse_long_field"));
 
-        assertTrue(rs.next());
-        assertEquals("Mismatched byte", new Byte("3"), new Byte(rs.getByte("reverse_byte_field")));
-        assertEquals("Mismatched short", new Short("32"), new Short(rs.getShort("reverse_short_field")));
-        assertEquals("Mismatched int", 100, rs.getInt("reverse_int_field"));
-        assertEquals("Mismatched long", 1000L, rs.getLong("reverse_long_field"));
-      }
+      assertTrue(rs.next());
+      assertEquals("Mismatched byte", new Byte("3"), new Byte(rs.getByte("reverse_byte_field")));
+      assertEquals("Mismatched short", new Short("32"), new Short(rs.getShort("reverse_short_field")));
+      assertEquals("Mismatched int", 100, rs.getInt("reverse_int_field"));
+      assertEquals("Mismatched long", 1000L, rs.getLong("reverse_long_field"));
     }
   }
 
   @Test
   public void testAscendingSortWithReverseSortedFields() throws Exception {
-    try (final JDBCQueryRunner runner = new JDBCQueryRunner(customTemplate, testHarness.getMasterAddressesAsString(), 1)) {
-      String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-      try (Connection conn = DriverManager.getConnection(url)) {
-        String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
-            + "ORDER BY account_sid, reverse_byte_field, reverse_short_field, reverse_int_field, reverse_long_field asc";
-        String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
+          + "ORDER BY account_sid, reverse_byte_field, reverse_short_field, reverse_int_field, reverse_long_field asc";
+      String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
 
-        // verify plan
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
-        String plan = SqlUtil.getExplainPlan(rs);
-        String expectedPlanFormat = "EnumerableSort(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], dir0=[ASC], dir1=[ASC], dir2=[ASC], dir3=[ASC], dir4=[ASC])\n" +
-            "  KuduToEnumerableRel\n" +
-            "    KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
-        String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
-        assertEquals("Unexpected plan ", expectedPlan, plan);
-        rs = conn.createStatement().executeQuery(firstBatchSql);
+      // verify plan
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      String expectedPlanFormat = "EnumerableSort(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], dir0=[ASC], dir1=[ASC], dir2=[ASC], dir3=[ASC], dir4=[ASC])\n" +
+          "  KuduToEnumerableRel\n" +
+          "    KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+      assertEquals("Unexpected plan ", expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(firstBatchSql);
 
-        assertTrue(rs.next());
-        assertEquals("Mismatched byte", new Byte("3"), new Byte(rs.getByte("reverse_byte_field")));
-        assertEquals("Mismatched short", new Short("32"), new Short(rs.getShort("reverse_short_field")));
-        assertEquals("Mismatched int", 100, rs.getInt("reverse_int_field"));
-        assertEquals("Mismatched long", 1000L, rs.getLong("reverse_long_field"));
+      assertTrue(rs.next());
+      assertEquals("Mismatched byte", new Byte("3"), new Byte(rs.getByte("reverse_byte_field")));
+      assertEquals("Mismatched short", new Short("32"), new Short(rs.getShort("reverse_short_field")));
+      assertEquals("Mismatched int", 100, rs.getInt("reverse_int_field"));
+      assertEquals("Mismatched long", 1000L, rs.getLong("reverse_long_field"));
 
-        assertTrue(rs.next());
-        assertEquals("Mismatched byte", new Byte("4"), new Byte(rs.getByte("reverse_byte_field")));
-        assertEquals("Mismatched short", new Short("33"), new Short(rs.getShort("reverse_short_field")));
-        assertEquals("Mismatched int", 101, rs.getInt("reverse_int_field"));
-        assertEquals("Mismatched long", 1001L, rs.getLong("reverse_long_field"));
-      }
+      assertTrue(rs.next());
+      assertEquals("Mismatched byte", new Byte("4"), new Byte(rs.getByte("reverse_byte_field")));
+      assertEquals("Mismatched short", new Short("33"), new Short(rs.getShort("reverse_short_field")));
+      assertEquals("Mismatched int", 101, rs.getInt("reverse_int_field"));
+      assertEquals("Mismatched long", 1001L, rs.getLong("reverse_long_field"));
     }
   }
 
   @Test
   public void testDescendingSortWithFilter() throws Exception {
-    try (final JDBCQueryRunner runner = new JDBCQueryRunner(customTemplate, testHarness.getMasterAddressesAsString(), 1)) {
-      String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-      try (Connection conn = DriverManager.getConnection(url)) {
-        String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
-            + "WHERE account_sid = '%s' and reverse_byte_field > CAST(3 AS TINYINT) and reverse_short_field > CAST(32 AS SMALLINT) and reverse_int_field > 100 and reverse_long_field > CAST(1000 AS BIGINT) "
-            + "ORDER BY account_sid asc, reverse_byte_field desc, reverse_short_field desc, reverse_int_field desc, reverse_long_field desc";
-        String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
+          + "WHERE account_sid = '%s' and reverse_byte_field > CAST(3 AS TINYINT) and reverse_short_field > CAST(32 AS SMALLINT) and reverse_int_field > 100 and reverse_long_field > CAST(1000 AS BIGINT) "
+          + "ORDER BY account_sid asc, reverse_byte_field desc, reverse_short_field desc, reverse_int_field desc, reverse_long_field desc";
+      String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
 
-        // verify plan
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
-        String plan = SqlUtil.getExplainPlan(rs);
-        String expectedPlanFormat = "KuduToEnumerableRel\n" +
-            "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], " +
-                "dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC], " +
-                "groupBySorted=[false])\n" +
-            "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, reverse_byte_field " +
-                "GREATER 3, reverse_short_field GREATER 32, reverse_int_field GREATER 100, " +
-                "reverse_long_field GREATER 1000])\n" +
-            "      KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
-        String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
-        assertEquals("Unexpected plan ", expectedPlan, plan);
-        rs = conn.createStatement().executeQuery(firstBatchSql);
+      // verify plan
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      String expectedPlanFormat = "KuduToEnumerableRel\n" +
+          "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], " +
+              "dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC], " +
+              "groupBySorted=[false])\n" +
+          "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, reverse_byte_field " +
+              "GREATER 3, reverse_short_field GREATER 32, reverse_int_field GREATER 100, " +
+              "reverse_long_field GREATER 1000])\n" +
+          "      KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+      assertEquals("Unexpected plan ", expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(firstBatchSql);
 
-        assertTrue(rs.next());
-        assertEquals("Mismatched byte", new Byte("4"), new Byte(rs.getByte("reverse_byte_field")));
-        assertEquals("Mismatched short", new Short("33"), new Short(rs.getShort("reverse_short_field")));
-        assertEquals("Mismatched int", 101, rs.getInt("reverse_int_field"));
-        assertEquals("Mismatched long", 1001L, rs.getLong("reverse_long_field"));
-      }
+      assertTrue(rs.next());
+      assertEquals("Mismatched byte", new Byte("4"), new Byte(rs.getByte("reverse_byte_field")));
+      assertEquals("Mismatched short", new Short("33"), new Short(rs.getShort("reverse_short_field")));
+      assertEquals("Mismatched int", 101, rs.getInt("reverse_int_field"));
+      assertEquals("Mismatched long", 1001L, rs.getLong("reverse_long_field"));
     }
   }
 }

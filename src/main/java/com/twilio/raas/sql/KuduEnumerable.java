@@ -8,6 +8,7 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.EnumerableDefaults;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
@@ -56,10 +57,10 @@ import org.apache.kudu.client.KuduScannerUtil;
  * primary key.
  *
  * Enumerable will return in unsorted order unless
- * {@link SortableEnumerable#setSorted} is called.
+ * {@link KuduEnumerable#setSorted} is called.
  */
-public final class SortableEnumerable extends AbstractEnumerable<Object> {
-  private static final Logger logger = LoggerFactory.getLogger(SortableEnumerable.class);
+public final class KuduEnumerable extends AbstractEnumerable<Object> {
+  private static final Logger logger = LoggerFactory.getLogger(KuduEnumerable.class);
 
   private final AtomicBoolean scansShouldStop;
 
@@ -76,11 +77,8 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
   private final KuduTable openedTable;
 
   /**
-   * A SortableEnumerable is an {@link Enumerable} for Kudu that can be configured to be sorted.
+   * A KuduEnumerable is an {@link Enumerable} for Kudu that can be configured to be sorted.
    *
-   * @param scanners a List of running {@link AsyncKuduScanner}
-   * @param scansShouldStop signal to be used by this class to stop the scanners
-   * @param tableSchema {@link Schema} for the kudu table
    * @param limit the number of rows this should return. -1 indicates no limit
    * @param offset the number of rows from kudu to skip prior to returning rows
    * @param sort whether or not have Kudu RPCs come back in sorted by primary key
@@ -90,7 +88,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
    *
    * @throws IllegalArgumentException when groupByLimited is true but sorted is false
    */
-  public SortableEnumerable(
+  public KuduEnumerable(
       final List<List<CalciteKuduPredicate>> predicates,
       final List<Integer> columnIndices,
       final AsyncKuduClient client,
@@ -137,7 +135,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
     return false;
   }
 
-  public Enumerator<Object> unsortedEnumerator(final int numScanners,
+  public Enumerator<Object> unsortedEnumerator(final List<AsyncKuduScanner> scanners,
       final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages) {
     return new Enumerator<Object>() {
       private int finishedScanners = 0;
@@ -174,7 +172,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
               throw new RuntimeException("A scanner failed, failing whole query", fetched.failure.get());
             }
             if (fetched.type == CalciteScannerMessage.MessageType.CLOSE) {
-              if (++finishedScanners >= numScanners) {
+              if (++finishedScanners >= scanners.size()) {
                 finished = true;
                 return false;
               }
@@ -185,7 +183,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
             fetched.type != CalciteScannerMessage.MessageType.ROW);
         // Indicates this is the first move.
         if (next == null) {
-          scanStats.setFirstRow();
+          scanStats.setTimeToFirstRowMs();
         }
         next = fetched.row.get().getRowData();
         totalMoves++;
@@ -209,12 +207,16 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       @Override
       public void close() {
         scansShouldStop.set(true);
-        scanStats.setTotalTime();
+        scanStats.setTotalTimeMs();
+        List<ScannerMetrics> scannerMetricsList =
+          scanners.stream().map( scanner -> new ScannerMetrics(scanner)).collect(Collectors.toList());
+        scanStats.setScannerMetricsList(scannerMetricsList);
       }
     };
   }
 
-  public Enumerator<Object> sortedEnumerator(final List<Enumerator<CalciteRow>> subEnumerables) {
+  public Enumerator<Object> sortedEnumerator(final List<AsyncKuduScanner> scanners,
+                                             final List<Enumerator<CalciteRow>> subEnumerables) {
 
     return new Enumerator<Object>() {
       private Object next = null;
@@ -272,9 +274,8 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
         }
         // Indicates this is the first move.
         if (next == null) {
-          scanStats.setFirstRow();
+          scanStats.setTimeToFirstRowMs();
         }
-        scanStats.incrementRowCount(1L);
         next = smallest.getRowData();
 
         // Move the chosen one forward. The others have their smallest
@@ -307,7 +308,10 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       public void close() {
         subEnumerables.stream()
           .forEach(enumerable -> enumerable.close());
-        scanStats.setTotalTime();
+        scanStats.setTotalTimeMs();
+        List<ScannerMetrics> scannerMetricsList =
+          scanners.stream().map( scanner -> new ScannerMetrics(scanner)).collect(Collectors.toList());
+        scanStats.setScannerMetricsList(scannerMetricsList);
       }
     };
   }
@@ -319,7 +323,6 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
   @Override
   public Enumerator<Object> enumerator() {
     final List<AsyncKuduScanner> scanners = createScanners();
-    final int numScanners = scanners.size();
 
     if (scanners.isEmpty()) {
         // if there are predicates but they result in an empty scan list that means this query
@@ -330,9 +333,9 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
     final Schema projectedSchema = scanners.get(0).getProjectionSchema();
     final Schema tableSchema = openedTable.getSchema();
 
-    scanStats.setNumScanners(numScanners);
     if (sort) {
       return sortedEnumerator(
+          scanners,
           scanners
           .stream()
           .map(scanner -> {
@@ -375,7 +378,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
                       scanStats));
           });
 
-    return unsortedEnumerator(numScanners, messages);
+    return unsortedEnumerator(scanners, messages);
   }
 
   @Override
@@ -517,27 +520,27 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
     return scanners;
   }
 
-  public SortableEnumerable clone(final List<List<CalciteKuduPredicate>> conjunctions) {
-      // The result of the merge can be an empty list. That means we are scanning everything.
-      // @TODO: can we generate unique predicates? What happens when it contains the same one.
-      final List<List<CalciteKuduPredicate>> merged = KuduPredicatePushDownVisitor
-          .mergePredicateLists(
-              SqlKind.AND,
-              this.predicates,
-              conjunctions
-          );
-      return new SortableEnumerable(
-          merged,
-          columnIndices,
-          client,
-          openedTable,
-          limit,
-          offset,
-          sort,
-          descendingSortedFieldIndices,
-          groupBySorted,
-          scanStats
+  public KuduEnumerable clone(final List<List<CalciteKuduPredicate>> conjunctions) {
+    // The result of the merge can be an empty list. That means we are scanning everything.
+    // @TODO: can we generate unique predicates? What happens when it contains the same one.
+    final List<List<CalciteKuduPredicate>> merged = KuduPredicatePushDownVisitor
+      .mergePredicateLists(
+        SqlKind.AND,
+        this.predicates,
+        conjunctions
       );
+    return new KuduEnumerable(
+      merged,
+      columnIndices,
+      client,
+      openedTable,
+      limit,
+      offset,
+      sort,
+      descendingSortedFieldIndices,
+      groupBySorted,
+      scanStats
+    );
   }
 
   /**
@@ -564,7 +567,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
               rightSideProjection,
               this.getTableSchema()
           ));
-    final SortableEnumerable rootEnumerable = this;
+    final KuduEnumerable rootEnumerable = this;
     return new Function1<List<Object>, Enumerable<Object>>() {
       @Override
       public Enumerable<Object> apply(final List<Object> batch) {

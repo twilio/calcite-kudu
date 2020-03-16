@@ -1,17 +1,14 @@
 package com.twilio.raas.sql;
 
-import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import com.stumbleupon.async.Callback;
 import org.apache.kudu.client.RowResultIterator;
 import org.apache.kudu.client.RowResult;
-import org.apache.kudu.ColumnSchema;
-import java.nio.ByteBuffer;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.Partition;
 import java.util.List;
 import org.apache.kudu.Schema;
-import java.util.concurrent.TimeUnit;
 
 import com.stumbleupon.async.Deferred;
 import org.apache.kudu.client.AsyncKuduScanner;
@@ -37,7 +34,8 @@ final public class ScannerCallback
     final AtomicBoolean scansShouldStop;
     final List<Integer> primaryKeyColumnsInProjection;
     final List<Integer> descendingSortedFieldIndices;
-  final KuduScanStats scanStats;
+    final KuduScanStats scanStats;
+    
     public ScannerCallback(final AsyncKuduScanner scanner,
                            final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults,
                            final AtomicBoolean scansShouldStop,
@@ -57,9 +55,9 @@ final public class ScannerCallback
     @Override
     public Deferred<Void> call(final RowResultIterator nextBatch) {
         boolean earlyExit = false;
-        scanStats.incrementRpcCount(1L);
+        scanStats.incrementScannerNextBatchRpcCount(1L);
         if (nextBatch != null) {
-          scanStats.incrementRowCount(nextBatch.getNumRows());
+          scanStats.incrementRowsReadCount(nextBatch.getNumRows());
         }
         try {
             while (nextBatch != null && nextBatch.hasNext()) {

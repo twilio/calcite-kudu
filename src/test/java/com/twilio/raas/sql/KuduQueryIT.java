@@ -174,36 +174,36 @@ public class KuduQueryIT {
             2, KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
 
         // since we are not sorting assert that the limit is not pushed down into the kudu scanner
-        SortableEnumerable sortableEnumerable =
-                (SortableEnumerable)relTable.executeQuery(
+        KuduEnumerable kuduEnumerable =
+                (KuduEnumerable)relTable.executeQuery(
                         Collections.singletonList(Collections.singletonList(filterToSid)),
                         Collections.singletonList(2), 3, -1, false, false, new KuduScanStats());
-        for (AsyncKuduScanner scanner : sortableEnumerable.getScanners()) {
+        for (AsyncKuduScanner scanner : kuduEnumerable.getScanners()) {
             Assert.assertEquals( Long.MAX_VALUE, scanner.getLimit());
         }
 
         // even though we are sorting we cannot push down the limit since there is an offset
-        sortableEnumerable = (SortableEnumerable)relTable.executeQuery(
+        kuduEnumerable = (KuduEnumerable)relTable.executeQuery(
                 Collections.singletonList(Collections.singletonList(filterToSid)),
                 Collections.singletonList(2), 3, 4, true, false, new KuduScanStats());
-        for (AsyncKuduScanner scanner : sortableEnumerable.getScanners()) {
+        for (AsyncKuduScanner scanner : kuduEnumerable.getScanners()) {
             Assert.assertEquals( Long.MAX_VALUE, scanner.getLimit());
         }
 
         // since we sorting assert that the limit is pushed down into the kudu scanner
-        sortableEnumerable = (SortableEnumerable)relTable.executeQuery(
+        kuduEnumerable = (KuduEnumerable)relTable.executeQuery(
                 Collections.singletonList(Collections.singletonList(filterToSid)),
                 Collections.singletonList(2), 3, -1, true, false, new KuduScanStats());
-        for (AsyncKuduScanner scanner : sortableEnumerable.getScanners()) {
+        for (AsyncKuduScanner scanner : kuduEnumerable.getScanners()) {
             Assert.assertEquals( 3, scanner.getLimit());
         }
 
         // even though we ask not to sort, since we set an offset the enumerable forces a sort
-        sortableEnumerable = (SortableEnumerable)relTable.executeQuery(
+        kuduEnumerable = (KuduEnumerable)relTable.executeQuery(
                 Collections.singletonList(Collections.singletonList(filterToSid)),
                 Collections.singletonList(2), -1, 1, false, false, new KuduScanStats());
-        Assert.assertTrue(sortableEnumerable.sort);
-        for (AsyncKuduScanner scanner : sortableEnumerable.getScanners()) {
+        Assert.assertTrue(kuduEnumerable.sort);
+        for (AsyncKuduScanner scanner : kuduEnumerable.getScanners()) {
             Assert.assertEquals( Long.MAX_VALUE, scanner.getLimit());
         }
     }
