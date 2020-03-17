@@ -19,7 +19,6 @@ import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Function2;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
 
 import java.util.stream.Collectors;
@@ -321,7 +320,6 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
   public Enumerator<Object> enumerator() {
     final List<AsyncKuduScanner> scanners = createScanners();
     final int numScanners = scanners.size();
-    final Schema projectedSchema;
 
     if (scanners.isEmpty()) {
         // if there are predicates but they result in an empty scan list that means this query
@@ -329,12 +327,7 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
         return Linq4j.emptyEnumerator();
     }
 
-    if (scanners.size() > 0) {
-      projectedSchema = scanners.get(0).getProjectionSchema();
-    }
-    else {
-      projectedSchema = openedTable.getSchema();
-    }
+    final Schema projectedSchema = scanners.get(0).getProjectionSchema();
     final Schema tableSchema = openedTable.getSchema();
 
     scanStats.setNumScanners(numScanners);
@@ -522,24 +515,6 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
       scanners = Collections.singletonList(allBuilder.build());
     }
     return scanners;
-  }
-
-  public List<List<KuduPredicate>> conditionToPredicate(final RexNode condition) {
-    /**
-     * @TODO: need to use {@link RowValueExpressionConverter}
-     */
-    final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor();
-    List<List<CalciteKuduPredicate>> predicates = condition.accept(predicateParser, null);
-
-    return predicates
-      .stream()
-      .map(subList -> {
-            return subList
-              .stream()
-              .map(p ->  p.toPredicate(openedTable.getSchema(), descendingSortedFieldIndices))
-              .collect(Collectors.toList());
-          })
-      .collect(Collectors.toList());
   }
 
   public SortableEnumerable clone(final List<List<CalciteKuduPredicate>> conjunctions) {
