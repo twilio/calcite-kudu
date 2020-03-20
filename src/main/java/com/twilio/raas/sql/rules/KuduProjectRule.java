@@ -9,11 +9,13 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.logical.LogicalCalc;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelRecordType;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexProgram;
 import org.apache.calcite.tools.RelBuilderFactory;
 
 import java.util.LinkedHashMap;
@@ -24,23 +26,9 @@ public class KuduProjectRule extends RelOptRule {
 
     public KuduProjectRule(RelBuilderFactory relBuilderFactory) {
         super(convertOperand(LogicalProject.class,
-                (java.util.function.Predicate<RelNode>) r -> canConvertNode(r), Convention.NONE),
+                (java.util.function.Predicate<RelNode>) r -> true, Convention.NONE),
             relBuilderFactory, "KuduProjection");
     }
-
-  public static boolean canConvertNode(RelNode relNode) {
-    if (relNode instanceof Project) {
-      RelNode input = ((Project) relNode).getInput();
-      if (input instanceof RelSubset) {
-        for (RelNode rel : ((RelSubset) input).getRelList()) {
-          if (rel instanceof KuduProjectRel) {
-            return false;
-          }
-        }
-      }
-    }
-    return true;
-  }
 
   @Override
   public void onMatch(RelOptRuleCall call) {
@@ -55,7 +43,7 @@ public class KuduProjectRule extends RelOptRule {
     final RelTraitSet traitSet = project.getTraitSet().replace(KuduRel.CONVENTION);
     // if the Projection includes expressions then we split the Projection into a
     // KuduProjectRel that includes only column values which is wrapped by a
-    // LogicalProject that computes the expressions
+    // LogicalCalc that computes the expressions
     if (!projectsOnlyColumns) {
       KuduProjectRel.KuduProjectTransformer transformer =
           new KuduProjectRel.KuduProjectTransformer();
@@ -85,9 +73,17 @@ public class KuduProjectRule extends RelOptRule {
       final KuduProjectRel kuduProjection = new KuduProjectRel(project.getCluster(),
           traitSet, convert(project.getInput(), KuduRel.CONVENTION), kuduProjects,
           relRecordType, false);
-      Project wrappedProject = LogicalProject.create(kuduProjection, transformedProjects,
-          project.getRowType());
-      call.transformTo(wrappedProject);
+
+      // wrap the KuduProjectRel in a LogicalCalc
+      final RexProgram program =
+        RexProgram.create(
+          kuduProjection.getRowType(),
+          transformedProjects,
+          null,
+          project.getRowType(),
+          project.getCluster().getRexBuilder());
+      final LogicalCalc calc = LogicalCalc.create(kuduProjection, program);
+      call.transformTo(calc);
     } else {
       // just replace the LogicalProject with a KuduProjectRel
       final RelNode newProjection = new KuduProjectRel(project.getCluster(),
