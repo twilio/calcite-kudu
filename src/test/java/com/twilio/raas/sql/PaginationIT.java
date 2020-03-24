@@ -75,6 +75,7 @@ public class PaginationIT {
                 new ColumnSchema.ColumnSchemaBuilder(DATE_INITIATED, Type.UNIXTIME_MICROS).key(true).build(),
                 new ColumnSchema.ColumnSchemaBuilder(TRANSACTION_ID, Type.STRING).key(true).build(),
                 new ColumnSchema.ColumnSchemaBuilder(BILLABLE_ITEM, Type.STRING).build(),
+                new ColumnSchema.ColumnSchemaBuilder("UNITS", Type.INT32).defaultValue(3).build(),
                 new ColumnSchema.ColumnSchemaBuilder(PHONENUMBER, Type.STRING).build(),
                 new ColumnSchema.ColumnSchemaBuilder(AMOUNT, Type.DECIMAL).typeAttributes(scaleAndPrecision).build()
         );
@@ -231,10 +232,10 @@ public class PaginationIT {
             String sql = String.format(sqlFormat, ACCOUNT1);
 
             // verify that usage_account_sid is pushed down to kudu
-            String expectedPlanFormat = "EnumerableCalc(expr#0..5=[{inputs}], " +
-                    "expr#6=['%s':VARCHAR], expr#7=[=($t0, $t6)]," +
-                    " expr#8=['%%0'], expr#9=[LIKE($t4, $t8)], expr#10=[AND($t7, $t9)], proj#0." +
-                    ".5=[{exprs}], $condition=[$t10])\n" +
+            String expectedPlanFormat = "EnumerableCalc(expr#0..6=[{inputs}], " +
+                    "expr#7=['%s':VARCHAR], expr#8=[=($t0, $t7)]," +
+                    " expr#9=['%%0'], expr#10=[LIKE($t5, $t9)], expr#11=[AND($t8, $t10)], proj#0." +
+                    ".6=[{exprs}], $condition=[$t11])\n" +
                     "  KuduToEnumerableRel\n" +
                     "    KuduFilterRel(ScanToken 1=[usage_account_sid EQUAL %s])\n" +
                     "      KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
