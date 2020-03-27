@@ -55,9 +55,9 @@ final public class ScannerCallback
     @Override
     public Deferred<Void> call(final RowResultIterator nextBatch) {
         boolean earlyExit = false;
-        scanStats.incrementScannerNextBatchRpcCount(1L);
+        scanStats.incrementScannerRpcCount(1L);
         if (nextBatch != null) {
-          scanStats.incrementRowsReadCount(nextBatch.getNumRows());
+          scanStats.incrementRowsScannedCount(nextBatch.getNumRows());
         }
         try {
             while (nextBatch != null && nextBatch.hasNext()) {

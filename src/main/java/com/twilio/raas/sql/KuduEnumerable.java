@@ -55,9 +55,6 @@ import org.apache.kudu.client.KuduScannerUtil;
  * This guarantees the first rows coming out of the
  * {@link org.apache.kudu.client.AsyncKuduScanner} will return rows sorted by
  * primary key.
- *
- * Enumerable will return in unsorted order unless
- * {@link KuduEnumerable#setSorted} is called.
  */
 public final class KuduEnumerable extends AbstractEnumerable<Object> {
   private static final Logger logger = LoggerFactory.getLogger(KuduEnumerable.class);

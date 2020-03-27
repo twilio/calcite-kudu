@@ -11,9 +11,9 @@ public final class KuduScanStats {
 
   // rowsReadCount and scannerNextBatchRpcCount are accessed concurrently from ScannerCallback
   // for scans running in parallel
-  private AtomicLong rowsReadCount = new AtomicLong(0L);
+  private AtomicLong rowsScannedCount = new AtomicLong(0L);
 
-  private AtomicLong scannerNextBatchRpcCount = new AtomicLong(0L);
+  private AtomicLong scannerRpcCount = new AtomicLong(0L);
 
   private long timeToFirstRowMs = -1L;
 
@@ -29,12 +29,12 @@ public final class KuduScanStats {
     this.startTime = System.currentTimeMillis();
   }
 
-  public void incrementRowsReadCount(final long additionalRows) {
-    this.rowsReadCount.updateAndGet(current -> current + additionalRows);
+  public void incrementRowsScannedCount(final long additionalRows) {
+    this.rowsScannedCount.updateAndGet(current -> current + additionalRows);
   }
 
-  public void incrementScannerNextBatchRpcCount(final long additionalRpcs) {
-    this.scannerNextBatchRpcCount.updateAndGet(current -> current + additionalRpcs);
+  public void incrementScannerRpcCount(final long additionalRpcs) {
+    this.scannerRpcCount.updateAndGet(current -> current + additionalRpcs);
   }
 
   public void setTimeToFirstRowMs() {
@@ -54,12 +54,12 @@ public final class KuduScanStats {
     return scannerMetricsList;
   }
 
-  public long getRowsReadCount() {
-    return this.rowsReadCount.longValue();
+  public long getRowsScannedCount() {
+    return this.rowsScannedCount.longValue();
   }
 
-  public long getScannerNextBatchRpcCount() {
-    return this.scannerNextBatchRpcCount.longValue();
+  public long getScannerRpcCount() {
+    return this.scannerRpcCount.longValue();
   }
 
   public long getTimeToFirstRowMs() {
