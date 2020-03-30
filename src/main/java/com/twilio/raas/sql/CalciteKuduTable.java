@@ -211,12 +211,12 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      *
      * @return Enumeration on the objects, Fields conform to {@link CalciteKuduTable#getRowType}.
      */
-    public SortableEnumerable executeQuery(final List<List<CalciteKuduPredicate>> predicates,
+    public KuduEnumerable executeQuery(final List<List<CalciteKuduPredicate>> predicates,
                                              final List<Integer> columnIndices, final long limit,
         final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats) {
 
 
-        return new SortableEnumerable(
+        return new KuduEnumerable(
             predicates, columnIndices, this.client, this.openedTable,
             limit, offset, sorted, descendingSortedFieldIndices,
             groupByLimited, scanStats);

@@ -1,61 +1,77 @@
 package com.twilio.raas.sql;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * A single KuduScanStats object is created per query that is executed and is accessed from all
+ * the {@link ScannerCallback}s created for each scanner as well as the {@link KuduEnumerable}
+ */
 public final class KuduScanStats {
-  private long numScanners = 0;
 
-  private AtomicLong rowCount = new AtomicLong(0L);
+  // rowsReadCount and scannerNextBatchRpcCount are accessed concurrently from ScannerCallback
+  // for scans running in parallel
+  private AtomicLong rowsScannedCount = new AtomicLong(0L);
 
-  private AtomicLong rpcCount = new AtomicLong(0L);
+  private AtomicLong scannerRpcCount = new AtomicLong(0L);
 
-  private AtomicLong msToFirstRow = new AtomicLong(-1L);
+  private long timeToFirstRowMs = -1L;
 
-  private AtomicLong msTotalTime = new AtomicLong(-1L);
+  private long totalTimeMs = -1L;
 
   private final long startTime;
+
+  private long scannerCount;
+
+  private List<ScannerMetrics> scannerMetricsList;
 
   public KuduScanStats() {
     this.startTime = System.currentTimeMillis();
   }
 
-  public void setNumScanners(final long numScanners) {
-    this.numScanners = numScanners;
+  public void incrementRowsScannedCount(final long additionalRows) {
+    this.rowsScannedCount.updateAndGet(current -> current + additionalRows);
   }
 
-  public void incrementRowCount(final long additionalRows) {
-    this.rowCount.updateAndGet(current -> current + additionalRows);
+  public void incrementScannerRpcCount(final long additionalRpcs) {
+    this.scannerRpcCount.updateAndGet(current -> current + additionalRpcs);
   }
 
-  public void incrementRpcCount(final long additionalRpcs) {
-    this.rpcCount.updateAndGet(current -> current + additionalRpcs);
+  public void setTimeToFirstRowMs() {
+    this.timeToFirstRowMs = System.currentTimeMillis() - this.startTime;
   }
 
-  public void setFirstRow() {
-    this.msToFirstRow.compareAndSet(-1L, System.currentTimeMillis() - this.startTime);
+  public void setTotalTimeMs() {
+    this.totalTimeMs = System.currentTimeMillis() - this.startTime;
   }
 
-  public void setTotalTime() {
-    this.msTotalTime.compareAndSet(-1L, System.currentTimeMillis() - this.startTime);
+  public void setScannerMetricsList(List<ScannerMetrics> scannerMetricsList) {
+    this.scannerCount = scannerMetricsList.size();
+    this.scannerMetricsList = scannerMetricsList;
   }
 
-  public long getNumScanners() {
-    return this.numScanners;
+  public List<ScannerMetrics> getScannerMetricsList() {
+    return scannerMetricsList;
   }
 
-  public long getRowCount() {
-    return this.rowCount.longValue();
+  public long getRowsScannedCount() {
+    return this.rowsScannedCount.longValue();
   }
 
-  public long getRpcCount() {
-    return this.rpcCount.longValue();
+  public long getScannerRpcCount() {
+    return this.scannerRpcCount.longValue();
   }
 
-  public long getMsToFirstRow() {
-    return this.msToFirstRow.longValue();
+  public long getTimeToFirstRowMs() {
+    return this.timeToFirstRowMs;
   }
 
-  public long getMsTotalTime() {
-    return this.msTotalTime.longValue();
+  public long getTotalTimeMs() {
+    return this.totalTimeMs;
   }
+
+  public long getScannerCount() {
+    return scannerCount;
+  }
+
 }

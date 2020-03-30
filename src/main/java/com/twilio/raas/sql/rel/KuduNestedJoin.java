@@ -1,5 +1,6 @@
 package com.twilio.raas.sql.rel;
 
+import com.twilio.raas.sql.KuduEnumerable;
 import org.apache.calcite.adapter.enumerable.EnumUtils;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
@@ -39,7 +40,6 @@ import org.apache.calcite.util.Pair;
 
 import com.google.common.collect.ImmutableList;
 import com.twilio.raas.sql.KuduMethod;
-import com.twilio.raas.sql.SortableEnumerable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -162,7 +162,7 @@ public class KuduNestedJoin extends Join implements EnumerableRel {
                 Expressions.call(
                     Expressions.convert_(
                         rightExpression,
-                        SortableEnumerable.class),
+                        KuduEnumerable.class),
                     KuduMethod.NESTED_JOIN_PREDICATES.method,
                     implementor.stash(this, Join.class)),
                 selector,

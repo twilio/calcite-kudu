@@ -43,7 +43,6 @@ public class PaginationIT {
 
     @ClassRule
     public static KuduTestHarness testHarness = new KuduTestHarness();
-    public static JDBCQueryRunner runner;
     public static KuduTable kuduTable;
 
     public static final String ACCOUNT1 = "AC3b1ebbfc4cd2fc2485ed634788370001";
@@ -60,7 +59,6 @@ public class PaginationIT {
     @BeforeClass
     public static void setup() throws Exception {
         createUsageReportTransactionTable(testHarness.getClient());
-        runner = new JDBCQueryRunner(testHarness.getMasterAddressesAsString(), 1);
     }
 
     /**
@@ -116,7 +114,6 @@ public class PaginationIT {
     @AfterClass
     public static void tearDown() throws Exception {
         testHarness.getClient().deleteTable(TABLE_NAME);
-        runner.close();
     }
 
     private static void insertRow(KuduSession insertSession, String usageAccountSid,
@@ -144,7 +141,7 @@ public class PaginationIT {
 
     @Test
     public void testQueryNoRows() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             TimestampString timestampString = TimestampString.fromMillisSinceEpoch(100);
             String sqlFormat = "SELECT * FROM kudu.\"ReportCenter.UsageReportTransactions\" "
@@ -163,7 +160,7 @@ public class PaginationIT {
 
     @Test
     public void testLimit() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sql = "SELECT * FROM kudu.\"ReportCenter.UsageReportTransactions\" LIMIT 3";
             String expectedPlan = "KuduToEnumerableRel\n" +
@@ -184,7 +181,7 @@ public class PaginationIT {
 
     @Test
     public void testFilterWithLimitAndOffset() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             // this query will return rows in an unpredictable order
             String sqlFormat = "SELECT * FROM kudu.\"ReportCenter.UsageReportTransactions\" "
@@ -225,7 +222,7 @@ public class PaginationIT {
 
     @Test
     public void testNotHandledFilter() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sqlFormat = "SELECT * FROM kudu.\"ReportCenter.UsageReportTransactions\" "
                     + "WHERE usage_account_sid = '%s' AND phonenumber like '%%0' ";
@@ -258,7 +255,7 @@ public class PaginationIT {
 
     @Test
     public void testSortWithFilterAndLimitAndOffset() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String firstBatchSqlFormat = "SELECT * FROM kudu.\"ReportCenter" +
                     ".UsageReportTransactions\" "
@@ -298,7 +295,7 @@ public class PaginationIT {
 
     @Test
     public void testQueryMore() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
             TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);

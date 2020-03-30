@@ -1,7 +1,6 @@
 package com.twilio.raas.sql;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Sets;
 import org.apache.kudu.client.Upsert;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.PartialRow;
@@ -31,10 +30,6 @@ import java.util.HashMap;
 import java.util.Map;
 import org.junit.Assert;
 import java.sql.SQLException;
-import com.twilio.dataEngine.protocol.ExecuteQueryLog;
-import com.twilio.dataEngine.protocol.ExecuteQueryRequest;
-import java.util.Collections;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
@@ -42,8 +37,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
-public final class JDBCQueryRunnerIT {
-    private static final Logger logger = LoggerFactory.getLogger(JDBCQueryRunnerIT.class);
+public final class JDBCQueryIT {
+    private static final Logger logger = LoggerFactory.getLogger(JDBCQueryIT.class);
 
     public static String FIRST_SID = "SM1";
     public static String SECOND_SID = "SM2";
@@ -77,8 +72,8 @@ public final class JDBCQueryRunnerIT {
 
     final Upsert firstRowOp = TABLE.newUpsert();
     final PartialRow firstRowWrite = firstRowOp.getRow();
-    firstRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    firstRowWrite.addString("sid", JDBCQueryRunnerIT.FIRST_SID);
+    firstRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
+    firstRowWrite.addString("sid", JDBCQueryIT.FIRST_SID);
     firstRowWrite.addTimestamp("date_created",
         new Timestamp(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)));
     firstRowWrite.addString("mcc", "mcc1");
@@ -88,8 +83,8 @@ public final class JDBCQueryRunnerIT {
 
     final Upsert secondRowOp = TABLE.newUpsert();
     final PartialRow secondRowWrite = secondRowOp.getRow();
-    secondRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    secondRowWrite.addString("sid", JDBCQueryRunnerIT.SECOND_SID);
+    secondRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
+    secondRowWrite.addString("sid", JDBCQueryIT.SECOND_SID);
     Timestamp ts = new Timestamp(System.currentTimeMillis());
     secondRowWrite.addTimestamp("date_created", ts);
     secondRowWrite.addString("mcc", "mcc2");
@@ -99,8 +94,8 @@ public final class JDBCQueryRunnerIT {
 
     final Upsert thirdRowOp = TABLE.newUpsert();
     final PartialRow thirdRowWrite = thirdRowOp.getRow();
-    thirdRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
-    thirdRowWrite.addString("sid", JDBCQueryRunnerIT.THIRD_SID);
+    thirdRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
+    thirdRowWrite.addString("sid", JDBCQueryIT.THIRD_SID);
     thirdRowWrite.addTimestamp("date_created", ts);
     thirdRowWrite.addString("mcc", "mcc3");
     thirdRowWrite.addString("mnc", "mnc3");
@@ -115,49 +110,31 @@ public final class JDBCQueryRunnerIT {
 
     @Test
     public void testQuery() throws Exception {
-      try (final JDBCQueryRunner runner = new JDBCQueryRunner(testHarness.getMasterAddressesAsString(), 1)) {
-        List<Map<String, String>> records = runner
-          .executeSql("SELECT account_sid, sid FROM kudu.\"ReportCenter.DeliveredMessages\"", (rs -> {
-                    final Map<String, String> record = new HashMap<>();
-                    try {
-                      record.put("account_sid", rs.getString(1));
-                      record.put("sid", rs.getString(2));
-                    }
-                    catch (SQLException failed) {
-                      // swallow it.
-                    }
-                    return record;
-                  }),
-              new ExecuteQueryLog(
-                  new ExecuteQueryRequest(
-                      "test-dataset",
-                      Collections.emptyList(),
-                      Collections.emptyList(),
-                      0,
-                      Collections.emptyList(),
-                      null,
-                      null,
-                      Collections.emptyMap()),
-                  "test-query"), false)
-          .toCompletableFuture().get();
-        Assert.assertEquals("should get the rows back",
-            3, records.size());
-        Assert.assertEquals("First record's account sid should match",
-            ACCOUNT_SID, records.get(0).get("account_sid"));
-        Assert.assertEquals("Second record's account sid should match",
-            ACCOUNT_SID, records.get(1).get("account_sid"));
+      String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE,
+        testHarness.getMasterAddressesAsString());
+      try (Connection conn = DriverManager.getConnection(url)) {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT account_sid, sid FROM kudu" +
+          ".\"ReportCenter.DeliveredMessages\"");
+        assertTrue(rs.next());
+        assertEquals("First record's account sid should match",
+            ACCOUNT_SID, rs.getString("account_sid"));
+        assertTrue(rs.next());
+        assertEquals("Second record's account sid should match",
+            ACCOUNT_SID, rs.getString("account_sid"));
+        assertTrue(rs.next());
         Assert.assertEquals("Third record's account sid should match",
-            ACCOUNT_SID, records.get(2).get("account_sid"));
+            ACCOUNT_SID, rs.getString("account_sid"));
+        assertFalse(rs.next());
       }
     }
 
     @Test
     public void testProjectionWithFilter() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sqlFormat = "SELECT sid FROM kudu.\"ReportCenter.DeliveredMessages\" WHERE " +
                     "account_sid = '%s'";
-            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
             String expectedPlan = "KuduToEnumerableRel\n" +
                     "  KuduProjectRel(SID=[$2])\n" +
                     "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
@@ -169,22 +146,22 @@ public final class JDBCQueryRunnerIT {
             // since the rows are not ordered just assert that we get the expected number of rows
             rs = conn.createStatement().executeQuery(sql);
             assertTrue(rs.next());
-            assertEquals(rs.getString("sid"), JDBCQueryRunnerIT.FIRST_SID);
+            assertEquals(rs.getString("sid"), JDBCQueryIT.FIRST_SID);
             assertTrue(rs.next());
-            assertEquals(rs.getString("sid"), JDBCQueryRunnerIT.SECOND_SID);
+            assertEquals(rs.getString("sid"), JDBCQueryIT.SECOND_SID);
             assertTrue(rs.next());
-            assertEquals(rs.getString("sid"), JDBCQueryRunnerIT.THIRD_SID);
+            assertEquals(rs.getString("sid"), JDBCQueryIT.THIRD_SID);
             assertFalse(rs.next());
         }
     }
 
     @Test
     public void testProjectionWithFunctions() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sqlFormat = "SELECT mcc||mnc, mcc, mnc, mnc||mcc FROM kudu.\"ReportCenter" +
                     ".DeliveredMessages\" WHERE account_sid = '%s'";
-            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
             String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], expr#3=[||($t1, $t2)], " +
                     "expr#4=[||($t2, $t1)], EXPR$0=[$t3], MCC=[$t1], MNC=[$t2], EXPR$3=[$t4])\n" +
                     "  KuduToEnumerableRel\n" +
@@ -218,10 +195,10 @@ public final class JDBCQueryRunnerIT {
 
     @Test
     public void testProjectionWithCountStar() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sqlFormat = "SELECT count(*) FROM kudu.\"ReportCenter.DeliveredMessages\" WHERE account_sid = '%s'";
-            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
             String expectedPlan = "EnumerableAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
                     "  KuduToEnumerableRel\n" +
                     "    KuduProjectRel(ACCOUNT_SID=[$0])\n" +
@@ -241,12 +218,12 @@ public final class JDBCQueryRunnerIT {
 
     @Test
     public void testSortByPrimaryKey() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
 
             String sqlFormat = "SELECT sid FROM kudu.\"ReportCenter.DeliveredMessages\" " +
                     "WHERE account_sid = '%s' ORDER BY account_sid, date_created, sid";
-            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
             String expectedPlan = "KuduToEnumerableRel\n" +
                     "  KuduProjectRel(SID=[$2], ACCOUNT_SID=[$0], DATE_CREATED=[$1])\n" +
                     "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[ASC], " +
@@ -281,13 +258,13 @@ public final class JDBCQueryRunnerIT {
   }
 
   private void helpTestSortedAggregation(boolean limit) throws SQLException {
-    String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
         String sqlFormat = "SELECT account_sid, date_created , count(*) FROM kudu" +
                 ".\"ReportCenter.DeliveredMessages\" " +
                 "WHERE account_sid = '%s' GROUP BY account_sid, date_created ORDER BY " +
                 "account_sid, date_created %s";
-        String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID, limit ? "LIMIT 51" :
+        String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID, limit ? "LIMIT 51" :
             "");
         String expectedPlanFormat = "EnumerableAggregate(group=[{0, 1}], EXPR$2=[COUNT()])\n" +
             "  KuduToEnumerableRel\n" +
@@ -321,14 +298,14 @@ public final class JDBCQueryRunnerIT {
 
   @Test
     public void testSortOnSubsetOfGroupByColumns() throws Exception {
-        String url = String.format(JDBCQueryRunner.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
 
             String sqlFormat = "SELECT account_sid, error_code , count(*) FROM kudu" +
                     ".\"ReportCenter.DeliveredMessages\" " +
                     "WHERE account_sid = '%s' GROUP BY account_sid, error_code ORDER BY " +
                     "account_sid  LIMIT 51";
-            String sql = String.format(sqlFormat, JDBCQueryRunnerIT.ACCOUNT_SID);
+            String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
             String expectedPlan = "EnumerableLimit(fetch=[51])\n" +
                     "  EnumerableSort(sort0=[$0], dir0=[ASC])\n" +
                     "    EnumerableAggregate(group=[{0, 1}], EXPR$2=[COUNT()])\n" +

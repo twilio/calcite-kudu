@@ -56,7 +56,7 @@ public final class SortedAggregationIT {
 
     final Upsert firstRowOp = descendingSortTestTable.newUpsert();
     final PartialRow firstRowWrite = firstRowOp.getRow();
-    firstRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
+    firstRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
     firstRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("4")));
     firstRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("32")));
     firstRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 100);
@@ -66,7 +66,7 @@ public final class SortedAggregationIT {
 
     final Upsert secondRowOp = descendingSortTestTable.newUpsert();
     final PartialRow secondRowWrite = secondRowOp.getRow();
-    secondRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
+    secondRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
     secondRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("4")));
     secondRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("33")));
     secondRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 101);
@@ -76,7 +76,7 @@ public final class SortedAggregationIT {
 
     final Upsert thirdRowOp = descendingSortTestTable.newUpsert();
     final PartialRow thirdRowWrite = thirdRowOp.getRow();
-    thirdRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
+    thirdRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
     thirdRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("6")));
     thirdRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("33")));
     thirdRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 101);
@@ -86,7 +86,7 @@ public final class SortedAggregationIT {
 
     final Upsert fourthRowOp = descendingSortTestTable.newUpsert();
     final PartialRow fourthRowWrite = fourthRowOp.getRow();
-    fourthRowWrite.addString("account_sid", JDBCQueryRunnerIT.ACCOUNT_SID);
+    fourthRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
     fourthRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("6")));
     fourthRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("33")));
     fourthRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 101);
@@ -215,7 +215,7 @@ public final class SortedAggregationIT {
   public void aggregateSortedResultsByAccountAndByteWithOffset() throws Exception {
     final String sql = String.format(
         "SELECT account_sid, sum(cast(reverse_long_field as bigint)) \"reverse_long_field\" FROM %s WHERE account_sid = '%s' GROUP BY reverse_byte_field, account_sid ORDER BY account_sid ASC, reverse_byte_field DESC limit 1 offset 1",
-        descendingSortTableName, JDBCQueryRunnerIT.ACCOUNT_SID);
+        descendingSortTableName, JDBCQueryIT.ACCOUNT_SID);
 
     String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
@@ -285,7 +285,7 @@ public final class SortedAggregationIT {
   public void aggregateSortedResultsByAccountWithLimitOfFour() throws Exception {
     final String sql = String.format(
         "SELECT account_sid, reverse_byte_field, sum(reverse_long_field), sum(reverse_int_field) FROM %s WHERE account_sid = '%s' GROUP BY account_sid, reverse_byte_field ORDER BY account_sid ASC, reverse_byte_field DESC limit 4",
-        descendingSortTableName, JDBCQueryRunnerIT.ACCOUNT_SID);
+        descendingSortTableName, JDBCQueryIT.ACCOUNT_SID);
 
     String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
