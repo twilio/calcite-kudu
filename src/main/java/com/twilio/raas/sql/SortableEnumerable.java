@@ -179,6 +179,9 @@ public final class SortableEnumerable extends AbstractEnumerable<Object> {
                 return false;
               }
             }
+            if (fetched.type == CalciteScannerMessage.MessageType.BATCH_COMPLETED) {
+              fetched.callback.get().nextBatch();
+            }
           }
 
         } while(fetched == null ||

@@ -21,11 +21,12 @@ import java.util.Objects;
  */
 public final class CalciteScannerMessage<T> {
     public enum MessageType {
-        ROW, CLOSE, ERROR
+        ROW, BATCH_COMPLETED, CLOSE, ERROR
     }
     public final MessageType type;
     public final Optional<T> row;
     public final Optional<Exception> failure;
+    public final Optional<ScannerCallback> callback;
 
     /**
      * Construct a Scanner Message that contains an exception. When this message
@@ -38,6 +39,7 @@ public final class CalciteScannerMessage<T> {
         Objects.requireNonNull(failure);
         this.type = MessageType.ERROR;
         this.row = Optional.empty();
+        this.callback = Optional.empty();
         this.failure = Optional.of(failure);
     }
 
@@ -52,6 +54,20 @@ public final class CalciteScannerMessage<T> {
         this.type = MessageType.ROW;
         this.row = Optional.of(row);
         this.failure = Optional.empty();
+        this.callback = Optional.empty();
+    }
+
+    /**
+     * Constructs a Batch Completed Scanner Message.
+     *
+     * @param callback the {@link ScannerCallback} that completed it's batch
+     * @throws {@link NullPointerException} when scanner is null
+     */
+    public CalciteScannerMessage(final ScannerCallback callback) {
+        this.type = MessageType.BATCH_COMPLETED;
+        this.row = Optional.empty();
+        this.failure = Optional.empty();
+        this.callback = Optional.of(callback);
     }
 
     /**
@@ -64,8 +80,13 @@ public final class CalciteScannerMessage<T> {
     }
 
     private CalciteScannerMessage(MessageType type) {
+        if (type != MessageType.CLOSE) {
+            throw new IllegalArgumentException(
+                "Creating a scanner using private constructor must be of type close");
+        }
         this.type = type;
         this.row = Optional.empty();
         this.failure = Optional.empty();
+        this.callback = Optional.empty();
     }
 }

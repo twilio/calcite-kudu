@@ -35,6 +35,7 @@ final public class ScannerCallback
     final AsyncKuduScanner scanner;
     final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults;
     final AtomicBoolean scansShouldStop;
+    final AtomicBoolean earlyExit = new AtomicBoolean(false);
     final List<Integer> primaryKeyColumnsInProjection;
     final List<Integer> descendingSortedFieldIndices;
   final KuduScanStats scanStats;
@@ -54,29 +55,52 @@ final public class ScannerCallback
         logger.debug("ScannerCallback created for scanner" + scanner);
     }
 
+    /**
+     * After an Batch is completed, this method should be called to fetch the next
+     */
+    public void nextBatch() {
+        // @TODO: How to protect this method from being called while a batch is being processed?
+
+        // If the scanner can continue and we are not stopping
+        if (scanner.hasMoreRows() && !earlyExit.get() && !scansShouldStop.get()) {
+            scanner.nextRows().addCallbackDeferring(this);
+        }
+        else {
+            // Else -> scanner has completed, notify the consumer of rowResults
+            try {
+                // This blocks to ensure the query finishes.
+                rowResults.put(CLOSE_MESSAGE);
+            } catch (InterruptedException threadInterrupted) {
+                logger.error("Interrupted while closing. Means queue is full. Closing scanner");
+            }
+            scanner.close();
+        }
+    }
+
     @Override
     public Deferred<Void> call(final RowResultIterator nextBatch) {
-        boolean earlyExit = false;
         scanStats.incrementRpcCount(1L);
         if (nextBatch != null) {
           scanStats.incrementRowCount(nextBatch.getNumRows());
         }
         try {
-            while (nextBatch != null && nextBatch.hasNext()) {
-                final RowResult row = nextBatch.next();
-                final CalciteScannerMessage<CalciteRow> wrappedRow = new CalciteScannerMessage<>(
-                    new CalciteRow(row, primaryKeyColumnsInProjection, descendingSortedFieldIndices));
-                // Blocks if the queue is full.
-                // @TODO: How to we protect it from locking up here because nothing is consuming
-                // from the queue.
-                rowResults.put(wrappedRow);
+            if (!earlyExit.get()) {
+                while (nextBatch != null && nextBatch.hasNext()) {
+                    final RowResult row = nextBatch.next();
+                    final CalciteScannerMessage<CalciteRow> wrappedRow = new CalciteScannerMessage<>(
+                            new CalciteRow(row, primaryKeyColumnsInProjection, descendingSortedFieldIndices));
+                    // Blocks if the queue is full.
+                    // @TODO: How to we protect it from locking up here because nothing is consuming
+                    // from the queue.
+                    rowResults.put(wrappedRow);
+                }
             }
         }
         catch (Exception | Error failure) {
             // Something failed, like row.getDecimal() or something of that nature.
             // this means we have to abort this scan.
             logger.error("Failed to parse out row. Setting early exit", failure);
-            earlyExit = true;
+            earlyExit.set(true);
             try {
               rowResults.put(
                   new CalciteScannerMessage<CalciteRow>(
@@ -87,20 +111,14 @@ final public class ScannerCallback
             }
         }
 
-        // If the scanner can continue and we are not stopping
-        if (scanner.hasMoreRows() && !earlyExit && !scansShouldStop.get()) {
-            return scanner.nextRows().addCallbackDeferring(this);
-        }
-
-        // Else -> scanner has completed, notify the consumer of rowResults
         try {
-          // This blocks to ensure the query finishes.
-          rowResults.put(CLOSE_MESSAGE);
+            rowResults.put(new CalciteScannerMessage<CalciteRow>(this));
         }
-        catch (InterruptedException threadInterrupted) {
-          logger.error("Interrupted while closing. Means queue is full. Closing scanner");
+        catch (InterruptedException ignored) {
+            // Set the early exit to protect ourselves and close the scanner.
+            earlyExit.set(true);
+            scanner.close();
         }
-        scanner.close();
         return null;
     }
 }

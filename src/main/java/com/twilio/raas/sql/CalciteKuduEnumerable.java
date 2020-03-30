@@ -70,10 +70,16 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
                         case ROW:
                             logger.trace("Scanner found a row: {}",
                                 iterationNext.row.get());
+                            break;
+                        case BATCH_COMPLETED:
+                            logger.info("Batch completed for a scanner. Getting next batch");
+                            iterationNext.callback.get().nextBatch();
                         }
                     }
 
-                } while (iterationNext == null);
+                } while (iterationNext == null ||
+                    (iterationNext.type != CalciteScannerMessage.MessageType.CLOSE &&
+                        iterationNext.type != CalciteScannerMessage.MessageType.ROW));
 
                 if (iterationNext.type == CalciteScannerMessage.MessageType.CLOSE) {
                     logger.info("No more results in queue, exiting");
@@ -94,6 +100,8 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
                     throw new RuntimeException(next.failure.get());
                 case CLOSE:
                     throw new RuntimeException("Calling current() where next is CLOSE message. This should never happen");
+                case BATCH_COMPLETED:
+                    throw new RuntimeException("Calling current() after receiving a BATCH_COMPLETED message. This should never happen");
                 }
                 throw new RuntimeException("Fell out of current(), this should not happen");
             }
