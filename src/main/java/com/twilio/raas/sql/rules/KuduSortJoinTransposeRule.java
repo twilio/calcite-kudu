@@ -1,8 +1,12 @@
 package com.twilio.raas.sql.rules;
 
+import java.util.Optional;
+
 import com.google.common.collect.Lists;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.plan.RelOptRuleOperand;
+import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
@@ -13,30 +17,27 @@ import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Sort;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.metadata.RelMdUtil;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.sql.SqlExplainFormat;
+import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.tools.RelBuilderFactory;
 
 /**
  * Similar to {@link org.apache.calcite.rel.rules.SortJoinTransposeRule} rule except it can
  * handle a filter in between the sort and join
  */
-public class KuduSortJoinTransposeRule extends RelOptRule {
+public abstract class KuduSortJoinTransposeRule extends RelOptRule {
 
-    public KuduSortJoinTransposeRule(Class<? extends Sort> sortClass,
-                                     Class<? extends Filter> filterClass,
-                                 Class<? extends Join> joinClass, RelBuilderFactory relBuilderFactory) {
-        super(
-                operand(sortClass,
-                        operand(filterClass,
-                                operand(joinClass, any()))),
-                relBuilderFactory, null);
+    public KuduSortJoinTransposeRule(RelOptRuleOperand operand,
+        RelBuilderFactory relBuilderFactory, String description) {
+        super(operand, relBuilderFactory, description);
     }
 
-    @Override public boolean matches(RelOptRuleCall call) {
-        final Sort sort = call.rel(0);
-        final Join join = call.rel(2);
-        final RelMetadataQuery mq = call.getMetadataQuery();
+    protected boolean doesMatch(final Sort sort, final Join join, final RelMetadataQuery mq) {
         final JoinInfo joinInfo = JoinInfo.of(
                 join.getLeft(), join.getRight(), join.getCondition());
 
@@ -47,7 +48,7 @@ public class KuduSortJoinTransposeRule extends RelOptRule {
         // 3) If sort has an offset, and if the non-preserved side
         // of the join is not count-preserving against the join
         // condition, we bail out
-        if (join.getJoinType() == JoinRelType.LEFT) {
+        if (!join.getJoinType().generatesNullsOnLeft()) {
             if (sort.getCollation() != RelCollations.EMPTY) {
                 for (RelFieldCollation relFieldCollation
                         : sort.getCollation().getFieldCollations()) {
@@ -62,7 +63,7 @@ public class KuduSortJoinTransposeRule extends RelOptRule {
                     mq, join.getRight(), joinInfo.rightSet())) {
                 return false;
             }
-        } else if (join.getJoinType() == JoinRelType.RIGHT) {
+        } else if (!join.getJoinType().generatesNullsOnRight()) {
             if (sort.getCollation() != RelCollations.EMPTY) {
                 for (RelFieldCollation relFieldCollation
                         : sort.getCollation().getFieldCollations()) {
@@ -84,17 +85,13 @@ public class KuduSortJoinTransposeRule extends RelOptRule {
         return true;
     }
 
-    @Override public void onMatch(RelOptRuleCall call) {
-        final Sort sort = call.rel(0);
-        final Filter filter = call.rel(1);
-        final Join join = call.rel(2);
-
+    protected void perform(final RelOptRuleCall call,  final Sort sort, final Join join, final Optional<Filter> filter) {
         // We create a new sort operator on the corresponding input
         final RelNode newLeftInput;
         final RelNode newRightInput;
         final RelMetadataQuery mq = call.getMetadataQuery();
-        if (join.getJoinType() == JoinRelType.LEFT) {
-            // If the input is already sorted and we are not reducing the number of tuples,
+        if (!join.getJoinType().generatesNullsOnLeft()) {
+            // If the[] input is already sorted and we are not reducing the number of tuples,
             // we bail out
             if (RelMdUtil.checkInputForCollationAndLimit(mq, join.getLeft(),
                     sort.getCollation(), sort.offset, sort.fetch)) {
@@ -123,11 +120,67 @@ public class KuduSortJoinTransposeRule extends RelOptRule {
                 newRightInput, join.getJoinType(), join.isSemiJoinDone());
         // since the filter wraps the sort operator create a copy of the filter with the sort's
         // trait so that the sort can get optimized out
-        final RelNode filterCopy = filter.copy(sort.getTraitSet(), Lists.newArrayList(joinCopy));
-        final RelNode sortCopy = sort.copy(sort.getTraitSet(), filterCopy, sort.getCollation(),
+        final RelNode sortCopy;
+        if (filter.isPresent()) {
+            final RelNode filterCopy = filter.get().copy(filter.get().getTraitSet().replace(sort.getCollation()), Lists.newArrayList(joinCopy));
+            sortCopy = sort.copy(sort.getTraitSet(), filterCopy, sort.getCollation(),
                 sort.offset, sort.fetch);
+        }
+        else {
+            sortCopy = sort.copy(sort.getTraitSet(), joinCopy, sort.getCollation(), sort.offset, sort.fetch);
+        }
 
         call.transformTo(sortCopy);
     }
 
+    public static class KuduSortAboveFilter extends KuduSortJoinTransposeRule {
+        public KuduSortAboveFilter(final RelBuilderFactory relBuilderFactory) {
+            super(
+                operand(
+                    LogicalSort.class,
+                    operand(LogicalFilter.class,
+                        operand(LogicalJoin.class,
+                            any()))),
+                relBuilderFactory, null);
+        }
+
+        @Override
+        public boolean matches(RelOptRuleCall call) {
+            final Sort sort = call.rel(0);
+            final Join join = call.rel(2);
+            return doesMatch(sort, join, call.getMetadataQuery());
+        }
+        @Override
+        public void onMatch(RelOptRuleCall call) {
+            final Sort sort = call.rel(0);
+            final Filter filter = call.rel(1);
+            final Join join = call.rel(2);
+
+            perform(call, sort, join, Optional.of(filter));
+        }
+    }
+
+
+    public static class KuduSortAboveJoin extends KuduSortJoinTransposeRule {
+        public KuduSortAboveJoin(final RelBuilderFactory relBuilderFactory) {
+            super(operand(LogicalSort.class,
+                    operand(LogicalJoin.class, any())),
+                relBuilderFactory, null);
+        }
+
+        @Override
+        public boolean matches(RelOptRuleCall call) {
+            final Sort sort = call.rel(0);
+            final Join join = call.rel(1);
+            return doesMatch(sort, join, call.getMetadataQuery());
+        }
+
+        @Override
+        public void onMatch(RelOptRuleCall call) {
+            final Sort sort = call.rel(0);
+            final Join join = call.rel(1);
+
+            perform(call, sort, join, Optional.empty());
+        }
+    }
 }

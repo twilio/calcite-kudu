@@ -4,6 +4,8 @@ import com.twilio.raas.sql.rel.metadata.KuduRelMetadataProvider;
 import com.twilio.raas.sql.rules.KuduRules;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 
+import org.apache.calcite.adapter.enumerable.EnumerableHashJoin;
+import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -69,13 +71,6 @@ public final class KuduQuery extends TableScan implements KuduRel {
             planner.addRule(rule);
         }
         planner.addRule(KuduToEnumerableConverter.INSTANCE);
-        // FilterJoinRule tries to convert a left/right outer join into an inner join, which causes
-        // the SortJoinTransposeRule to not match.
-        // SortJoinTransposeRule pushes down a sort past a join for outer joins only, so we
-        // disable the rule and enable the dumb rule which does not transform an outer to inner
-        // join.
-        planner.removeRule(FilterJoinRule.FILTER_ON_JOIN);
-        planner.addRule(FilterJoinRule.DUMB_FILTER_ON_JOIN);
 
         // we include our own metadata provider that overrides calcite's default filter
         // selectivity information in order to ensure that limits are pushed down into kudu
