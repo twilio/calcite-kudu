@@ -2,8 +2,10 @@ package com.twilio.raas.sql.rules;
 
 import java.util.EnumSet;
 
+import com.twilio.raas.sql.KuduQuery;
 import com.twilio.raas.sql.KuduRel;
 import com.twilio.raas.sql.rel.KuduNestedJoin;
+import com.twilio.raas.sql.rel.KuduProjectRel;
 import com.twilio.raas.sql.rel.KuduToEnumerableRel;
 
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
@@ -32,7 +34,9 @@ public class KuduNestedJoinRule extends RelOptRule {
     public KuduNestedJoinRule(RelBuilderFactory relBuilderFactory) {
         super(operand(Join.class, some(
                     operand(KuduToEnumerableRel.class, any()),
-                    operand(KuduToEnumerableRel.class, any()))),
+                    operand(KuduToEnumerableRel.class, some(
+                            operand(KuduProjectRel.class, some(
+                                    operand(KuduQuery.class, none()))))))),
             relBuilderFactory, "KuduNestedJoin");
         this.batchSize = DEFAULT_BATCH_SIZE;
     }
@@ -44,6 +48,7 @@ public class KuduNestedJoinRule extends RelOptRule {
             && join.getJoinType() != JoinRelType.LEFT) {
             return false;
         }
+
         final RexNode condition = join.getCondition();
         final RexVisitor<Boolean> validateJoinCondition = new RexVisitorImpl<Boolean>(true) {
             @Override
@@ -82,12 +87,13 @@ public class KuduNestedJoinRule extends RelOptRule {
 
         final JoinRelType joinType = join.getJoinType();
 
-        call.transformTo(
-            KuduNestedJoin.create(
+        final KuduNestedJoin newJoin = KuduNestedJoin.create(
                 join.getLeft(),
                 join.getRight(),
                 join.getCondition(),
                 joinType,
-                this.batchSize));
+                this.batchSize);
+
+        call.transformTo(newJoin);
     }
 }
