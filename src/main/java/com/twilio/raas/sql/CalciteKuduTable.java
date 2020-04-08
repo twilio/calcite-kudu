@@ -60,8 +60,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         new Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
 
     private final static Double DIMENSION_TABLE_ROW_COUNT = 1000.0;
-    private final static Double CUBE_TABLE_ROW_COUNT = 2000000000.0;
-    private final static Double FACT_TABLE_ROW_COUNT = 20000000000.0;
+    private final static Double CUBE_TABLE_ROW_COUNT = 2000000.0;
+    private final static Double FACT_TABLE_ROW_COUNT = 20000000.0;
 
     private final KuduTable openedTable;
     private final AsyncKuduClient client;

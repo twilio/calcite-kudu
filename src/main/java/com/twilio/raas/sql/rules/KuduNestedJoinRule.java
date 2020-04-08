@@ -3,15 +3,16 @@ package com.twilio.raas.sql.rules;
 import java.util.EnumSet;
 
 import com.twilio.raas.sql.KuduQuery;
-import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.rel.KuduFilterRel;
+import com.twilio.raas.sql.rel.KuduLimitRel;
 import com.twilio.raas.sql.rel.KuduNestedJoin;
 import com.twilio.raas.sql.rel.KuduProjectRel;
+import com.twilio.raas.sql.rel.KuduSortRel;
 import com.twilio.raas.sql.rel.KuduToEnumerableRel;
 
-import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.plan.RelOptRuleOperand;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexCall;
@@ -19,8 +20,6 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexVisitor;
 import org.apache.calcite.rex.RexVisitorImpl;
-import org.apache.calcite.sql.SqlExplainFormat;
-import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.tools.RelBuilderFactory;
 
@@ -31,21 +30,16 @@ public class KuduNestedJoinRule extends RelOptRule {
     public static final int DEFAULT_BATCH_SIZE = 100;
     private int batchSize;
 
-    public KuduNestedJoinRule(RelBuilderFactory relBuilderFactory) {
-        super(operand(Join.class, some(
-                    operand(KuduToEnumerableRel.class, any()),
-                    operand(KuduToEnumerableRel.class, some(
-                            operand(KuduProjectRel.class, some(
-                                    operand(KuduQuery.class, none()))))))),
-            relBuilderFactory, "KuduNestedJoin");
+    public KuduNestedJoinRule(final RelOptRuleOperand op, RelBuilderFactory relBuilderFactory, final String name,
+            final int batchSize) {
+        super(op, relBuilderFactory, name);
         this.batchSize = DEFAULT_BATCH_SIZE;
     }
 
     @Override
     public boolean matches(final RelOptRuleCall call) {
         final Join join = call.rel(0);
-        if (join.getJoinType() != JoinRelType.INNER
-            && join.getJoinType() != JoinRelType.LEFT) {
+        if (join.getJoinType() != JoinRelType.INNER && join.getJoinType() != JoinRelType.LEFT) {
             return false;
         }
 
@@ -87,13 +81,55 @@ public class KuduNestedJoinRule extends RelOptRule {
 
         final JoinRelType joinType = join.getJoinType();
 
-        final KuduNestedJoin newJoin = KuduNestedJoin.create(
-                join.getLeft(),
-                join.getRight(),
-                join.getCondition(),
-                joinType,
-                this.batchSize);
+        final KuduNestedJoin newJoin = KuduNestedJoin.create(join.getLeft(), join.getRight(), join.getCondition(),
+                joinType, this.batchSize);
 
         call.transformTo(newJoin);
     }
+    /**
+     * Because our current cost calculation is so poor, we have to write rules that target specific
+     * plans. These three rule target those plans.
+     */
+    public static final class KuduNestedOverFilter extends KuduNestedJoinRule {
+        public KuduNestedOverFilter(final RelBuilderFactory factory) {
+            super(operand(Join.class, some(
+                    operand(KuduToEnumerableRel.class,
+                            some(operand(KuduProjectRel.class,
+                                    some(operand(KuduFilterRel.class, some(operand(KuduQuery.class, none()))))))),
+                    operand(KuduToEnumerableRel.class,
+                            some(operand(KuduProjectRel.class, some(operand(KuduQuery.class, none()))))))),
+                    factory, "KuduNestedOverFilter", DEFAULT_BATCH_SIZE);
+        }
+    }
+
+    public static final class KuduNestedOverSortAndFilter extends KuduNestedJoinRule {
+        public KuduNestedOverSortAndFilter(final RelBuilderFactory factory) {
+            super(operand(
+                    Join.class, some(
+                            operand(KuduToEnumerableRel.class,
+                                    some(operand(KuduProjectRel.class,
+                                            some(operand(KuduSortRel.class,
+                                                    some(operand(KuduFilterRel.class,
+                                                            some(operand(KuduQuery.class, none()))))))))),
+                            operand(KuduToEnumerableRel.class,
+                                    some(operand(KuduProjectRel.class, some(operand(KuduQuery.class, none()))))))),
+                    factory, "KuduNestedOverSortAndFilter", DEFAULT_BATCH_SIZE);
+        }
+    }
+
+    public static final class KuduNestedOverLimitAndFilter extends KuduNestedJoinRule {
+        public KuduNestedOverLimitAndFilter(final RelBuilderFactory factory) {
+            super(operand(
+                    Join.class, some(
+                            operand(KuduToEnumerableRel.class,
+                                    some(operand(KuduProjectRel.class,
+                                            some(operand(KuduLimitRel.class,
+                                                    some(operand(KuduFilterRel.class,
+                                                            some(operand(KuduQuery.class, none()))))))))),
+                            operand(KuduToEnumerableRel.class,
+                                    some(operand(KuduProjectRel.class, some(operand(KuduQuery.class, none()))))))),
+                    factory, "KuduNestedOverLimitAndFilter", DEFAULT_BATCH_SIZE);
+        }
+    }
+
 }
