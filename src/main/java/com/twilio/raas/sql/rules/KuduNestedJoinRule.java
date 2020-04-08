@@ -132,4 +132,19 @@ public class KuduNestedJoinRule extends RelOptRule {
         }
     }
 
+    public static final class KuduNestedOverLimitAndSortAndFilter extends KuduNestedJoinRule {
+        public KuduNestedOverLimitAndSortAndFilter(final RelBuilderFactory factory) {
+            super(operand(
+                    Join.class, some(
+                            operand(KuduToEnumerableRel.class,
+                                    some(operand(KuduProjectRel.class,
+                                            some(operand(KuduLimitRel.class,
+                                                    some(operand(KuduSortRel.class,
+                                                            some(operand(KuduFilterRel.class,
+                                                                    some(operand(KuduQuery.class, none()))))))))))),
+                            operand(KuduToEnumerableRel.class,
+                                    some(operand(KuduProjectRel.class, some(operand(KuduQuery.class, none()))))))),
+                    factory, "KuduNestedOverLimitAndSortAndFilter", DEFAULT_BATCH_SIZE);
+        }
+    }
 }

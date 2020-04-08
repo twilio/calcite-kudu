@@ -25,6 +25,8 @@ public class KuduRules {
             RelFactories.LOGICAL_BUILDER);
     public static final KuduNestedJoinRule NESTED_JOIN_OVER_LIMIT = new KuduNestedJoinRule.KuduNestedOverSortAndFilter(
         RelFactories.LOGICAL_BUILDER);
+    public static final KuduNestedJoinRule NESTED_JOIN_OVER_LIMIT_SORT_FILTER = new KuduNestedJoinRule.KuduNestedOverLimitAndSortAndFilter(
+        RelFactories.LOGICAL_BUILDER);
 
 
     public static List<RelOptRule> RULES = Arrays.asList(
@@ -39,6 +41,7 @@ public class KuduRules {
             KuduSortedAggregationRule.SORTED_AGGREGATION_LIMIT_RULE,
             NESTED_JOIN,
             NESTED_JOIN_OVER_SORT,
-            NESTED_JOIN_OVER_LIMIT
+            NESTED_JOIN_OVER_LIMIT,
+            NESTED_JOIN_OVER_LIMIT_SORT_FILTER
     );
 }
