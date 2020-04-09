@@ -2,6 +2,7 @@ package com.twilio.raas.sql;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -18,7 +19,7 @@ import org.apache.calcite.rel.core.Join;
  */
 public enum KuduMethod {
     KUDU_QUERY_METHOD(CalciteKuduTable.KuduQueryable.class, "query", List.class,
-        List.class, int.class, int.class, boolean.class, boolean.class, KuduScanStats.class),
+        List.class, int.class, int.class, boolean.class, boolean.class, KuduScanStats.class, AtomicBoolean.class),
     NESTED_JOIN_PREDICATES(KuduEnumerable.class, "nestedJoinPredicates", Join.class);
 
     public final Method method;

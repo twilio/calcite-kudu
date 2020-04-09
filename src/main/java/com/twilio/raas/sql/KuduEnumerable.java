@@ -60,6 +60,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
   private static final Logger logger = LoggerFactory.getLogger(KuduEnumerable.class);
 
   private final AtomicBoolean scansShouldStop;
+  private final AtomicBoolean cancelFlag;
 
   public final boolean sort;
   public final boolean groupBySorted;
@@ -82,6 +83,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
    * @param descendingSortedFieldIndices is a list of column indices that are sorted in reverse
    * @param groupBySorted when sorted, and {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)
    * @param scanStats a container of scan stats that should be updated as the scan executes.
+   * @param cancelFlag boolean indicating the end process has asked the query to finish.
    *
    * @throws IllegalArgumentException when groupByLimited is true but sorted is false
    */
@@ -95,8 +97,10 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
       final boolean sort,
       final List<Integer> descendingSortedFieldIndices,
       final boolean groupBySorted,
-      final KuduScanStats scanStats) {
+      final KuduScanStats scanStats,
+      final AtomicBoolean cancelFlag) {
     this.scansShouldStop = new AtomicBoolean(false);
+    this.cancelFlag = cancelFlag;
     this.limit = limit;
     this.offset = offset;
     // if we have an offset always sort by the primary key to ensure the rows are returned
@@ -334,49 +338,52 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     final Schema tableSchema = openedTable.getSchema();
 
     if (sort) {
+      final List<ScannerCallback> callbacks = scanners
+        .stream()
+        .map(scanner -> {
+              final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>();
+              return new ScannerCallback(scanner,
+                  rowResults,
+                  scansShouldStop,
+                  cancelFlag,
+                  tableSchema,
+                  projectedSchema,
+                  descendingSortedFieldIndices,
+                  scanStats);
+            })
+        .collect(Collectors.toList());
+      callbacks
+        .stream()
+        .forEach(callback -> callback.nextBatch());
+
       return sortedEnumerator(
           scanners,
-          scanners
+          callbacks
           .stream()
-          .map(scanner -> {
-                final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>();
-
-                // Yuck!!! side effect within a mapper. This is because the
-                // callback and the CalciteKuduEnumerable need to both share
-                // queue.
-                scanner.nextRows()
-                  .addBothDeferring(
-                      new ScannerCallback(scanner,
-                          rowResults,
-                          scansShouldStop,
-                          tableSchema,
-                          projectedSchema,
-                          descendingSortedFieldIndices,
-                          scanStats));
-                // Limit is not required here. do not use it.
+          .map(callback -> {
                 return new CalciteKuduEnumerable(
-                    rowResults,
+                    callback.rowResults,
                     scansShouldStop
                 );
-              }
-          )
+              })
           .map(enumerable -> enumerable.enumerator())
           .collect(Collectors.toList()));
     }
     final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages = new LinkedBlockingQueue<>();
     scanners
       .stream()
-      .forEach(scanner -> {
-            scanner.nextRows()
-              .addBothDeferring(
-                  new ScannerCallback(scanner,
-                      messages,
-                      scansShouldStop,
-                      tableSchema,
-                      projectedSchema,
-                      descendingSortedFieldIndices,
-                      scanStats));
-          });
+      .map(scanner -> {
+            return new ScannerCallback(scanner,
+                messages,
+                scansShouldStop,
+                cancelFlag,
+                tableSchema,
+                projectedSchema,
+                descendingSortedFieldIndices,
+                scanStats);
+          })
+      .forEach(callback -> callback.nextBatch());
+
 
     return unsortedEnumerator(scanners, messages);
   }
@@ -539,7 +546,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
       sort,
       descendingSortedFieldIndices,
       groupBySorted,
-      scanStats
+      scanStats,
+      cancelFlag
     );
   }
 
