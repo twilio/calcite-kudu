@@ -32,6 +32,7 @@ final public class ScannerCallback
     final AsyncKuduScanner scanner;
     final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults;
     final AtomicBoolean scansShouldStop;
+    final AtomicBoolean cancelFlag;
     final AtomicBoolean earlyExit = new AtomicBoolean(false);
     final List<Integer> primaryKeyColumnsInProjection;
     final List<Integer> descendingSortedFieldIndices;
@@ -40,6 +41,7 @@ final public class ScannerCallback
     public ScannerCallback(final AsyncKuduScanner scanner,
                            final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults,
                            final AtomicBoolean scansShouldStop,
+                           final AtomicBoolean cancelFlag,
                            final Schema tableSchema,
                            final Schema projectedSchema,
         final List<Integer> descendingSortedFieldIndices,
@@ -50,6 +52,10 @@ final public class ScannerCallback
         this.primaryKeyColumnsInProjection = CalciteRow.findPrimaryKeyColumnsInProjection(projectedSchema, tableSchema);
         this.descendingSortedFieldIndices = CalciteRow.findColumnsIndicesInProjection(projectedSchema, descendingSortedFieldIndices, tableSchema);
         this.scanStats = scanStats;
+        // @NOTE: this can be NULL. Need to check it.
+        // @SEE: org.apache.calcite.plan.AbstractRelOptPlanner(RelOptCostFactory, Context)
+        this.cancelFlag = cancelFlag;
+
         logger.debug("ScannerCallback created for scanner" + scanner);
     }
 
@@ -60,13 +66,18 @@ final public class ScannerCallback
         // @TODO: How to protect this method from being called while a batch is being processed?
 
         // If the scanner can continue and we are not stopping
-        if (scanner.hasMoreRows() && !earlyExit.get() && !scansShouldStop.get()) {
+        if (scanner.hasMoreRows() && !earlyExit.get() && !scansShouldStop.get() &&
+            // allow `null` as cancel flag isn't guaranteed to be set. Instead of handling null
+            // in constructor check it here, .get() can be costly as it is atomic.
+            (cancelFlag == null || !cancelFlag.get())) {
             scanner.nextRows().addCallbackDeferring(this);
         }
         else {
             // Else -> scanner has completed, notify the consumer of rowResults
             try {
                 // This blocks to ensure the query finishes.
+                logger.info("Closing scanner: {} {} {} {}",
+                    scanner.hasMoreRows(), earlyExit.get(), scansShouldStop.get(), cancelFlag.get());
                 rowResults.put(CLOSE_MESSAGE);
             } catch (InterruptedException threadInterrupted) {
                 logger.error("Interrupted while closing. Means queue is full. Closing scanner");

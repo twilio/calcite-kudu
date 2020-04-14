@@ -6,6 +6,8 @@ import com.twilio.raas.sql.KuduMethod;
 import com.twilio.raas.sql.KuduRel;
 import com.twilio.raas.sql.KuduScanStats;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
+
+import org.apache.calcite.DataContext;
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.adapter.enumerable.JavaRowFormat;
@@ -24,8 +26,10 @@ import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.runtime.Hook;
+import org.apache.calcite.util.BuiltInMethod;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel {
@@ -96,12 +100,21 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
         final Expression scanStats =
             list.append("scanStats", implementor.stash(new KuduScanStats(), KuduScanStats.class));
 
+        final Expression cancelBoolean = list.append("cancelBoolean",
+            Expressions.convert_(
+                    Expressions.call(DataContext.ROOT,
+                        BuiltInMethod.DATA_CONTEXT_GET.method,
+                        Expressions.constant(DataContext.Variable.CANCEL_FLAG.camelName)),
+                    AtomicBoolean.class)
+        );
+
         Expression enumerable = list.append("enumerable",
                 Expressions.call(table,
                         KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit,
                         offset, sorted,
                         Expressions.constant(kuduImplementor.groupByLimited),
-                        scanStats));
+                    scanStats,
+                    cancelBoolean));
 
         Hook.QUERY_PLAN.run(predicates);
         list.add(

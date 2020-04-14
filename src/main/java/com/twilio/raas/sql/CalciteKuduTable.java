@@ -213,13 +213,13 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      */
     public KuduEnumerable executeQuery(final List<List<CalciteKuduPredicate>> predicates,
                                              final List<Integer> columnIndices, final long limit,
-        final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats) {
+        final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag) {
 
 
         return new KuduEnumerable(
             predicates, columnIndices, this.client, this.openedTable,
             limit, offset, sorted, descendingSortedFieldIndices,
-            groupByLimited, scanStats);
+            groupByLimited, scanStats, cancelFlag);
     }
 
     @Override
@@ -242,7 +242,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
             //noinspection unchecked
             final Enumerable<T> enumerable =
                 (Enumerable<T>) getTable().executeQuery(Collections.emptyList(),
-                    Collections.emptyList(), -1, -1, false, false, new KuduScanStats());
+                    Collections.emptyList(), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false));
             return enumerable.enumerator();
         }
 
@@ -258,7 +258,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
          */
         public Enumerable<Object> query(final List<List<CalciteKuduPredicate>> predicates,
                                           final List<Integer> fieldsIndices,
-            final long limit, final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats) {
+            final long limit, final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag) {
             return getTable()
                 .executeQuery(
                 predicates,
@@ -267,7 +267,8 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                 offset,
                 sorted,
                 groupByLimited,
-                scanStats);
+                scanStats,
+                cancelFlag);
         }
     }
 
