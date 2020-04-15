@@ -3,10 +3,10 @@ package com.twilio.raas.sql.rules;
 import java.util.Optional;
 
 import com.google.common.collect.Lists;
+
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptRuleOperand;
-import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
@@ -22,8 +22,6 @@ import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.metadata.RelMdUtil;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
-import org.apache.calcite.sql.SqlExplainFormat;
-import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.tools.RelBuilderFactory;
 
 /**
@@ -63,7 +61,8 @@ public abstract class KuduSortJoinTransposeRule extends RelOptRule {
                     mq, join.getRight(), joinInfo.rightSet())) {
                 return false;
             }
-        } else if (!join.getJoinType().generatesNullsOnRight()) {
+        }
+        else if (!join.getJoinType().generatesNullsOnRight()) {
             if (sort.getCollation() != RelCollations.EMPTY) {
                 for (RelFieldCollation relFieldCollation
                         : sort.getCollation().getFieldCollations()) {
@@ -78,11 +77,12 @@ public abstract class KuduSortJoinTransposeRule extends RelOptRule {
                     mq, join.getLeft(), joinInfo.leftSet())) {
                 return false;
             }
-        } else {
+        }
+        else {
             return false;
         }
 
-        return true;
+        return sort.getCollation() != RelCollations.EMPTY;
     }
 
     protected void perform(final RelOptRuleCall call,  final Sort sort, final Join join, final Optional<Filter> filter) {
@@ -97,10 +97,19 @@ public abstract class KuduSortJoinTransposeRule extends RelOptRule {
                     sort.getCollation(), sort.offset, sort.fetch)) {
                 return;
             }
-            newLeftInput = sort.copy(sort.getTraitSet(), join.getLeft(), sort.getCollation(),
+            // Because it is inner we cannot push the fetch and  offset down. We do no know how many
+            // rows will need to be fetched on the left or right side.
+            if (join.getJoinType() == JoinRelType.INNER && (sort.fetch != null || sort.offset != null)) {
+                newLeftInput = sort.copy(sort.getTraitSet(), join.getLeft(), sort.getCollation(),
                     sort.offset, sort.fetch);
+            }
+            else {
+                newLeftInput = sort.copy(sort.getTraitSet(), join.getLeft(), sort.getCollation(),
+                    sort.offset, sort.fetch);
+            }
             newRightInput = join.getRight();
-        } else {
+        }
+        else {
             final RelCollation rightCollation =
                     RelCollationTraitDef.INSTANCE.canonize(
                             RelCollations.shift(sort.getCollation(),
@@ -112,25 +121,39 @@ public abstract class KuduSortJoinTransposeRule extends RelOptRule {
                 return;
             }
             newLeftInput = join.getLeft();
-            newRightInput = sort.copy(sort.getTraitSet().replace(rightCollation),
+            // Because it is inner we cannot push the fetch and  offset down. We do no know how many
+            // rows will need to be fetched on the left or right side.
+            if (join.getJoinType() == JoinRelType.INNER && (sort.fetch != null || sort.offset != null)) {
+                newRightInput = sort.copy(sort.getTraitSet().replace(rightCollation),
+                    join.getRight(), rightCollation, null, null);
+            }
+            else {
+                newRightInput = sort.copy(sort.getTraitSet().replace(rightCollation),
                     join.getRight(), rightCollation, sort.offset, sort.fetch);
+            }
         }
 
         final RelNode joinCopy = join.copy(join.getTraitSet(), join.getCondition(), newLeftInput,
                 newRightInput, join.getJoinType(), join.isSemiJoinDone());
         // since the filter wraps the sort operator create a copy of the filter with the sort's
         // trait so that the sort can get optimized out
-        final RelNode sortCopy;
+        final RelNode transformTarget;
         if (filter.isPresent()) {
-            final RelNode filterCopy = filter.get().copy(filter.get().getTraitSet().replace(sort.getCollation()), Lists.newArrayList(joinCopy));
-            sortCopy = sort.copy(sort.getTraitSet(), filterCopy, sort.getCollation(),
-                sort.offset, sort.fetch);
+            transformTarget = filter.get().copy(filter.get().getTraitSet(), Lists.newArrayList(joinCopy));
         }
         else {
-            sortCopy = sort.copy(sort.getTraitSet(), joinCopy, sort.getCollation(), sort.offset, sort.fetch);
+            transformTarget = joinCopy;
         }
 
-        call.transformTo(sortCopy);
+        // Because it is inner we cannot push the fetch and  offset down. We do no know how many
+        // rows will need to be fetched on the left or right side.
+        if (join.getJoinType() == JoinRelType.INNER && (sort.fetch != null || sort.offset != null)) {
+            final Sort limitNode = LogicalSort.create(transformTarget, RelCollations.EMPTY, sort.offset, sort.fetch);
+            call.transformTo(limitNode);
+        }
+        else {
+            call.transformTo(transformTarget);
+        }
     }
 
     public static class KuduSortAboveFilter extends KuduSortJoinTransposeRule {
