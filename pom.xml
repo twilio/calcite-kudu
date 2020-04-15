@@ -38,6 +38,11 @@
 	    <artifactId>metrics-core</artifactId>
 	</dependency>
 
+    <dependency>
+        <groupId>com.twilio.kudu</groupId>
+        <artifactId>dataset</artifactId>
+    </dependency>
+
         <!-- Testing dependencies -->
         <dependency>
             <groupId>junit</groupId>
