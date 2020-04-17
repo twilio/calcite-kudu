@@ -16,10 +16,8 @@ public class KuduRules {
     public static final RelOptRule FILTER_SORT = KuduSortRule.FILTER_SORT_RULE;
     public static final RelOptRule SORT = KuduSortRule.SIMPLE_SORT_RULE;
     public static final KuduLimitRule LIMIT = new KuduLimitRule();
-    public static final RelOptRule SORT_OVER_FILTER_TRANSPOSE =
-            new KuduSortJoinTransposeRule.KuduSortAboveFilter(RelFactories.LOGICAL_BUILDER);
     public static final RelOptRule SORT_OVER_JOIN_TRANSPOSE =
-            new KuduSortJoinTransposeRule.KuduSortAboveJoin(RelFactories.LOGICAL_BUILDER);
+            new SortInnerJoinTranspose(RelFactories.LOGICAL_BUILDER);
     public static final KuduNestedJoinRule NESTED_JOIN = new KuduNestedJoinRule.KuduNestedOverFilter(RelFactories.LOGICAL_BUILDER);
     public static final KuduNestedJoinRule NESTED_JOIN_OVER_SORT = new KuduNestedJoinRule.KuduNestedOverSortAndFilter(
             RelFactories.LOGICAL_BUILDER);
@@ -35,7 +33,6 @@ public class KuduRules {
             SORT,
             FILTER_SORT,
             LIMIT,
-            SORT_OVER_FILTER_TRANSPOSE,
             SORT_OVER_JOIN_TRANSPOSE,
             KuduSortedAggregationRule.SORTED_AGGREGATION_RULE,
             KuduSortedAggregationRule.SORTED_AGGREGATION_LIMIT_RULE,
