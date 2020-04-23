@@ -39,6 +39,7 @@ public class KuduNestedJoinRule extends RelOptRule {
     @Override
     public boolean matches(final RelOptRuleCall call) {
         final Join join = call.rel(0);
+
         if (join.getJoinType() != JoinRelType.INNER && join.getJoinType() != JoinRelType.LEFT) {
             return false;
         }
@@ -72,7 +73,12 @@ public class KuduNestedJoinRule extends RelOptRule {
         };
 
         final Boolean isValid = condition.accept(validateJoinCondition);
-        return isValid;
+
+        // @TODO: Hack for the moment.
+        final boolean containsActorSid = join.getRight().getRowType().getFieldList().stream()
+                .anyMatch(fl -> fl.getName().equalsIgnoreCase("actor_sid"));
+
+        return isValid && containsActorSid;
     }
 
     @Override
