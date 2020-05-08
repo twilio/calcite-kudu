@@ -1,11 +1,9 @@
 package com.twilio.raas.sql.rel;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.KuduRelNode;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
-import org.apache.calcite.plan.RelOptCostFactory;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
@@ -36,21 +34,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class KuduProjectRel extends Project implements KuduRel {
-    private final boolean projectOnlyColumns;
+public class KuduProjectRel extends Project implements KuduRelNode {
     private List<Integer> projectedColumnsIndexes = Lists.newArrayList();
 
     public KuduProjectRel(RelOptCluster cluster, RelTraitSet traitSet,
                           RelNode input, List<? extends RexNode> projects,
-                          RelDataType rowType, boolean projectOnlyColumns) {
+                          RelDataType rowType) {
         super(cluster, traitSet, input, projects, rowType);
-        this.projectOnlyColumns = projectOnlyColumns;
     }
     @Override
     public Project copy(RelTraitSet traitSet, RelNode input,
                         List<RexNode> projects, RelDataType rowType) {
-        return new KuduProjectRel(getCluster(), traitSet, input, projects,
-                                  rowType, false);
+        return new KuduProjectRel(getCluster(), traitSet, input, projects, rowType);
     }
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner,

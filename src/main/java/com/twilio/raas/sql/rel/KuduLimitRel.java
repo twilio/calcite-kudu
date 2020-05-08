@@ -1,6 +1,6 @@
 package com.twilio.raas.sql.rel;
 
-import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.KuduRelNode;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
@@ -14,7 +14,7 @@ import org.apache.calcite.rex.RexNode;
 
 import java.util.List;
 
-public class KuduLimitRel extends SingleRel implements KuduRel {
+public class KuduLimitRel extends SingleRel implements KuduRelNode {
     public final RexNode offset;
     public final RexNode fetch;
 

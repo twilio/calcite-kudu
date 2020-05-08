@@ -1,26 +1,23 @@
 package com.twilio.raas.sql;
 
+import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.kudu.client.AsyncKuduClient;
-import org.apache.calcite.schema.Table;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.stream.Collectors;
-import java.util.Collections;
-import java.util.List;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.ImmutableMultimap;
-import java.sql.Timestamp;
-import org.apache.calcite.schema.Function;
-import org.apache.calcite.schema.impl.ScalarFunctionImpl;
 import org.apache.kudu.client.KuduTable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.Set;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 
 public final class KuduSchema extends AbstractSchema {
+
+    private static final Logger logger = LoggerFactory.getLogger(KuduSchema.class);
 
     private final AsyncKuduClient client;
     private final Map<String, KuduTableConfig> kuduTableConfigMap;
@@ -68,6 +65,7 @@ public final class KuduSchema extends AbstractSchema {
                 // tableName or an openedTable? and if the
                 // table wasn't opened it would attempt to
                 // open it prior to sending queries?
+                logger.error("Unable to open table " + tableName, failedToOpen);
             }      
         }
         if (!tableMap.isEmpty()) {

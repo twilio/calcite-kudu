@@ -1,17 +1,25 @@
 package com.twilio.raas.sql;
 
+import com.google.common.collect.ImmutableList;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.linq4j.Enumerable;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 import org.apache.calcite.linq4j.Linq4j;
+import org.apache.calcite.prepare.Prepare;
+import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.schema.ModifiableTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.kudu.client.KuduException;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.util.TimestampUtil;
 import org.apache.kudu.Schema;
@@ -23,13 +31,13 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.kudu.client.AsyncKuduClient;
 
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.apache.kudu.client.AsyncKuduScanner;
+
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.kudu.client.KuduPredicate;
-import org.apache.kudu.client.KuduScanToken;
 
-import java.util.stream.Collectors;
 import java.util.Collections;
+import java.util.stream.Collectors;
+
 import org.apache.calcite.adapter.java.AbstractQueryableTable;
 import org.apache.calcite.linq4j.QueryProvider;
 import org.apache.calcite.schema.SchemaPlus;
@@ -41,7 +49,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 // This class resides in this project under the org.apache namespace
-import org.apache.kudu.client.KuduScannerUtil;
+
 
 /**
  * A {@code CalciteKuduTable} is responsible for returning rows of Objects back.
@@ -51,7 +59,7 @@ import org.apache.kudu.client.KuduScannerUtil;
  * It requires a {@link KuduTable} to be opened and ready to be used.
  */
 public final class CalciteKuduTable extends AbstractQueryableTable
-    implements TranslatableTable {
+    implements TranslatableTable, ModifiableTable {
     private static final Logger logger = LoggerFactory.getLogger(CalciteKuduTable.class);
 
     public static final Instant EPOCH_DAY_FOR_REVERSE_SORT = Instant.parse("9999-12-31T00:00:00.000000Z");
@@ -63,7 +71,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
     private final static Double CUBE_TABLE_ROW_COUNT = 2000000.0;
     private final static Double FACT_TABLE_ROW_COUNT = 20000000.0;
 
-    private final KuduTable openedTable;
+    private final KuduTable kuduTable;
     private final AsyncKuduClient client;
     private final List<Integer> descendingSortedFieldIndices;
 
@@ -78,20 +86,20 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      */
     public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client, final List<Integer> descendingSortedFieldIndices) {
         super(Object[].class);
-        this.openedTable = openedTable;
+        this.kuduTable = openedTable;
         this.client = client;
         this.descendingSortedFieldIndices = descendingSortedFieldIndices;
     }
 
     @Override
     public Statistic getStatistic() {
-      final String tableName = this.openedTable.getName();
+      final String tableName = this.kuduTable.getName();
       // Simple rules.
       // "-" in table name, you are a cube
       // "." in table name, you are a raw fact table
       // "anything else" you are a dimension table.
       final List<ImmutableBitSet> primaryKeys = Collections.singletonList(ImmutableBitSet
-          .range(this.openedTable.getSchema().getPrimaryKeyColumnCount()));
+          .range(this.kuduTable.getSchema().getPrimaryKeyColumnCount()));
       if (tableName.contains("-")) {
         return Statistics.of(CUBE_TABLE_ROW_COUNT,
             primaryKeys,
@@ -128,7 +136,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
     @Override
     public RelDataType getRowType(final RelDataTypeFactory typeFactory) {
         final RelDataTypeFactory.Builder builder = new RelDataTypeFactory.Builder(typeFactory);
-        final Schema kuduSchema = this.openedTable.getSchema();
+        final Schema kuduSchema = this.kuduTable.getSchema();
 
         for (int i = 0; i < kuduSchema.getColumnCount(); i++) {
             final ColumnSchema currentColumn = kuduSchema.getColumnByIndex(i);
@@ -189,15 +197,15 @@ public final class CalciteKuduTable extends AbstractQueryableTable
 
         final RelOptCluster cluster = context.getCluster();
         return new KuduQuery(cluster,
-                             cluster.traitSetOf(KuduRel.CONVENTION),
+                             cluster.traitSetOf(KuduRelNode.CONVENTION),
                              relOptTable,
-                             this.openedTable,
+                             this.kuduTable,
                              this.descendingSortedFieldIndices,
                              this.getRowType(context.getCluster().getTypeFactory()));
     }
 
     /**
-     * Run the query against the kudu table {@link openedTable}. {@link KuduPredicate} are the
+     * Run the query against the kudu table {@link kuduTable}. {@link KuduPredicate} are the
      * filters to apply to the query, {@link kuduFields} are the columns to return in the
      * response and finally {@link limit} is used to limit the results that come back.
      *
@@ -217,9 +225,24 @@ public final class CalciteKuduTable extends AbstractQueryableTable
 
 
         return new KuduEnumerable(
-            predicates, columnIndices, this.client, this.openedTable,
+            predicates, columnIndices, this.client, this.kuduTable,
             limit, offset, sorted, descendingSortedFieldIndices,
             groupByLimited, scanStats, cancelFlag);
+    }
+
+    /**
+     * Called while using {@link java.sql.Statement}
+     */
+    public int mutateTuples(final List<String> columnNames,
+                               final List<List<RexLiteral>> tuples) {
+      return new KuduMutation(this, columnNames).mutateTuples(tuples);
+    }
+
+    /**
+     * Called while using {@link java.sql.PreparedStatement}
+     */
+    public int mutateRow(final List<String> columnNames, final List<Object> values) {
+      return new KuduMutation(this, columnNames).mutateRow(values);
     }
 
     @Override
@@ -228,7 +251,46 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         return new KuduQueryable<>(queryProvider, schema, this, tableName);
     }
 
-    /** Implementation of {@link Queryable} based on
+    @Override
+    public Collection getModifiableCollection() {
+      return null;
+    }
+
+    @Override
+    public TableModify toModificationRel(RelOptCluster cluster, RelOptTable table,
+                                         Prepare.CatalogReader catalogReader, RelNode child,
+                                         TableModify.Operation operation,
+                                         List<String> updateColumnList,
+                                         List<RexNode> sourceExpressionList, boolean flattened) {
+      if (!operation.equals(TableModify.Operation.INSERT)) {
+        throw new UnsupportedOperationException("Only INSERT statement is supported");
+      }
+      return new KuduWrite(
+        this.kuduTable,
+        cluster,
+        table,
+        catalogReader,
+        child,
+        operation,
+        updateColumnList,
+        sourceExpressionList,
+        flattened);
+    }
+
+    public boolean isColumnSortedDesc(String columnName) {
+      int columnIndex = kuduTable.getSchema().getColumnIndex(columnName);
+      return descendingSortedFieldIndices.contains(columnIndex);
+    }
+
+    public KuduTable getKuduTable() {
+      return kuduTable;
+    }
+
+    public AsyncKuduClient getClient() {
+      return client;
+    }
+
+  /** Implementation of {@link Queryable} based on
      * a {@link CalciteKuduTable}.
      *
      * @param <T> element type */
@@ -257,8 +319,11 @@ public final class CalciteKuduTable extends AbstractQueryableTable
          * Code generation happens in {@link KuduToEnumerableConverter}
          */
         public Enumerable<Object> query(final List<List<CalciteKuduPredicate>> predicates,
-                                          final List<Integer> fieldsIndices,
-            final long limit, final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag) {
+                                        final List<Integer> fieldsIndices, final long limit,
+                                        final long offset, final boolean sorted,
+                                        final boolean groupByLimited,
+                                        final KuduScanStats scanStats,
+                                        final AtomicBoolean cancelFlag) {
             return getTable()
                 .executeQuery(
                 predicates,
@@ -270,7 +335,17 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                 scanStats,
                 cancelFlag);
         }
+
+        public Enumerable<Object> mutateTuples(final List<String> columnNames,
+                          final List<List<RexLiteral>> tuples) {
+          return Linq4j.singletonEnumerable(getTable().mutateTuples(columnNames, tuples));
+        }
+
+    public Enumerable<Object> mutateRow(final List<String> columnNames,
+                                     final List<Object> values) {
+      return Linq4j.singletonEnumerable(getTable().mutateRow(columnNames, values));
     }
+  }
 
 
 }

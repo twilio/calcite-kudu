@@ -1,6 +1,6 @@
 package com.twilio.raas.sql.rel;
 
-import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.KuduRelNode;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
@@ -19,7 +19,7 @@ import org.slf4j.Logger;
  * This relation sets {@link Implementor#sorted} to true and conditionally sets
  * {@link Implementor#limit} and {@link Implementor#offset}.
  */
-public class KuduSortRel extends Sort implements KuduRel {
+public class KuduSortRel extends Sort implements KuduRelNode {
 
     public static final Logger LOGGER = CalciteTrace.getPlannerTracer();
     public final boolean groupBySorted;
@@ -32,7 +32,7 @@ public class KuduSortRel extends Sort implements KuduRel {
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet,
       RelNode child, RelCollation collation, RexNode offset, RexNode fetch, boolean groupBySorted) {
       super(cluster, traitSet, child, collation, offset, fetch);
-      assert getConvention() == KuduRel.CONVENTION;
+      assert getConvention() == KuduRelNode.CONVENTION;
       assert getConvention() == child.getConvention();
       this.groupBySorted = groupBySorted;
     }

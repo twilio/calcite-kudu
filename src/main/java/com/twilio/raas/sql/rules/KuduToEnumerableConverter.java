@@ -1,6 +1,6 @@
 package com.twilio.raas.sql.rules;
 
-import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.KuduRelNode;
 import com.twilio.raas.sql.rel.KuduToEnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
@@ -17,7 +17,7 @@ import org.slf4j.Logger;
 
 /**
  * Rule to convert a relational expression from
- * {@link KuduRel#CONVENTION} to {@link EnumerableConvention}.
+ * {@link KuduRelNode#CONVENTION} to {@link EnumerableConvention}.
  *
  * Bulk of the work is in the implement method which takes an
  * {@link EnumerableRelImplementor} and creates
@@ -32,7 +32,7 @@ public class KuduToEnumerableConverter extends ConverterRule {
 
     private KuduToEnumerableConverter(RelBuilderFactory relBuilderFactory) {
         super(RelNode.class, Predicates.<RelNode>alwaysTrue(),
-              KuduRel.CONVENTION, EnumerableConvention.INSTANCE,
+              KuduRelNode.CONVENTION, EnumerableConvention.INSTANCE,
               relBuilderFactory, "KuduToEnumerableConverterRule");
     }
 

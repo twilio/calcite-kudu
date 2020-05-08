@@ -76,7 +76,7 @@ final public class ScannerCallback
             // Else -> scanner has completed, notify the consumer of rowResults
             try {
                 // This blocks to ensure the query finishes.
-                logger.info("Closing scanner: {} {} {} {}",
+                logger.debug("Closing scanner: {} {} {} {}",
                     scanner.hasMoreRows(), earlyExit.get(), scansShouldStop.get(), cancelFlag.get());
                 rowResults.put(CLOSE_MESSAGE);
             } catch (InterruptedException threadInterrupted) {

@@ -1,14 +1,12 @@
 package com.twilio.raas.sql.rules;
 
-import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.KuduRelNode;
 import com.twilio.raas.sql.rel.KuduProjectRel;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.logical.LogicalCalc;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -40,7 +38,7 @@ public class KuduProjectRule extends RelOptRule {
         break;
       }
     }
-    final RelTraitSet traitSet = project.getTraitSet().replace(KuduRel.CONVENTION);
+    final RelTraitSet traitSet = project.getTraitSet().replace(KuduRelNode.CONVENTION);
     // if the Projection includes expressions then we split the Projection into a
     // KuduProjectRel that includes only column values which is wrapped by a
     // LogicalCalc that computes the expressions
@@ -71,8 +69,8 @@ public class KuduProjectRule extends RelOptRule {
 
       // create a KuduProjectRel that contains the required columns
       final KuduProjectRel kuduProjection = new KuduProjectRel(project.getCluster(),
-          traitSet, convert(project.getInput(), KuduRel.CONVENTION), kuduProjects,
-          relRecordType, false);
+          traitSet, convert(project.getInput(), KuduRelNode.CONVENTION), kuduProjects,
+          relRecordType);
 
       // wrap the KuduProjectRel in a LogicalCalc
       final RexProgram program =
@@ -88,9 +86,9 @@ public class KuduProjectRule extends RelOptRule {
       // just replace the LogicalProject with a KuduProjectRel
       final RelNode newProjection = new KuduProjectRel(project.getCluster(),
           traitSet,
-          convert(project.getInput(), KuduRel.CONVENTION),
+          convert(project.getInput(), KuduRelNode.CONVENTION),
           project.getProjects(),
-          project.getRowType(), true);
+          project.getRowType());
       call.transformTo(newProjection);
     }
   }

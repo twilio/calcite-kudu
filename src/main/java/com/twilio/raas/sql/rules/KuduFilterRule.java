@@ -1,30 +1,20 @@
 package com.twilio.raas.sql.rules;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSortedSet;
-import com.google.common.collect.RangeSet;
 import com.twilio.raas.sql.CalciteKuduPredicate;
 import com.twilio.raas.sql.KuduQuery;
-import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.KuduRelNode;
 import com.twilio.raas.sql.rel.KuduFilterRel;
-import org.apache.calcite.avatica.util.TimeUnitRange;
-import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.logical.LogicalFilter;
-import org.apache.calcite.rel.rules.DateRangeRules;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.tools.RelBuilderFactory;
 
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class KuduFilterRule extends RelOptRule {
     public KuduFilterRule(RelBuilderFactory relBuilderFactory) {
@@ -57,8 +47,8 @@ public class KuduFilterRule extends RelOptRule {
                 return;
             }
             final RelNode converted = new KuduFilterRel(filter.getCluster(),
-                                                        filter.getTraitSet().replace(KuduRel.CONVENTION),
-                                                        convert(filter.getInput(), KuduRel.CONVENTION), // @TODO: what is this call
+                                                        filter.getTraitSet().replace(KuduRelNode.CONVENTION),
+                                                        convert(filter.getInput(), KuduRelNode.CONVENTION), // @TODO: what is this call
                                                         filter.getCondition(),
                 predicates,
             scan.openedTable.getSchema());

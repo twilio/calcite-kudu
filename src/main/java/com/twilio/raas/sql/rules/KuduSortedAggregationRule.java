@@ -2,7 +2,7 @@ package com.twilio.raas.sql.rules;
 
 import com.google.common.collect.Lists;
 import com.twilio.raas.sql.KuduQuery;
-import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.KuduRelNode;
 import com.twilio.raas.sql.rel.KuduSortRel;
 import com.twilio.raas.sql.rel.KuduToEnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableLimit;
@@ -118,7 +118,7 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
 
     final KuduSortRel newSort = new KuduSortRel(
       project.getCluster(),
-      traitSet.replace(KuduRel.CONVENTION),
+      traitSet.replace(KuduRelNode.CONVENTION),
       convert(project, project.getTraitSet().replace(RelCollations.EMPTY)),
       newCollation,
       originalLimit.isPresent() ? originalLimit.get().offset : originalSort.offset,

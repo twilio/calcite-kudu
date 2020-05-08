@@ -3,11 +3,10 @@ package com.twilio.raas.sql.rules;
 import java.util.Optional;
 
 import com.twilio.raas.sql.KuduQuery;
-import com.twilio.raas.sql.KuduRel;
+import com.twilio.raas.sql.KuduRelNode;
 import com.twilio.raas.sql.rel.KuduFilterRel;
 import com.twilio.raas.sql.rel.KuduSortRel;
 import com.twilio.raas.sql.rel.KuduToEnumerableRel;
-import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptRuleOperand;
@@ -59,7 +58,7 @@ public abstract class KuduSortRule extends RelOptRule {
       return false;
     }
 
-    if (sortTraits.contains(KuduRel.CONVENTION)) {
+    if (sortTraits.contains(KuduRelNode.CONVENTION)) {
       return false;
     }
 
@@ -106,7 +105,7 @@ public abstract class KuduSortRule extends RelOptRule {
   public void perform(final RelOptRuleCall call, final Sort originalSort, final KuduQuery query, final KuduTable openedTable, final Optional<Filter> filter) {
     if (canApply(originalSort.getTraitSet(), query, openedTable, filter)) {
       final RelNode input = originalSort.getInput();
-      final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRel.CONVENTION)
+      final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRelNode.CONVENTION)
         .replace(originalSort.getCollation());
       final RelNode newNode = new KuduSortRel(input.getCluster(), traitSet,
           convert(input, traitSet.replace(RelCollations.EMPTY)),
