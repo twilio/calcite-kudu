@@ -136,9 +136,9 @@ public final class JDBCQueryIT {
                     "account_sid = '%s'";
             String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
             String expectedPlan = "KuduToEnumerableRel\n" +
-                    "  KuduProjectRel(SID=[$2])\n" +
-                    "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
-                    "      KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+              "  KuduProjectRel(SID=[$2])\n" +
+              "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+              "      KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
             String plan = SqlUtil.getExplainPlan(rs);
             assertEquals("Unexpected plan ", expectedPlan, plan);
@@ -162,12 +162,13 @@ public final class JDBCQueryIT {
             String sqlFormat = "SELECT mcc||mnc, mcc, mnc, mnc||mcc FROM kudu.\"ReportCenter" +
                     ".DeliveredMessages\" WHERE account_sid = '%s'";
             String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
-            String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], expr#3=[||($t1, $t2)], " +
-                    "expr#4=[||($t2, $t1)], EXPR$0=[$t3], MCC=[$t1], MNC=[$t2], EXPR$3=[$t4])\n" +
-                    "  KuduToEnumerableRel\n" +
-                    "    KuduProjectRel(ACCOUNT_SID=[$0], MCC=[$3], MNC=[$4])\n" +
-                    "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
-                    "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+            // TODO figure out if costs can be tweaked so that the two KuduProjectRel are merged
+            final String expectedPlan = "EnumerableCalc(expr#0..1=[{inputs}], expr#2=[||($t0, $t1)], expr#3=[||($t1, $t0)], EXPR$0=[$t2], MCC=[$t0], MNC=[$t1], EXPR$3=[$t3])\n" +
+              "  KuduToEnumerableRel\n" +
+              "    KuduProjectRel($1=[$1], $2=[$2])\n" +
+              "      KuduProjectRel(ACCOUNT_SID=[$0], MCC=[$3], MNC=[$4])\n" +
+              "        KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+              "          KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
             String plan = SqlUtil.getExplainPlan(rs);
             assertEquals("Unexpected plan ", expectedPlan, plan);
@@ -200,10 +201,10 @@ public final class JDBCQueryIT {
             String sqlFormat = "SELECT count(*) FROM kudu.\"ReportCenter.DeliveredMessages\" WHERE account_sid = '%s'";
             String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
             String expectedPlan = "EnumerableAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
-                    "  KuduToEnumerableRel\n" +
-                    "    KuduProjectRel(ACCOUNT_SID=[$0])\n" +
-                    "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
-                    "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+              "  KuduToEnumerableRel\n" +
+              "    KuduProjectRel(ACCOUNT_SID=[$0])\n" +
+              "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+              "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
             String plan = SqlUtil.getExplainPlan(rs);
             assertEquals("Unexpected plan ", expectedPlan, plan);
@@ -225,11 +226,10 @@ public final class JDBCQueryIT {
                     "WHERE account_sid = '%s' ORDER BY account_sid, date_created, sid";
             String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
             String expectedPlan = "KuduToEnumerableRel\n" +
-                    "  KuduProjectRel(SID=[$2], ACCOUNT_SID=[$0], DATE_CREATED=[$1])\n" +
-                    "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[ASC], " +
-                    "dir2=[ASC], groupBySorted=[false])\n" +
-                    "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
-                    "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+              "  KuduProjectRel(SID=[$2], ACCOUNT_SID=[$0], DATE_CREATED=[$1])\n" +
+              "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[ASC], dir2=[ASC], groupBySorted=[false])\n" +
+              "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+              "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
             String plan = SqlUtil.getExplainPlan(rs);
             assertEquals("Unexpected plan ", expectedPlan, plan);

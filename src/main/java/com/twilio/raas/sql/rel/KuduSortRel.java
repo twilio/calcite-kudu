@@ -53,7 +53,10 @@ public class KuduSortRel extends Sort implements KuduRelNode {
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner,
                                       RelMetadataQuery mq) {
-      return planner.getCostFactory().makeZeroCost();
+      double dRows = Double.MIN_VALUE;
+      double dCpu = 0;
+      double dIo = 0;
+      return planner.getCostFactory().makeCost(dRows, dCpu, dIo);
     }
 
     @Override

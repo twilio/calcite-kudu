@@ -8,9 +8,18 @@ import java.util.stream.Collectors;
 
 public class JDBCUtil {
 
+  static {
+    try {
+      // ensure that KuduDriver is registered with DriverManager
+      Class.forName(KuduDriver.class.getName());
+    } catch (ClassNotFoundException e) {
+    }
+  }
+
   public static final String DESCENDING_COLUMNS = getDescendingColumns();
 
-  public static final String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0'," +
+  // TODO see if we can use KuduSchemaFactory by default in KuduDriver
+  public static String CALCITE_MODEL_TEMPLATE = "jdbc:kudu:model=inline:{version: '1.0'," +
     "defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom'," +
     "factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s'," + DESCENDING_COLUMNS +
     "}]};caseSensitive=false;timeZone=UTC";

@@ -136,7 +136,7 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
     // is coming out sorted because the kudu sorted rel is enabling it.
     final RelNode newAggregation = originalAggregate.copy(
         originalAggregate.getTraitSet()
-            .replace(traitSet.getTrait(RelCollationTraitDef.INSTANCE)),
+            .replace(originalSort.getCollation()),
         Collections.singletonList(newkuduToEnumerableRel));
 
     call.transformTo(newAggregation);

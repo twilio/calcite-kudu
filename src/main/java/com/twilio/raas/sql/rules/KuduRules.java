@@ -39,6 +39,8 @@ public class KuduRules {
             NESTED_JOIN,
             NESTED_JOIN_OVER_SORT,
             NESTED_JOIN_OVER_LIMIT,
-            NESTED_JOIN_OVER_LIMIT_SORT_FILTER
+            NESTED_JOIN_OVER_LIMIT_SORT_FILTER,
+            KuduProjectMergeRule.INSTANCE,
+            KuduToEnumerableConverter.INSTANCE
     );
 }

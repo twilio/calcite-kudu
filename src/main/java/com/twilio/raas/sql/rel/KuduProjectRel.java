@@ -35,29 +35,33 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class KuduProjectRel extends Project implements KuduRelNode {
+
+    private boolean projectExpressions;
     private List<Integer> projectedColumnsIndexes = Lists.newArrayList();
 
     public KuduProjectRel(RelOptCluster cluster, RelTraitSet traitSet,
                           RelNode input, List<? extends RexNode> projects,
-                          RelDataType rowType) {
+                          RelDataType rowType, boolean projectExpressions) {
         super(cluster, traitSet, input, projects, rowType);
+        this.projectExpressions = projectExpressions;
     }
+
     @Override
     public Project copy(RelTraitSet traitSet, RelNode input,
                         List<RexNode> projects, RelDataType rowType) {
-        return new KuduProjectRel(getCluster(), traitSet, input, projects, rowType);
+        return new KuduProjectRel(getCluster(), traitSet, input, projects, rowType, projectExpressions);
     }
+
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner,
                                       RelMetadataQuery mq) {
-        // The planner will set the cost to VolcanoCost.TINY if the cost is zero which will cause
-        // this rel to not get chosen if the projection contains a function expression (since we
-        // wrap this rel with a LogicalProject)
-        // TODO find a better way of ensuring KuduProjectRel is chosen
-        double dRows = Double.MIN_VALUE;
-        double dCpu = 0;
-        double dIo = 0;
-        return planner.getCostFactory().makeCost(dRows, dCpu, dIo);
+      // if the projection includes an expression we replace it with a LogicalCalc wrapping a
+      // KuduProjectRel, so set to cost of the KuduProjectRel to negative so that the overall
+      // cost if lowered
+      double dRows = projectExpressions ? -100000.0 : 1.0;
+      double dCpu = 0;
+      double dIo = 0;
+      return planner.getCostFactory().makeCost(dRows, dCpu, dIo);
     }
 
     @Override

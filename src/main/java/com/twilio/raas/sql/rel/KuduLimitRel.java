@@ -29,7 +29,7 @@ public class KuduLimitRel extends SingleRel implements KuduRelNode {
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner,
                                                 RelMetadataQuery mq) {
-        return planner.getCostFactory().makeZeroCost();
+        return planner.getCostFactory().makeTinyCost();
     }
 
     @Override

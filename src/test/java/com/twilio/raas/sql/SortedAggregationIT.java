@@ -8,7 +8,9 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -32,67 +34,49 @@ public final class SortedAggregationIT {
   @ClassRule
   public static KuduTestHarness testHarness = new KuduTestHarness();
   private static final String descendingSortTableName = "DescendingSortTestTable";
-  private static final String customTemplate = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'DescendingSortTestTable', descendingSortedFields:['reverse_byte_field', 'reverse_short_field', 'reverse_int_field', 'reverse_long_field']}]}}]};caseSensitive=false;timeZone=UTC";
+  private static final String customTemplate = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'DescendingSortTestTable', descendingSortedFields:['REVERSE_BYTE_FIELD', 'REVERSE_SHORT_FIELD', 'REVERSE_INT_FIELD', 'REVERSE_LONG_FIELD']}]}}]};caseSensitive=false;timeZone=UTC";
 
   @BeforeClass
   public static void setup() throws Exception {
     System.setProperty("org.codehaus.janino.source_debugging.enable", "true");
     final List<ColumnSchema> columns = Arrays.asList(
-        new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("reverse_byte_field", Type.INT8).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("reverse_short_field", Type.INT16).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("reverse_int_field", Type.INT32).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("reverse_long_field", Type.INT64).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("resource_type", Type.STRING).build());
+        new ColumnSchema.ColumnSchemaBuilder("ACCOUNT_SID", Type.STRING).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("REVERSE_BYTE_FIELD", Type.INT8).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("REVERSE_SHORT_FIELD", Type.INT16).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("REVERSE_INT_FIELD", Type.INT32).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("REVERSE_LONG_FIELD", Type.INT64).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("RESOURCE_TYPE", Type.STRING).build());
 
     Schema schema = new Schema(columns);
 
     testHarness.getClient().createTable(descendingSortTableName, schema,
         new org.apache.kudu.client.CreateTableOptions()
-            .addHashPartitions(Arrays.asList("account_sid"), 5)
+            .addHashPartitions(Arrays.asList("ACCOUNT_SID"), 5)
             .setNumReplicas(1));
-    final KuduTable descendingSortTestTable = testHarness.getClient().openTable(descendingSortTableName);
-    final AsyncKuduSession insertSession = testHarness.getAsyncClient().newSession();
 
-    final Upsert firstRowOp = descendingSortTestTable.newUpsert();
-    final PartialRow firstRowWrite = firstRowOp.getRow();
-    firstRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
-    firstRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("4")));
-    firstRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("32")));
-    firstRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 100);
-    firstRowWrite.addLong("reverse_long_field", Long.MAX_VALUE - 1000L);
-    firstRowWrite.addString("resource_type", "message-body");
-    insertSession.apply(firstRowOp).join();
+    // insert rows
+    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      PreparedStatement stmt = conn.prepareStatement("INSERT INTO \"" + descendingSortTableName + "\" " +
+        "VALUES (?,?,?,?,?,?)");
+      insertRow(stmt, (byte)4, new Short("32"), 100, 1000L, "message-body");
+      insertRow(stmt, (byte)4, new Short("33"), 101, 1001L, "message-body");
+      insertRow(stmt, (byte)5, new Short("32"), 100, 50L, "message-body");
+      insertRow(stmt, (byte)5, new Short("32"), 100, 30L, "message-body");
+      insertRow(stmt, (byte)6, new Short("33"), 101, 1001L, "user-login");
+      insertRow(stmt, (byte)6, new Short("33"), 101, 1001L, "user-login");
+    }
+  }
 
-    final Upsert secondRowOp = descendingSortTestTable.newUpsert();
-    final PartialRow secondRowWrite = secondRowOp.getRow();
-    secondRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
-    secondRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("4")));
-    secondRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("33")));
-    secondRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 101);
-    secondRowWrite.addLong("reverse_long_field", Long.MAX_VALUE - 1001L);
-    secondRowWrite.addString("resource_type", "message-body");
-    insertSession.apply(secondRowOp).join();
-
-    final Upsert thirdRowOp = descendingSortTestTable.newUpsert();
-    final PartialRow thirdRowWrite = thirdRowOp.getRow();
-    thirdRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
-    thirdRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("6")));
-    thirdRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("33")));
-    thirdRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 101);
-    thirdRowWrite.addLong("reverse_long_field", Long.MAX_VALUE - 1001L);
-    thirdRowWrite.addString("resource_type", "user-login");
-    insertSession.apply(thirdRowOp).join();
-
-    final Upsert fourthRowOp = descendingSortTestTable.newUpsert();
-    final PartialRow fourthRowWrite = fourthRowOp.getRow();
-    fourthRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
-    fourthRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("6")));
-    fourthRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("33")));
-    fourthRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 101);
-    fourthRowWrite.addLong("reverse_long_field", Long.MAX_VALUE - 1001L);
-    fourthRowWrite.addString("resource_type", "user-login");
-    insertSession.apply(fourthRowOp).join();
+  private static void insertRow(PreparedStatement stmt, byte byteVal, short shortVal, int intVal,
+                                long longVal, String resourceType) throws SQLException {
+    stmt.setString(1, JDBCQueryIT.ACCOUNT_SID);
+    stmt.setByte(2, byteVal);
+    stmt.setShort(3, shortVal);
+    stmt.setInt(4, intVal);
+    stmt.setLong(5, longVal);
+    stmt.setString(6, resourceType);
+    stmt.execute();
   }
 
   @AfterClass
@@ -110,7 +94,8 @@ public final class SortedAggregationIT {
 
     String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
-      ResultSet queryResult = conn.createStatement().executeQuery(sql);
+      ResultSet queryResult = conn.createStatement().executeQuery("SELECT * FROM " + descendingSortTableName);
+      queryResult = conn.createStatement().executeQuery(sql);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
 
@@ -119,7 +104,7 @@ public final class SortedAggregationIT {
         "  KuduToEnumerableRel\n" +
         "    KuduSortRel(sort0=[$0], dir0=[ASC], fetch=[1], groupBySorted=[true])\n" +
         "      KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_LONG_FIELD=[$4], REVERSE_INT_FIELD=[$3])\n" +
-        "        KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
+        "        KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n" +
         "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       assertTrue("Should have results to iterate over",
@@ -130,8 +115,7 @@ public final class SortedAggregationIT {
           plan.contains("groupBySorted=[true]"));
       assertEquals("Full SQL plan has changed\n",
           expectedPlan, plan);
-      assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
-          2001L == queryResult.getLong(2));
+      assertEquals("Incorrect aggregated value", 2081, queryResult.getLong(2));
       assertFalse("Should not have any more results",
           queryResult.next());
     }
@@ -140,7 +124,7 @@ public final class SortedAggregationIT {
   @Test
   public void aggregateSortedResultsByAccountAndByte() throws Exception {
     final String sql = String.format(
-        "SELECT account_sid, sum(cast(reverse_long_field as bigint)) \"reverse_long_field\" FROM %s WHERE resource_type = 'message-body' GROUP BY reverse_byte_field, account_sid ORDER BY account_sid ASC, reverse_byte_field DESC limit 1",
+        "SELECT account_sid, sum(cast(reverse_long_field as bigint)) \"reverse_long_field\" FROM %s WHERE resource_type = 'message-body' GROUP BY reverse_byte_field, account_sid ORDER BY account_sid ASC, reverse_byte_field DESC limit 2",
         descendingSortTableName);
 
     String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
@@ -149,16 +133,13 @@ public final class SortedAggregationIT {
       String plan = SqlUtil.getExplainPlan(rs);
 
       final String expectedPlan =
-        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], reverse_long_field=[$t2], " +
-                "REVERSE_BYTE_FIELD=[$t1])\n" +
-        "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($2)])\n" +
-        "    KuduToEnumerableRel\n" +
-        "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[1], " +
-                "groupBySorted=[true])\n" +
-        "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], " +
-                "REVERSE_LONG_FIELD=[$4], RESOURCE_TYPE=[$5])\n" +
-        "          KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
-        "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t1], reverse_long_field=[$t2], REVERSE_BYTE_FIELD=[$t0])\n" +
+          "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($2)])\n" +
+          "    KuduToEnumerableRel\n" +
+          "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[2], groupBySorted=[true])\n" +
+          "        KuduProjectRel(REVERSE_BYTE_FIELD=[$1], ACCOUNT_SID=[$0], $f2=[$4])\n" +
+          "          KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n" +
+          "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -170,10 +151,12 @@ public final class SortedAggregationIT {
           plan.contains("groupBySorted=[true]"));
       assertEquals("Full SQL plan has changed\n",
           expectedPlan, plan);
-      assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
-          2001L == queryResult.getLong(2));
+      assertEquals("Incorrect aggregated value", 80, queryResult.getLong(2));
+      assertTrue("Should have more results",
+        queryResult.next());
+      assertEquals("Incorrect aggregated value", 2001, queryResult.getLong(2));
       assertFalse("Should not have any more results",
-          queryResult.next());
+        queryResult.next());
     }
   }
 
@@ -193,7 +176,7 @@ public final class SortedAggregationIT {
         "    EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($1)])\n" +
         "      KuduToEnumerableRel\n" +
         "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_LONG_FIELD=[$4])\n" +
-        "          KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
+        "          KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n" +
         "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
@@ -204,8 +187,7 @@ public final class SortedAggregationIT {
           plan.contains("KuduSortRel"));
       assertEquals("Full SQL plan has changed\n",
           expectedPlan, plan);
-      assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
-          2001L == queryResult.getLong(2));
+      assertEquals("Incorrect aggregated value", 2081, queryResult.getLong(2));
       assertFalse("Should not have any more results",
           queryResult.next());
     }
@@ -222,16 +204,13 @@ public final class SortedAggregationIT {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       final String expectedPlan =
-        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], reverse_long_field=[$t2], " +
-                "REVERSE_BYTE_FIELD=[$t1])\n" +
-        "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($2)])\n" +
-        "    KuduToEnumerableRel\n" +
-        "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], offset=[1], " +
-                "fetch=[1], groupBySorted=[true])\n" +
-        "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], " +
-                "REVERSE_LONG_FIELD=[$4])\n" +
-        "          KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
-        "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t1], reverse_long_field=[$t2], REVERSE_BYTE_FIELD=[$t0])\n" +
+          "  EnumerableAggregate(group=[{0, 1}], reverse_long_field=[$SUM0($2)])\n" +
+          "    KuduToEnumerableRel\n" +
+          "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], offset=[1], fetch=[1], groupBySorted=[true])\n" +
+          "        KuduProjectRel(REVERSE_BYTE_FIELD=[$1], ACCOUNT_SID=[$0], $f2=[$4])\n" +
+          "          KuduFilterRel(ScanToken 1=[ACCOUNT_SID EQUAL AC1234567])\n" +
+          "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -243,8 +222,7 @@ public final class SortedAggregationIT {
           plan.contains("groupBySorted=[true]"));
       assertEquals("Full SQL plan has changed\n",
           expectedPlan, plan);
-      assertTrue(String.format("Stored value should be reversed in sumation %d", queryResult.getLong(2)),
-          2001L == queryResult.getLong(2));
+      assertEquals("Incorrect aggregated value", 80, queryResult.getLong(2));
       assertFalse("Should not have any more results",
           queryResult.next());
     }
@@ -271,7 +249,7 @@ public final class SortedAggregationIT {
         "        KuduToEnumerableRel\n" +
         "          KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_INT_FIELD=[$3], " +
                 "REVERSE_LONG_FIELD=[$4])\n" +
-        "            KuduFilterRel(ScanToken 1=[resource_type EQUAL message-body])\n" +
+        "            KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n" +
         "              KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       assertFalse(String.format("Plan should not contain KuduSortRel. It is\n%s", plan),
@@ -298,7 +276,7 @@ public final class SortedAggregationIT {
         "  KuduToEnumerableRel\n" +
         "    KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[4], groupBySorted=[true])\n" +
         "      KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], REVERSE_LONG_FIELD=[$4], REVERSE_INT_FIELD=[$3])\n" +
-        "        KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
+        "        KuduFilterRel(ScanToken 1=[ACCOUNT_SID EQUAL AC1234567])\n" +
         "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
 
       assertTrue("Should have results to iterate over",
@@ -309,17 +287,19 @@ public final class SortedAggregationIT {
           plan.contains("groupBySorted=[true]"));
 
       assertEquals("Should be grouped second by Byte of 6",
-          new Byte("6"), Byte.valueOf(queryResult.getByte(2)));
-
-      assertTrue("Should have any more results",
+          (byte)6, queryResult.getByte(2));
+      assertTrue("Should have more results",
           queryResult.next());
 
       assertEquals("Should be grouped first by Byte of 4",
-          new Byte("4"), Byte.valueOf(queryResult.getByte(2)));
-
-
-      assertFalse("Should only have two results",
+        (byte)5, queryResult.getByte(2));
+      assertTrue("Should have more results",
           queryResult.next());
+
+      assertEquals("Should be grouped first by Byte of 4",
+        (byte)4, queryResult.getByte(2));
+      assertFalse("Should only have three results",
+        queryResult.next());
 
       assertEquals(String.format("Full SQL plan has changed\n%s", plan),
           expectedPlan, plan);

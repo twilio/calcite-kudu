@@ -79,27 +79,38 @@ public class KuduMutation {
     return tuples.size();
   }
 
-  private Long getUnixTimeMicros(String columnName, Object value) {
-    if (calciteKuduTable.isColumnSortedDesc(columnName)) {
-      return (CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Long) value) * 1000;
-    }
-    else {
-      return ((Long) value) * 1000;
-    }
-  }
-
   private Object getValue(String columnName, Object value) {
     if (value == null) {
       return value;
     }
     ColumnSchema col = kuduTable.getSchema().getColumn(columnName);
-    switch (col.getType()) {
-      case UNIXTIME_MICROS:
-        return getUnixTimeMicros(columnName, value);
-      case BINARY:
-        return ((ByteString) value).getBytes();
-      default:
-        return value;
+    if (calciteKuduTable.isColumnSortedDesc(columnName)) {
+      switch (col.getType()) {
+        case INT8:
+          return (byte) (Byte.MAX_VALUE - (Byte) value);
+        case INT16:
+          return (short) (Short.MAX_VALUE - (Short) value);
+        case INT32:
+          return (Integer.MAX_VALUE - (Integer) value);
+        case INT64:
+          return (Long.MAX_VALUE - (Long) value);
+        case UNIXTIME_MICROS:
+          return (CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (long) value) * 1000;
+        case BINARY:
+          return ((ByteString) value).getBytes();
+        default:
+          return value;
+      }
+    }
+    else {
+      switch (col.getType()) {
+        case UNIXTIME_MICROS:
+          return ((Long) value) * 1000;
+        case BINARY:
+          return ((ByteString) value).getBytes();
+        default:
+          return value;
+      }
     }
   }
 

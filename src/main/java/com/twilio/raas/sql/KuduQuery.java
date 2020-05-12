@@ -1,6 +1,6 @@
 package com.twilio.raas.sql;
 
-import com.twilio.raas.sql.rel.metadata.KuduRelMetadataProvider;
+import com.twilio.raas.sql.rules.KuduProjectMergeRule;
 import com.twilio.raas.sql.rules.KuduRules;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 
@@ -11,8 +11,9 @@ import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableScan;
-import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
-import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
+import org.apache.calcite.rel.rules.ProjectMergeRule;
+import org.apache.calcite.rel.rules.ReduceExpressionsRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.kudu.client.KuduTable;
 
@@ -64,16 +65,18 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
 
     @Override
     public void register(RelOptPlanner planner) {
+        // since kudu is a columnar store we never want to push an aggregate past a project
+        planner.removeRule(AggregateProjectMergeRule.INSTANCE);
+        // see WirelessUsageIt.testPaginationOverFactAggregation for why this rule is removed
+        // disable ReduceExpressionsRule until RC-1274 is implemented
+        planner.removeRule(ReduceExpressionsRule.FILTER_INSTANCE);
+        // ProjectMergeRule is replaced by KuduProjectMergeRule which does not merge a LogicalCalc
+        // that wraps a LogicalProject that is created by KuduProjectRule to handle expressions
+        // being projected
+        planner.removeRule(ProjectMergeRule.INSTANCE);
         for (RelOptRule rule : KuduRules.RULES) {
-            planner.addRule(rule);
+          planner.addRule(rule);
         }
-        planner.addRule(KuduToEnumerableConverter.INSTANCE);
-
-        // we include our own metadata provider that overrides calcite's default filter
-        // selectivity information in order to ensure that limits are pushed down into kudu
-        JaninoRelMetadataProvider relMetadataProvider =
-                JaninoRelMetadataProvider.of(KuduRelMetadataProvider.INSTANCE);
-        RelMetadataQuery.THREAD_PROVIDERS.set(relMetadataProvider);
     }
 
     @Override

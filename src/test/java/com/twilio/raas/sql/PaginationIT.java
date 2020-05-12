@@ -150,12 +150,10 @@ public class PaginationIT {
         row.addString(TRANSACTION_ID, "TXN" + (id));
         row.addString(PHONENUMBER, "512-123-123"+(id%2));
         OperationResponse op = insertSession.apply(upsert);
-        System.out.println(op);
     }
 
     public static void validateRow(ResultSet rs, long expectedTimestamp,
                                 String expectedTransactionId) throws SQLException {
-        System.out.println(rs.getString(ACCOUNT_SID)+" "+rs.getTimestamp(DATE_INITIATED).toInstant().toEpochMilli()+" "+rs.getString(TRANSACTION_ID));
         assertEquals("Mismatched usage account sid", ACCOUNT1,
                 rs.getString(ACCOUNT_SID));
         assertEquals("Mismatched date initiated", expectedTimestamp + 1,
