@@ -37,8 +37,6 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
   private static final String descendingSortTableName = "DescendingSortTestTable";
   private static final String customTemplate = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'DescendingSortTestTable', descendingSortedFields:['reverse_byte_field', 'reverse_short_field', 'reverse_int_field', 'reverse_long_field']}]}}]};caseSensitive=false;timeZone=UTC";
 
-  private static KuduTable descendingSortTestTable;
-
   @BeforeClass
   public static void setup() throws Exception {
     final List<ColumnSchema> columns = Arrays.asList(

@@ -1,27 +1,19 @@
 package com.twilio.raas.sql.rules;
 
-import java.math.BigDecimal;
-import java.util.Arrays;
-
-import com.twilio.raas.sql.rules.KuduPredicatePushDownVisitor;
-
-import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.kudu.ColumnTypeAttributes;
-import org.apache.kudu.ColumnSchema;
-import org.apache.kudu.Schema;
-import org.apache.kudu.Type;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.math.BigDecimal;
+import java.util.Arrays;
 
 /**
  * This test confirms the behavior of the push down filter parses the numeric literal into a proper

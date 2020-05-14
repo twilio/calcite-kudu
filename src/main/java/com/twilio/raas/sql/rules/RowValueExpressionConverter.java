@@ -4,29 +4,46 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexShuttle;
 import org.apache.calcite.rex.RexUtil;
+import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 
 import java.util.List;
 
 /**
- * Transforms row expressions being compared with a GREATER THAN operator
+ * Used to paginate through rows in the order of the primary key columns by comparing row
+ * expressions with a greater than operator
  *
- *  (A, B, C) >  (X, Y, Z)
+ *  If the the PK of the table is (A asc, B asc, C asc)
+ *  (A, B, C) >  ('a1', 'b1', 'c1')
  *   is transformed to
- *  (A > X)
- *   OR ((A = X) AND (B > Y))
- *   OR ((A = X) AND (B = Y) AND (C > Z))
+ *  (A > 'a1')
+ *   OR ((A = 'a1') AND (B > 'b1'))
+ *   OR ((A = 'a1') AND (B = 'b1') AND (C > 'c1'))
+ *
+ *  If the the PK of the table is (A asc, B desc, C asc)
+ *  (A, B, C) >  ('a1', 'b1', 'c1')
+ *   is transformed to
+ *  (A > 'a1')
+ *   OR ((A = 'a1') AND (B < 'b1'))
+ *   OR ((A = 'a1') AND (B = 'b1') AND (C > 'c1'))
+ *
+ *   This implementation is different from the SQL-92 standard
+ *   see https://stackoverflow.com/questions/32981903/sql-syntax-term-for-where-col1-col2-val1-val2/32982077#32982077
  */
 public class RowValueExpressionConverter  extends RexShuttle {
 
     private final RexBuilder rexBuilder;
+    private final List<Integer> descendingSortedFieldIndices;
 
-    public RowValueExpressionConverter(RexBuilder rexBuilder) {
+    public RowValueExpressionConverter(RexBuilder rexBuilder,
+                                       List<Integer> descendingSortedFieldIndices) {
         this.rexBuilder = rexBuilder;
+        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
     }
 
     @Override
@@ -64,19 +81,22 @@ public class RowValueExpressionConverter  extends RexShuttle {
                         andNodes.add(equalNode);
                     }
                     // create the single greater than column value comparison node
-                    RexNode greaterThanNode = rexBuilder.makeCall(call.getType(),
-                            SqlStdOperatorTable.GREATER_THAN, ImmutableList.of(rowExpr1.get(i),
-                                    rowExpr2.get(i)));
-                    andNodes.add(greaterThanNode);
+                  RexInputRef rexInputRef = (RexInputRef)rowExpr1.get(i);
+                  SqlBinaryOperator operator =
+                    (descendingSortedFieldIndices.contains(rexInputRef.getIndex())) ?
+                      SqlStdOperatorTable.LESS_THAN : SqlStdOperatorTable.GREATER_THAN;
+                  RexNode comparatorNode = rexBuilder.makeCall(call.getType(), operator,
+                    ImmutableList.of(rexInputRef, rowExpr2.get(i)));
+                    andNodes.add(comparatorNode);
                     // create an AND'ed expression
                     RexNode and = RexUtil.composeConjunction(rexBuilder, andNodes);
                     orNodes.add(and);
                 }
                 // create an OR'ed expression
                 return RexUtil.composeDisjunction(rexBuilder, orNodes);
-            // TODO handle other types of comparison operators
             default:
-                return super.visitCall(call);
+                throw new UnsupportedOperationException("Only greater than operator is supported " +
+                  "while comparing two row value constructors");
         }
     }
 
