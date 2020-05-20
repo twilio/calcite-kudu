@@ -10,7 +10,7 @@ public class JDBCUtil {
 
   public static final String DESCENDING_COLUMNS = getDescendingColumns();
 
-  public static String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0'," +
+  public static final String CALCITE_MODEL_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0'," +
     "defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom'," +
     "factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s'," + DESCENDING_COLUMNS +
     "}]};caseSensitive=false;timeZone=UTC";
