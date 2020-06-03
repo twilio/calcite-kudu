@@ -9,7 +9,9 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.tools.RelBuilderFactory;
 
 /**
- * Merges two projections unless they were created by {@link KuduProjectRule}
+ * Merges two projections unless the top projection contains an expression.
+ * This allows {@link KuduProjectRule} (which splits a projection that contains an expression into
+ * a LogicalCalc that wraps a KuduProjectRule) to work.
  */
 public class KuduProjectMergeRule extends ProjectMergeRule {
 
