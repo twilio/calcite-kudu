@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Optional;
 import java.util.Queue;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.AbstractEnumerable;
@@ -57,6 +58,7 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
                     catch (InterruptedException interrupted) {
                         logger.info("Interrupted during poll, closing scanner");
                         iterationNext = CalciteScannerMessage.createEndMessage();
+                        Thread.currentThread().interrupt();
                     }
                     if (iterationNext != null) {
                         switch (iterationNext.type) {
@@ -64,16 +66,38 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
                             logger.info("Closing scanner");
                             break;
                         case ERROR:
-                            logger.error("Scanner has a failure",
-                                iterationNext.failure.get());
+                            final Optional<Exception> failure = iterationNext.failure;
+                            if (failure.isPresent()) {
+                                logger.error("Scanner has a failure",
+                                    failure.get());
+                            }
+                            else {
+                                logger.error("Scanner had an unreported failure");
+                            }
                             break;
                         case ROW:
-                            logger.trace("Scanner found a row: {}",
-                                iterationNext.row.get());
+                            final Optional<CalciteRow> maybeRow = iterationNext.row;
+                            if (maybeRow.isPresent()) {
+                                logger.trace("Scanner found a row: {}",
+                                    maybeRow.get());
+                            }
+                            else {
+                                logger.error(
+                                        "ROW message was received but didn't contain row data. This shouldn't happen. Closing");
+                                iterationNext = CalciteScannerMessage.createEndMessage();
+                            }
                             break;
                         case BATCH_COMPLETED:
-                            logger.info("Batch completed for a scanner. Getting next batch");
-                            iterationNext.callback.get().nextBatch();
+                            final Optional<ScannerCallback> maybeScannerCallback = iterationNext.callback;
+                            if (maybeScannerCallback.isPresent()) {
+                                logger.info("Batch completed for a scanner. Getting next batch");
+                                maybeScannerCallback.get().nextBatch();
+                            }
+                            else {
+                                logger.error(
+                                        "Batch completed message for scanner but no reference to the callback. This shouldn't happen");
+                                iterationNext = CalciteScannerMessage.createEndMessage();
+                            }
                         }
                     }
 
@@ -95,9 +119,16 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
             public CalciteRow current() {
                 switch (next.type) {
                 case ROW:
-                    return next.row.get();
+                    final Optional<CalciteRow> maybeRow = next.row;
+                    if (maybeRow.isPresent()) {
+                        return maybeRow.get();
+                    }
+                    else {
+                        throw new RuntimeException("Expected next to have a row, it does not. This shouldn't happen");
+                    }
                 case ERROR:
-                    throw new RuntimeException(next.failure.get());
+                    final Exception failure =  next.failure.orElseGet(() -> new RuntimeException("Unreported failure occurred"));
+                    throw new RuntimeException("Calling current() on Failed rpc fetch", failure);
                 case CLOSE:
                     throw new RuntimeException("Calling current() where next is CLOSE message. This should never happen");
                 case BATCH_COMPLETED:

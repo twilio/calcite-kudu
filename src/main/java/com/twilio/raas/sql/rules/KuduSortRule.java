@@ -86,7 +86,7 @@ public abstract class KuduSortRule extends RelOptRule {
           while (pkColumnIndex < sortField.getFieldIndex()) {
             final KuduFilterVisitor visitor = new KuduFilterVisitor(pkColumnIndex);
             final Boolean foundFieldInCondition = originalCondition.accept(visitor);
-            if (foundFieldInCondition == Boolean.FALSE) {
+            if (foundFieldInCondition.equals(Boolean.FALSE)) {
               return false;
             }
             pkColumnIndex++;
@@ -185,7 +185,7 @@ public abstract class KuduSortRule extends RelOptRule {
         return call.operands.get(0).accept(this);
       case AND:
         for (final RexNode operand : call.operands) {
-          if (operand.accept(this) == Boolean.TRUE) {
+          if (operand.accept(this).equals(Boolean.TRUE)) {
             return Boolean.TRUE;
           }
         }

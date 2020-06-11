@@ -82,14 +82,14 @@ public final class CalciteKuduPredicate {
                     else if (rightHandValue instanceof Byte) {
                       return invertValue ?
                           KuduPredicate
-                              .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Byte.MAX_VALUE - (Byte)rightHandValue) :
+                              .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Byte.MAX_VALUE - (Byte)rightHandValue) :
                           KuduPredicate
                               .newComparisonPredicate(columnsSchema, op, (Byte) rightHandValue);
                     }
                     else if (rightHandValue instanceof Short) {
                       return invertValue ?
                           KuduPredicate
-                              .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Short.MAX_VALUE - (Short)rightHandValue) :
+                              .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Short.MAX_VALUE - (Short)rightHandValue) :
                           KuduPredicate
                               .newComparisonPredicate(columnsSchema, op, (Short) rightHandValue);
                     }
@@ -97,17 +97,17 @@ public final class CalciteKuduPredicate {
                       switch(tableSchema.getColumnByIndex(columnIdx).getType()) {
                         case INT8: return invertValue ?
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Byte.MAX_VALUE - new Byte(rightHandValue.toString())) :
+                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Byte.MAX_VALUE - new Byte(rightHandValue.toString())) :
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, op, new Byte(rightHandValue.toString()));
                         case INT16: return invertValue ?
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Short.MAX_VALUE - new Short(rightHandValue.toString())) :
+                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Short.MAX_VALUE - new Short(rightHandValue.toString())) :
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, op, new Short(rightHandValue.toString()));
                         case INT32: return invertValue ?
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Integer.MAX_VALUE - (Integer)rightHandValue) :
+                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Integer.MAX_VALUE - (Integer)rightHandValue) :
                             KuduPredicate
                                 .newComparisonPredicate(columnsSchema, op, (Integer) rightHandValue);
                         case INT64: return invertValue ?
@@ -165,7 +165,7 @@ public final class CalciteKuduPredicate {
         final int prime = 31;
         int result = 1;
         result = prime * result + columnIdx;
-        result = prime * result + ((operation == null) ? 0 : operation.hashCode());
+        result = prime * result + operation.hashCode();
         result = prime * result + ((rightHandValue == null) ? 0 : rightHandValue.hashCode());
         return result;
     }
@@ -181,10 +181,7 @@ public final class CalciteKuduPredicate {
         CalciteKuduPredicate other = (CalciteKuduPredicate) obj;
         if (columnIdx != other.columnIdx)
             return false;
-        if (operation == null) {
-            if (other.operation != null)
-                return false;
-        } else if (!operation.equals(other.operation))
+        if (!operation.equals(other.operation))
             return false;
         if (rightHandValue == null) {
             if (other.rightHandValue != null)

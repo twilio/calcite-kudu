@@ -81,6 +81,7 @@ final public class ScannerCallback
                 rowResults.put(CLOSE_MESSAGE);
             } catch (InterruptedException threadInterrupted) {
                 logger.error("Interrupted while closing. Means queue is full. Closing scanner");
+                Thread.currentThread().interrupt();
             }
             scanner.close();
         }
@@ -118,6 +119,7 @@ final public class ScannerCallback
             }
             catch (InterruptedException ignored) {
               logger.error("Interrupted during put, moving to close scanner");
+              Thread.currentThread().interrupt();
             }
         }
 
@@ -128,6 +130,7 @@ final public class ScannerCallback
             // Set the early exit to protect ourselves and close the scanner.
             earlyExit.set(true);
             scanner.close();
+            Thread.currentThread().interrupt();
         }
         return null;
     }

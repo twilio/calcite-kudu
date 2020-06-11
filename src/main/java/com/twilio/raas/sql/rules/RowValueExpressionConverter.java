@@ -58,7 +58,7 @@ public class RowValueExpressionConverter  extends RexShuttle {
         }
         final RexCall op1 = (RexCall)call.operands.get(0);
         final RexCall op2 = (RexCall)call.operands.get(1);
-        if (op2.getOperator().getKind() != SqlKind.ROW || op2.getOperator().getKind() != SqlKind.ROW) {
+        if (op1.getOperator().getKind() != SqlKind.ROW || op2.getOperator().getKind() != SqlKind.ROW) {
             // ensure both operands are row expressions
             return super.visitCall(call);
         }

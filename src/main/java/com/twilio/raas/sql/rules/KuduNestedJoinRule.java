@@ -55,7 +55,7 @@ public class KuduNestedJoinRule extends RelOptRule {
                 else if (callType == SqlKind.AND) {
                     for (final RexNode operand : rexCall.operands) {
                         final Boolean opResult = operand.accept(this);
-                        if (opResult == null || opResult == Boolean.FALSE) {
+                        if (opResult == null || opResult.equals(Boolean.FALSE)) {
                             return Boolean.FALSE;
                         }
                     }

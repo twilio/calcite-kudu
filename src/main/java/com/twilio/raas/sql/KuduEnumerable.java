@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 
@@ -167,10 +168,17 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
           }
           catch (InterruptedException interrupted) {
             fetched = CalciteScannerMessage.createEndMessage();
+            Thread.currentThread().interrupt();
           }
           if (fetched != null) {
             if (fetched.type == CalciteScannerMessage.MessageType.ERROR) {
-              throw new RuntimeException("A scanner failed, failing whole query", fetched.failure.get());
+              final Optional<Exception> failureReason = fetched.failure;
+              if (failureReason.isPresent()) {
+                throw new RuntimeException("A scanner failed, failing whole query", failureReason.get());
+              }
+              else {
+                throw new RuntimeException("A scanner failed, failed for unreported reason. Failing query");
+              }
             }
             if (fetched.type == CalciteScannerMessage.MessageType.CLOSE) {
               if (++finishedScanners >= scanners.size()) {
@@ -179,7 +187,15 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
               }
             }
             if (fetched.type == CalciteScannerMessage.MessageType.BATCH_COMPLETED) {
-              fetched.callback.get().nextBatch();
+              final Optional<ScannerCallback> callback = fetched.callback;
+              if (callback.isPresent()) {
+                callback.get().nextBatch();
+              }
+              else {
+                logger.error(
+                    "Scanner sent a BATCH_COMPLETED message but didn't provide a reference to it. This shouldn't happen");
+                return false;
+              }
             }
           }
 
@@ -189,7 +205,15 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
         if (next == null) {
           scanStats.setTimeToFirstRowMs();
         }
-        next = fetched.row.get().getRowData();
+        final Optional<CalciteRow> rowData = fetched.row;
+        if (rowData.isPresent()) {
+          next = rowData.get().getRowData();
+        }
+        else {
+          logger.error("Polled a {} message and expected a CalciteRow. The message doesn't contain a row: {} ",
+              fetched.type, fetched);
+          return false;
+        }
         totalMoves++;
         boolean limitReached = checkLimitReached(totalMoves);
         if (limitReached) {

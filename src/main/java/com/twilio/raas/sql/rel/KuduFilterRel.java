@@ -12,6 +12,7 @@ import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.kudu.Schema;
+import org.apache.kudu.client.KuduPredicate.ComparisonOp;
 
 import java.util.List;
 
@@ -59,8 +60,10 @@ public class KuduFilterRel extends Filter implements KuduRelNode {
             final StringBuilder sb = new StringBuilder();
             boolean first = true;
             for (final CalciteKuduPredicate predicate : scanPredicate) {
-                final String optionalComparator = (predicate.operation.isPresent() ?
-                        predicate.operation.get().name() : "") ;
+                final String optionalComparator = predicate.operation
+                    .map(ComparisonOp::name)
+                    .orElse("");
+
                 if (first) {
                     first =false;
                 }

@@ -32,7 +32,12 @@ public class ScannerMetrics {
     byte[] scannerId  = (byte[])getField(scanner, "scannerId", byte[].class);
     byte[] startPrimaryKey  = (byte[])getField(scanner, "startPrimaryKey", byte[].class);
     byte[] endPrimaryKey  = (byte[])getField(scanner, "endPrimaryKey", byte[].class);
-    this.table = table.getName();
+    if (table != null) {
+        this.table = table.getName();
+    }
+    else {
+        this.table = "UNKNOWN_TABLE";
+    }
     this.tablet = tablet !=null ? tablet.toString() : "null";
     this.scannerId = Bytes.pretty(scannerId);
     this.startPrimaryKey = Bytes.pretty(startPrimaryKey);

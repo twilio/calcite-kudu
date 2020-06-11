@@ -7,6 +7,7 @@ import java.util.List;
 import com.twilio.raas.sql.CalciteKuduPredicate;
 import org.apache.calcite.rex.RexBiVisitor;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.rex.RexCall;
 import org.apache.kudu.ColumnSchema;
 import org.apache.calcite.rex.RexOver;
@@ -199,13 +200,19 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
             Optional<KuduPredicate.ComparisonOp> maybeOp = findKuduOp(parent);
             final RexNode left = parent.operands.get(0);
             final int index = ((RexInputRef) left).getIndex();
+
             if (left.getKind() == SqlKind.INPUT_REF) {
-                switch(literal.getType().getSqlTypeName()) {
-                case NULL:
-                    // maybeOp should be empty. but this is explicit.
-                    return Collections.singletonList(
-                        Collections.singletonList(
+                // The only type that doesn't require maybeOp to be present
+                if (literal.getType().getSqlTypeName() == SqlTypeName.NULL) {
+                    return Collections.singletonList(Collections.singletonList(
                             new CalciteKuduPredicate(index, null, null)));
+                }
+                // everything else requires op to be set.
+                else if (!maybeOp.isPresent()) {
+                    return setEmpty();
+                }
+
+                switch(literal.getType().getSqlTypeName()) {
                 case BOOLEAN:
                   return Collections.singletonList(
                       Collections.singletonList(
