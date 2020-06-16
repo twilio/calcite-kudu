@@ -1,6 +1,10 @@
 package com.twilio.raas.sql;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.twilio.kudu.metadata.KuduTableMetadata;
+import com.twilio.raas.sql.schema.KuduTestSchemaFactoryBase;
 import org.apache.calcite.util.TimestampString;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.ColumnTypeAttributes;
@@ -28,6 +32,7 @@ import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -57,10 +62,7 @@ public class PaginationIT {
     private final boolean descending;
     private final String tableName;
 
-    private static final String customTemplate = "jdbc:calcite:model=inline:{version: '1.0'," +
-      "defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql" +
-      ".KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'TABLE_DESC', " +
-      "descendingSortedFields:['date_initiated']}]}}]};caseSensitive=false;timeZone=UTC";
+    private static String JDBC_URL;
 
     @Parameterized.Parameters(name="PaginationIT_descending={0}")
     public static synchronized Collection<Boolean> data() {
@@ -78,6 +80,28 @@ public class PaginationIT {
 
       createTable(client, "TABLE_ASC", false);
       createTable(client, "TABLE_DESC", true);
+
+      JDBC_URL = String.format(JDBCUtil.CALCITE_TEST_MODEL_TEMPLATE,
+        KuduTestSchemaFactory.class.getName(), testHarness.getMasterAddressesAsString());
+    }
+
+    public static class KuduTestSchemaFactory extends KuduTestSchemaFactoryBase {
+      private static final Map<String, KuduTableMetadata> kuduTableConfigMap =
+        new ImmutableMap.Builder<String, KuduTableMetadata>()
+          .put("TABLE_DESC",
+            new KuduTableMetadata.KuduTableMetadataBuilder()
+              .setDescendingOrderedColumnNames(Lists.newArrayList("date_initiated"))
+              .build()
+          )
+          .build();
+
+      // Public singleton, per factory contract.
+      public static final DescendingSortedWithNonDateTimeFieldsIT.KuduTestSchemaFactory INSTANCE =
+        new DescendingSortedWithNonDateTimeFieldsIT.KuduTestSchemaFactory(kuduTableConfigMap);
+
+      public KuduTestSchemaFactory(Map<String, KuduTableMetadata> kuduTableConfigMap) {
+        super(kuduTableConfigMap);
+      }
     }
 
     private static Timestamp normalizeTimestamp(boolean descending, long ts) {
@@ -164,8 +188,7 @@ public class PaginationIT {
 
     @Test
     public void testQueryNoRows() throws Exception {
-        String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
             TimestampString timestampString = TimestampString.fromMillisSinceEpoch(100);
             String sqlFormat = "SELECT * FROM %s WHERE account_sid = '%s' AND " +
               "date_initiated < TIMESTAMP'%s'";
@@ -183,7 +206,7 @@ public class PaginationIT {
 
     @Test
     public void testLimit() throws Exception {
-        String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBC_URL, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sql = String.format("SELECT * FROM %s LIMIT 3", tableName);
             String expectedPlan = String.format("KuduToEnumerableRel\n" +
@@ -204,8 +227,7 @@ public class PaginationIT {
 
     @Test
     public void testFilterWithLimitAndOffset() throws Exception {
-        String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
             // this query will return rows in an unpredictable order
             String sqlFormat = "SELECT * FROM %s "
                     + "WHERE account_sid = '%s' "
@@ -250,8 +272,7 @@ public class PaginationIT {
 
     @Test
     public void testNotHandledFilter() throws Exception {
-        String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
             String sqlFormat = "SELECT * FROM %s WHERE account_sid = '%s' AND phonenumber like '%%0' ";
             String sql = String.format(sqlFormat, tableName, ACCOUNT1);
 
@@ -282,8 +303,7 @@ public class PaginationIT {
 
     @Test
     public void testSortWithFilterAndLimitAndOffset() throws Exception {
-        String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
             String firstBatchSqlFormat = "SELECT * FROM %s "
                     + "WHERE account_sid = '%s' "
                     + "ORDER BY account_sid, date_initiated %s, transaction_id "
@@ -340,8 +360,7 @@ public class PaginationIT {
 
     @Test
     public void testQueryMore() throws Exception {
-        String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-        try (Connection conn = DriverManager.getConnection(url)) {
+        try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
             TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
             TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
             String dateInitiatedOrder = descending ? "DESC" : "ASC";

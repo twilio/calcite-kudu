@@ -1,26 +1,12 @@
 package com.twilio.raas.sql;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.List;
-
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.twilio.kudu.metadata.KuduTableMetadata;
+import com.twilio.raas.sql.schema.KuduTestSchemaFactoryBase;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.Type;
-import org.apache.kudu.client.AsyncKuduSession;
-import org.apache.kudu.client.KuduTable;
-import org.apache.kudu.client.PartialRow;
-import org.apache.kudu.client.Upsert;
 import org.apache.kudu.test.KuduTestHarness;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -29,12 +15,25 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 @RunWith(JUnit4.class)
 public final class SortedAggregationIT {
   @ClassRule
   public static KuduTestHarness testHarness = new KuduTestHarness();
-  private static final String descendingSortTableName = "DescendingSortTestTable";
-  private static final String customTemplate = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'DescendingSortTestTable', descendingSortedFields:['REVERSE_BYTE_FIELD', 'REVERSE_SHORT_FIELD', 'REVERSE_INT_FIELD', 'REVERSE_LONG_FIELD']}]}}]};caseSensitive=false;timeZone=UTC";
+  private static final String descendingSortTableName = "SortedAggregationIT";
+  private static String JDBC_URL;
 
   @BeforeClass
   public static void setup() throws Exception {
@@ -54,17 +53,41 @@ public final class SortedAggregationIT {
             .addHashPartitions(Arrays.asList("ACCOUNT_SID"), 5)
             .setNumReplicas(1));
 
+    JDBC_URL = String.format(JDBCUtil.CALCITE_TEST_MODEL_TEMPLATE,
+      KuduTestSchemaFactory.class.getName(), testHarness.getMasterAddressesAsString());
+
     // insert rows
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       PreparedStatement stmt = conn.prepareStatement("INSERT INTO \"" + descendingSortTableName + "\" " +
         "VALUES (?,?,?,?,?,?)");
       insertRow(stmt, (byte)4, new Short("32"), 100, 1000L, "message-body");
       insertRow(stmt, (byte)4, new Short("33"), 101, 1001L, "message-body");
       insertRow(stmt, (byte)5, new Short("32"), 100, 50L, "message-body");
-      insertRow(stmt, (byte)5, new Short("32"), 100, 30L, "message-body");
+      insertRow(stmt, (byte)5, new Short("32"), 101, 30L, "message-body");
+      insertRow(stmt, (byte)6, new Short("32"), 100, 1001L, "user-login");
       insertRow(stmt, (byte)6, new Short("33"), 101, 1001L, "user-login");
-      insertRow(stmt, (byte)6, new Short("33"), 101, 1001L, "user-login");
+      conn.commit();
+    }
+
+  }
+
+  public static class KuduTestSchemaFactory extends KuduTestSchemaFactoryBase {
+    private static final Map<String, KuduTableMetadata> kuduTableConfigMap =
+      new ImmutableMap.Builder<String, KuduTableMetadata>()
+        .put(descendingSortTableName,
+          new KuduTableMetadata.KuduTableMetadataBuilder()
+            .setDescendingOrderedColumnNames(Lists.newArrayList("REVERSE_BYTE_FIELD",
+              "REVERSE_SHORT_FIELD", "REVERSE_INT_FIELD", "REVERSE_LONG_FIELD"))
+            .build()
+        )
+        .build();
+
+    // Public singleton, per factory contract.
+    public static final DescendingSortedWithNonDateTimeFieldsIT.KuduTestSchemaFactory INSTANCE =
+      new DescendingSortedWithNonDateTimeFieldsIT.KuduTestSchemaFactory(kuduTableConfigMap);
+
+    public KuduTestSchemaFactory(Map<String, KuduTableMetadata> kuduTableConfigMap) {
+      super(kuduTableConfigMap);
     }
   }
 
@@ -92,8 +115,7 @@ public final class SortedAggregationIT {
                 "limit 1",
         descendingSortTableName);
 
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet queryResult = conn.createStatement().executeQuery("SELECT * FROM " + descendingSortTableName);
       queryResult = conn.createStatement().executeQuery(sql);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
@@ -105,7 +127,7 @@ public final class SortedAggregationIT {
         "    KuduSortRel(sort0=[$0], dir0=[ASC], fetch=[1], groupBySorted=[true])\n" +
         "      KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_LONG_FIELD=[$4], REVERSE_INT_FIELD=[$3])\n" +
         "        KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n" +
-        "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "          KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
 
       assertTrue("Should have results to iterate over",
           queryResult.next());
@@ -127,8 +149,7 @@ public final class SortedAggregationIT {
         "SELECT account_sid, sum(cast(reverse_long_field as bigint)) \"reverse_long_field\" FROM %s WHERE resource_type = 'message-body' GROUP BY reverse_byte_field, account_sid ORDER BY account_sid ASC, reverse_byte_field DESC limit 2",
         descendingSortTableName);
 
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
 
@@ -139,7 +160,7 @@ public final class SortedAggregationIT {
           "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[2], groupBySorted=[true])\n" +
           "        KuduProjectRel(REVERSE_BYTE_FIELD=[$1], ACCOUNT_SID=[$0], $f2=[$4])\n" +
           "          KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n" +
-          "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+          "            KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -166,8 +187,7 @@ public final class SortedAggregationIT {
         "SELECT account_sid, sum(reverse_long_field) FROM %s WHERE resource_type = 'message-body' GROUP BY account_sid ORDER BY account_sid DESC limit 1",
         descendingSortTableName);
 
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       final String expectedPlan =
@@ -177,7 +197,7 @@ public final class SortedAggregationIT {
         "      KuduToEnumerableRel\n" +
         "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_LONG_FIELD=[$4])\n" +
         "          KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n" +
-        "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "            KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -199,8 +219,7 @@ public final class SortedAggregationIT {
         "SELECT account_sid, sum(cast(reverse_long_field as bigint)) \"reverse_long_field\" FROM %s WHERE account_sid = '%s' GROUP BY reverse_byte_field, account_sid ORDER BY account_sid ASC, reverse_byte_field DESC limit 1 offset 1",
         descendingSortTableName, JDBCQueryIT.ACCOUNT_SID);
 
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       final String expectedPlan =
@@ -210,7 +229,7 @@ public final class SortedAggregationIT {
           "      KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], offset=[1], fetch=[1], groupBySorted=[true])\n" +
           "        KuduProjectRel(REVERSE_BYTE_FIELD=[$1], ACCOUNT_SID=[$0], $f2=[$4])\n" +
           "          KuduFilterRel(ScanToken 1=[ACCOUNT_SID EQUAL AC1234567])\n" +
-          "            KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+          "            KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -236,8 +255,7 @@ public final class SortedAggregationIT {
                 "reverse_int_field ASC limit 1",
         descendingSortTableName);
 
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       final String expectedPlan =
@@ -250,7 +268,7 @@ public final class SortedAggregationIT {
         "          KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_INT_FIELD=[$3], " +
                 "REVERSE_LONG_FIELD=[$4])\n" +
         "            KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n" +
-        "              KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "              KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
 
       assertFalse(String.format("Plan should not contain KuduSortRel. It is\n%s", plan),
           plan.contains("KuduSortRel"));
@@ -265,8 +283,7 @@ public final class SortedAggregationIT {
         "SELECT account_sid, reverse_byte_field, sum(reverse_long_field), sum(reverse_int_field) FROM %s WHERE account_sid = '%s' GROUP BY account_sid, reverse_byte_field ORDER BY account_sid ASC, reverse_byte_field DESC limit 4",
         descendingSortTableName, JDBCQueryIT.ACCOUNT_SID);
 
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
@@ -277,7 +294,7 @@ public final class SortedAggregationIT {
         "    KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC], fetch=[4], groupBySorted=[true])\n" +
         "      KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_BYTE_FIELD=[$1], REVERSE_LONG_FIELD=[$4], REVERSE_INT_FIELD=[$3])\n" +
         "        KuduFilterRel(ScanToken 1=[ACCOUNT_SID EQUAL AC1234567])\n" +
-        "          KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "          KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
 
       assertTrue("Should have results to iterate over",
           queryResult.next());

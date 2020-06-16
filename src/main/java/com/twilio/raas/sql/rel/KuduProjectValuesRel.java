@@ -6,10 +6,11 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rex.RexDynamicParam;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexNode;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class KuduProjectValuesRel extends Project implements KuduRelNode {
 
@@ -26,7 +27,9 @@ public class KuduProjectValuesRel extends Project implements KuduRelNode {
 
   @Override
   public void implement(Implementor implementor) {
-    implementor.columnNames = rowType.getFieldNames();
+    implementor.columnIndexes = rowType.getFieldList().stream()
+      .map(RelDataTypeField::getIndex)
+      .collect(Collectors.toList());
     implementor.numBindExpressions = getProjects().size();
   }
 

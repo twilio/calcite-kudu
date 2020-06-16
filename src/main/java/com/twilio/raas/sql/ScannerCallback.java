@@ -1,5 +1,6 @@
 package com.twilio.raas.sql;
 
+import java.util.ArrayList;
 import java.util.concurrent.BlockingQueue;
 import com.stumbleupon.async.Callback;
 import org.apache.kudu.client.RowResultIterator;
@@ -38,19 +39,23 @@ final public class ScannerCallback
     final List<Integer> descendingSortedFieldIndices;
     final KuduScanStats scanStats;
 
-    public ScannerCallback(final AsyncKuduScanner scanner,
+    public ScannerCallback(final CalciteKuduTable calciteKuduTable,
+                           final AsyncKuduScanner scanner,
                            final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults,
                            final AtomicBoolean scansShouldStop,
                            final AtomicBoolean cancelFlag,
-                           final Schema tableSchema,
                            final Schema projectedSchema,
-        final List<Integer> descendingSortedFieldIndices,
-        final KuduScanStats scanStats) {
+                           final KuduScanStats scanStats,
+                           final boolean isScannerSorted) {
         this.scanner = scanner;
         this.rowResults = rowResults;
         this.scansShouldStop = scansShouldStop;
-        this.primaryKeyColumnsInProjection = CalciteRow.findPrimaryKeyColumnsInProjection(projectedSchema, tableSchema);
-        this.descendingSortedFieldIndices = CalciteRow.findColumnsIndicesInProjection(projectedSchema, descendingSortedFieldIndices, tableSchema);
+        // if the scanner is sorted, KuduEnumerable has to merge the results from multiple
+        // scanners (by picking the smallest row order by primary key key columns)
+        this.primaryKeyColumnsInProjection = isScannerSorted ?
+          calciteKuduTable.getPrimaryKeyColumnsInProjection(projectedSchema) : new ArrayList<>();
+        this.descendingSortedFieldIndices =
+          calciteKuduTable.getDescendingColumnsIndicesInProjection(projectedSchema);
         this.scanStats = scanStats;
         // @NOTE: this can be NULL. Need to check it.
         // @SEE: org.apache.calcite.plan.AbstractRelOptPlanner(RelOptCostFactory, Context)

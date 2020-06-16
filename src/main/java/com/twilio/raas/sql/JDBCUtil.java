@@ -1,10 +1,7 @@
 package com.twilio.raas.sql;
 
-import com.google.common.base.Joiner;
-import com.twilio.dataset.DatasetUtil;
-
-import java.util.List;
-import java.util.stream.Collectors;
+import com.twilio.raas.sql.schema.KuduSchemaFactory;
+import org.apache.calcite.jdbc.KuduDriver;
 
 public class JDBCUtil {
 
@@ -16,25 +13,20 @@ public class JDBCUtil {
     }
   }
 
-  public static final String DESCENDING_COLUMNS = getDescendingColumns();
+  public static String CALCITE_TEST_MODEL_TEMPLATE = "jdbc:kudu:model=inline:{version: '1.0'," +
+    "defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'%s'," +
+    "operand:{connect:'%s', enableInserts:'true'}}]};caseSensitive=false;timeZone=UTC";
 
-  // TODO see if we can use KuduSchemaFactory by default in KuduDriver
+  // This enables INSERT support which automatically maintains cube tables when a fact table
+  // is written to. It should only be used for testing from a single process as we maintain
+  // state on the client to compute the aggregated rows, which is not correct if a table is being
+  // written to from multiple processes
+  public static String CALCITE_MODEL_TEMPLATE_INSERT_ENABLED = "jdbc:kudu:model=inline:{version: '1.0'," +
+    "defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'"
+    + KuduSchemaFactory.class.getName() + "',operand:{connect:'%s', enableInserts:'true'}}]};caseSensitive=false;timeZone=UTC";
+
   public static String CALCITE_MODEL_TEMPLATE = "jdbc:kudu:model=inline:{version: '1.0'," +
-    "defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom'," +
-    "factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s'," + DESCENDING_COLUMNS +
-    "}]};caseSensitive=false;timeZone=UTC";
-
-  private static String getDescendingColumns() {
-    StringBuilder sb = new StringBuilder("kuduTableConfigs:[");
-    List <String> descendingList = DatasetUtil.INSTANCE.getDescendingDateFields()
-      .stream()
-      .map(
-        descendingInfo -> String.format("{tableName: '%s', descendingSortedFields:['%s']}",
-          descendingInfo.tableName, descendingInfo.columnName))
-      .collect(Collectors.toList());
-    sb.append(Joiner.on(", ").join(descendingList));
-    sb.append("]}");
-    return sb.toString();
-  }
+    "defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'"
+    + KuduSchemaFactory.class.getName() + "',operand:{connect:'%s'}}]};caseSensitive=false;timeZone=UTC";
 
 }

@@ -1,7 +1,8 @@
-package com.twilio.raas.sql;
+package org.apache.calcite.jdbc;
 
-import org.apache.calcite.jdbc.CalcitePrepare;
-import org.apache.calcite.jdbc.Driver;
+import org.apache.calcite.avatica.AvaticaConnection;
+import org.apache.calcite.avatica.Handler;
+import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.plan.RelOptPlanner;
@@ -33,8 +34,20 @@ public class KuduDriver extends Driver {
     return CALCITE_PREPARE_FACTORY;
   }
 
-  @Override protected String getConnectStringPrefix() {
+  @Override
+  protected String getConnectStringPrefix() {
     return CONNECT_STRING_PREFIX;
+  }
+
+  @Override
+  public Meta createMeta(AvaticaConnection connection) {
+    return new KuduMetaImpl((CalciteConnectionImpl) connection);
+  }
+
+  @Override
+  protected Handler createHandler() {
+    Handler handler = super.createHandler();
+    return handler;
   }
 
 }

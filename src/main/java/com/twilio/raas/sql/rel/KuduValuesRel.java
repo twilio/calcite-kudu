@@ -3,13 +3,13 @@ package com.twilio.raas.sql.rel;
 import com.google.common.collect.ImmutableList;
 import com.twilio.raas.sql.KuduRelNode;
 import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptCost;
-import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.core.Values;
-import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexLiteral;
+
+import java.util.stream.Collectors;
 
 public class KuduValuesRel extends Values implements KuduRelNode {
 
@@ -23,7 +23,9 @@ public class KuduValuesRel extends Values implements KuduRelNode {
 
   @Override
   public void implement(Implementor implementor) {
-    implementor.columnNames = rowType.getFieldNames();
+    implementor.columnIndexes = rowType.getFieldList().stream()
+      .map(RelDataTypeField::getIndex)
+      .collect(Collectors.toList());
     implementor.tuples = tuples;
   }
 

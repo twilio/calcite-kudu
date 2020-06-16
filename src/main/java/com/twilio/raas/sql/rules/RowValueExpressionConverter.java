@@ -2,6 +2,7 @@ package com.twilio.raas.sql.rules;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.twilio.raas.sql.CalciteKuduTable;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
@@ -38,12 +39,11 @@ import java.util.List;
 public class RowValueExpressionConverter  extends RexShuttle {
 
     private final RexBuilder rexBuilder;
-    private final List<Integer> descendingSortedFieldIndices;
+    private final CalciteKuduTable calciteKuduTable;
 
-    public RowValueExpressionConverter(RexBuilder rexBuilder,
-                                       List<Integer> descendingSortedFieldIndices) {
+    public RowValueExpressionConverter(RexBuilder rexBuilder, CalciteKuduTable calciteKuduTable) {
         this.rexBuilder = rexBuilder;
-        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
+        this.calciteKuduTable = calciteKuduTable;
     }
 
     @Override
@@ -83,7 +83,7 @@ public class RowValueExpressionConverter  extends RexShuttle {
                     // create the single greater than column value comparison node
                   RexInputRef rexInputRef = (RexInputRef)rowExpr1.get(i);
                   SqlBinaryOperator operator =
-                    (descendingSortedFieldIndices.contains(rexInputRef.getIndex())) ?
+                    calciteKuduTable.isColumnOrderedDesc((rexInputRef.getIndex())) ?
                       SqlStdOperatorTable.LESS_THAN : SqlStdOperatorTable.GREATER_THAN;
                   RexNode comparatorNode = rexBuilder.makeCall(call.getType(), operator,
                     ImmutableList.of(rexInputRef, rowExpr2.get(i)));

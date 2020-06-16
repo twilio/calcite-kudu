@@ -1,9 +1,8 @@
 package com.twilio.raas.sql;
 
-import java.sql.JDBCType;
-import java.sql.Time;
-import java.util.List;
 import java.util.Optional;
+
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Type;
 import org.apache.kudu.client.KuduPredicate;
@@ -41,114 +40,125 @@ public final class CalciteKuduPredicate {
     /**
      * Transforms this POJO into a proper {@link KuduPredicate}
      *
-     * @param tableSchema  table schema to use for the predicate
+     * @param columnSchema  column schema to use for the predicate
+     * @param invertValue   true if the column is stored in descending order
      *
      * @return {@code KuduPredicate} that represents this POJO
      */
-    public KuduPredicate toPredicate(Schema tableSchema, List<Integer> descendingSortedFieldIndices) {
-        final ColumnSchema columnsSchema = tableSchema.getColumnByIndex(columnIdx);
-        final boolean invertValue = descendingSortedFieldIndices.contains(
-            columnIdx);
+    public KuduPredicate toPredicate(ColumnSchema columnSchema, boolean invertValue) {
         return this.operation
             .map(op -> {
                     if (rightHandValue instanceof Boolean) {
                         return KuduPredicate
-                            .newComparisonPredicate(columnsSchema, op, (Boolean) rightHandValue);
+                            .newComparisonPredicate(columnSchema, op, (Boolean) rightHandValue);
                     }
                     else if (rightHandValue instanceof BigDecimal) {
                         return KuduPredicate
-                            .newComparisonPredicate(columnsSchema, op, (BigDecimal) rightHandValue);
+                            .newComparisonPredicate(columnSchema, op, (BigDecimal) rightHandValue);
                     }
                     else if (rightHandValue instanceof Double) {
                         return KuduPredicate
-                            .newComparisonPredicate(columnsSchema, op, (Double) rightHandValue);
+                            .newComparisonPredicate(columnSchema, op, (Double) rightHandValue);
                     }
                     else if (rightHandValue instanceof Float) {
                         return KuduPredicate
-                            .newComparisonPredicate(columnsSchema, op, (Float) rightHandValue);
+                            .newComparisonPredicate(columnSchema, op, (Float) rightHandValue);
                     }
                     else if (rightHandValue instanceof Timestamp) {
                       return invertValue ?
                           KuduPredicate
-                              .newComparisonPredicate(columnsSchema, invertComparisonOp(op),
+                              .newComparisonPredicate(columnSchema, invertComparisonOp(op),
                                   new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - ((Timestamp)rightHandValue).toInstant().toEpochMilli())) :
                           KuduPredicate
-                              .newComparisonPredicate(columnsSchema, op, (Timestamp) rightHandValue);
+                              .newComparisonPredicate(columnSchema, op, (Timestamp) rightHandValue);
                     }
                     else if (rightHandValue instanceof String) {
                         return KuduPredicate
-                            .newComparisonPredicate(columnsSchema, op, (String) rightHandValue);
+                            .newComparisonPredicate(columnSchema, op, (String) rightHandValue);
                     }
                     else if (rightHandValue instanceof Byte) {
                       return invertValue ?
                           KuduPredicate
-                              .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Byte.MAX_VALUE - (Byte)rightHandValue) :
+                              .newComparisonPredicate(columnSchema, invertComparisonOp(op), 1L * Byte.MAX_VALUE - (Byte)rightHandValue) :
                           KuduPredicate
-                              .newComparisonPredicate(columnsSchema, op, (Byte) rightHandValue);
+                              .newComparisonPredicate(columnSchema, op, (Byte) rightHandValue);
                     }
                     else if (rightHandValue instanceof Short) {
                       return invertValue ?
                           KuduPredicate
-                              .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Short.MAX_VALUE - (Short)rightHandValue) :
+                              .newComparisonPredicate(columnSchema, invertComparisonOp(op), 1L * Short.MAX_VALUE - (Short)rightHandValue) :
                           KuduPredicate
-                              .newComparisonPredicate(columnsSchema, op, (Short) rightHandValue);
+                              .newComparisonPredicate(columnSchema, op, (Short) rightHandValue);
                     }
                     else if (rightHandValue instanceof Integer) {
-                      switch(tableSchema.getColumnByIndex(columnIdx).getType()) {
+                      switch(columnSchema.getType()) {
                         case INT8: return invertValue ?
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Byte.MAX_VALUE - new Byte(rightHandValue.toString())) :
+                                .newComparisonPredicate(columnSchema, invertComparisonOp(op), 1L * Byte.MAX_VALUE - new Byte(rightHandValue.toString())) :
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, op, new Byte(rightHandValue.toString()));
+                                .newComparisonPredicate(columnSchema, op, new Byte(rightHandValue.toString()));
                         case INT16: return invertValue ?
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Short.MAX_VALUE - new Short(rightHandValue.toString())) :
+                                .newComparisonPredicate(columnSchema, invertComparisonOp(op), 1L * Short.MAX_VALUE - new Short(rightHandValue.toString())) :
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, op, new Short(rightHandValue.toString()));
+                                .newComparisonPredicate(columnSchema, op, new Short(rightHandValue.toString()));
                         case INT32: return invertValue ?
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), 1L * Integer.MAX_VALUE - (Integer)rightHandValue) :
+                                .newComparisonPredicate(columnSchema, invertComparisonOp(op), 1L * Integer.MAX_VALUE - (Integer)rightHandValue) :
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, op, (Integer) rightHandValue);
+                                .newComparisonPredicate(columnSchema, op, (Integer) rightHandValue);
                         case INT64: return invertValue ?
                             // UNIXTIME_MICROS wont come in as an Integer. So safe to ignore
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op), Long.MAX_VALUE - (Long)rightHandValue) :
+                                .newComparisonPredicate(columnSchema, invertComparisonOp(op), Long.MAX_VALUE - (Long)rightHandValue) :
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, op, (Long) rightHandValue);
+                                .newComparisonPredicate(columnSchema, op, (Long) rightHandValue);
                         case DECIMAL: return KuduPredicate
-                                .newComparisonPredicate(columnsSchema, op, BigDecimal.valueOf(((Number) rightHandValue).longValue()));
+                                .newComparisonPredicate(columnSchema, op, BigDecimal.valueOf(((Number) rightHandValue).longValue()));
                         default: throw new IllegalArgumentException(
                             String.format("Passed in predicate value:%s is incompatible with table datatype:%s",
                                           rightHandValue.toString(),
-                                          tableSchema.getColumnByIndex(columnIdx).getType().getName()));
+                                          columnSchema.getName()));
                       }
                     }
                     else if (rightHandValue instanceof Long) {
                       if (invertValue) {
                         // Long as well as UNIXTIME_MICROS return Long value
-                        return (tableSchema.getColumnByIndex(columnIdx).getType() == Type.UNIXTIME_MICROS) ?
+                        return (columnSchema.getType() == Type.UNIXTIME_MICROS) ?
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op),
+                                .newComparisonPredicate(columnSchema, invertComparisonOp(op),
                                     CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (Long)rightHandValue) :
                             KuduPredicate
-                                .newComparisonPredicate(columnsSchema, invertComparisonOp(op),
+                                .newComparisonPredicate(columnSchema, invertComparisonOp(op),
                                     Long.MAX_VALUE - (Long)rightHandValue);
                       }
-                      else if (tableSchema.getColumnByIndex(columnIdx).getType() == Type.DECIMAL) {
+                      else if (columnSchema.getType() == Type.DECIMAL) {
                         return KuduPredicate
-                          .newComparisonPredicate(columnsSchema, op, BigDecimal.valueOf(((Number) rightHandValue).longValue()));
+                          .newComparisonPredicate(columnSchema, op, BigDecimal.valueOf(((Number) rightHandValue).longValue()));
                       }
-                      return KuduPredicate.newComparisonPredicate(columnsSchema, op, (Long) rightHandValue);
+                      return KuduPredicate.newComparisonPredicate(columnSchema, op, (Long) rightHandValue);
                     }
                     // @TODO: this covers all the possible types known in kudu 1.9
                     // So.... this shouldn't ever happen
                     return null;
                 })
-            .orElse(KuduPredicate.newIsNullPredicate(columnsSchema));
+            .orElse(KuduPredicate.newIsNullPredicate(columnSchema));
     }
 
-    private KuduPredicate.ComparisonOp invertComparisonOp(final KuduPredicate.ComparisonOp currentOp) {
+  /**
+   * Transforms this POJO into a proper {@link KuduPredicate}
+   *
+   * @param calciteKuduTable table to use to generate predicate
+   * @return {@code KuduPredicate} that represents this POJO
+   */
+  public KuduPredicate toPredicate(CalciteKuduTable calciteKuduTable) {
+    final Schema tableSchema = calciteKuduTable.getKuduTable().getSchema();
+    final ColumnSchema columnsSchema = tableSchema.getColumnByIndex(columnIdx);
+    final boolean invertValue = calciteKuduTable.isColumnOrderedDesc(columnIdx);
+    return toPredicate(columnsSchema, invertValue);
+  }
+
+  private KuduPredicate.ComparisonOp invertComparisonOp(final KuduPredicate.ComparisonOp currentOp) {
       switch(currentOp) {
         case GREATER: return KuduPredicate.ComparisonOp.LESS;
         case GREATER_EQUAL: return KuduPredicate.ComparisonOp.LESS_EQUAL;

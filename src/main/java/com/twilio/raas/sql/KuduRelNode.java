@@ -53,7 +53,7 @@ public interface KuduRelNode extends RelNode {
         public boolean groupByLimited = false;
 
         // information required for executing an update
-        public List<String> columnNames;
+        public List<Integer> columnIndexes;
         // list of tuples from a regular Statement
         public ImmutableList<ImmutableList<RexLiteral>> tuples;
         // number of column values to be bound from a PreparedStatement

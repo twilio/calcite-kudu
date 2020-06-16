@@ -1,11 +1,17 @@
 package com.twilio.raas.sql;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.annotations.VisibleForTesting;
+import com.twilio.kudu.metadata.CubeTableInfo;
+import com.twilio.kudu.metadata.KuduTableMetadata;
+import com.twilio.raas.sql.mutation.CubeMaintainer;
+import com.twilio.raas.sql.mutation.CubeMutationState;
+import com.twilio.raas.sql.mutation.MutationState;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.linq4j.Enumerable;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -19,7 +25,6 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.ModifiableTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
-import org.apache.kudu.client.KuduException;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.util.TimestampUtil;
 import org.apache.kudu.Schema;
@@ -36,7 +41,6 @@ import org.apache.calcite.linq4j.Enumerator;
 import org.apache.kudu.client.KuduPredicate;
 
 import java.util.Collections;
-import java.util.stream.Collectors;
 
 import org.apache.calcite.adapter.java.AbstractQueryableTable;
 import org.apache.calcite.linq4j.QueryProvider;
@@ -58,8 +62,8 @@ import org.slf4j.LoggerFactory;
  *
  * It requires a {@link KuduTable} to be opened and ready to be used.
  */
-public final class CalciteKuduTable extends AbstractQueryableTable
-    implements TranslatableTable, ModifiableTable {
+public class CalciteKuduTable extends AbstractQueryableTable
+    implements TranslatableTable {
     private static final Logger logger = LoggerFactory.getLogger(CalciteKuduTable.class);
 
     public static final Instant EPOCH_DAY_FOR_REVERSE_SORT = Instant.parse("9999-12-31T00:00:00.000000Z");
@@ -71,37 +75,73 @@ public final class CalciteKuduTable extends AbstractQueryableTable
     private final static Double CUBE_TABLE_ROW_COUNT = 2000000.0;
     private final static Double FACT_TABLE_ROW_COUNT = 20000000.0;
 
-    private final KuduTable kuduTable;
-    private final AsyncKuduClient client;
-    private final List<Integer> descendingSortedFieldIndices;
+    protected final KuduTable kuduTable;
+    protected final AsyncKuduClient client;
 
-    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client) {
-        this(openedTable, client, Collections.<Integer>emptyList());
-    }
+    // list of column indexes for columns that are stored in descending order
+    protected final List<Integer> descendingOrderedColumnIndexes;
 
-    /**
-     * Create the {@code CalciteKuduTable} for a physical scan over
-     * the provided {@link KuduTable}. {@code KuduTable} must exist
-     * and be opened.
-     */
-    public CalciteKuduTable(final KuduTable openedTable, final AsyncKuduClient client, final List<Integer> descendingSortedFieldIndices) {
+    // index of the column that represents event time
+    protected final int timestampColumnIndex;
+    // list of cube tables (if this is a fact table)
+    protected final List<CalciteKuduTable> cubeTables;
+    // type of table
+    protected final TableType tableType;
+
+    // type of table
+    protected final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType;
+
+  /**
+   * Create the {@code CalciteKuduTable} for a physical scan over the provided{@link KuduTable}.
+   * {@code KuduTable} must exist and be opened.
+   *
+   * Use {@link CalciteKuduTableBuilder} to build a table instead of this constructor
+   *
+   * @param kuduTable the opened kudu table
+   * @param client  kudu client that is used to write mutations
+   * @param descendingOrderColumnIndexes  indexes of columns that are stored in descending ordere
+   * @param cubeTables the list of cube tables (if this is a fact table)
+   * @param tableType type of this table
+   */
+   CalciteKuduTable(final KuduTable kuduTable, final AsyncKuduClient client,
+                     final List<Integer> descendingOrderColumnIndexes,
+                     final int timestampColumnIndex, final List<CalciteKuduTable> cubeTables,
+                     final TableType tableType, final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType) {
         super(Object[].class);
-        this.kuduTable = openedTable;
+        this.kuduTable = kuduTable;
         this.client = client;
-        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
+        this.descendingOrderedColumnIndexes = descendingOrderColumnIndexes;
+        this.cubeTables = cubeTables;
+        this.tableType = tableType;
+        this.timestampColumnIndex = timestampColumnIndex;
+        this.eventTimeAggregationType = eventTimeAggregationType;
     }
 
     @Override
     public Statistic getStatistic() {
-      final String tableName = this.kuduTable.getName();
-      // Simple rules.
-      // "-" in table name, you are a cube
-      // "." in table name, you are a raw fact table
-      // "anything else" you are a dimension table.
       final List<ImmutableBitSet> primaryKeys = Collections.singletonList(ImmutableBitSet
           .range(this.kuduTable.getSchema().getPrimaryKeyColumnCount()));
-      if (tableName.contains("-")) {
-        return Statistics.of(CUBE_TABLE_ROW_COUNT,
+      switch (tableType) {
+        case CUBE:
+          return Statistics.of(CUBE_TABLE_ROW_COUNT,
+            primaryKeys,
+            Collections.emptyList(),
+            // We don't always sort for two reasons:
+            // 1. When applying a Filter we want to also sort that doesn't magically happen by
+            //    setting this as a RelCollation
+            // 2. Awhile ago we saw performance degrade with always sorting.
+            Collections.emptyList());
+        case FACT:
+          return Statistics.of(FACT_TABLE_ROW_COUNT,
+            primaryKeys,
+            Collections.emptyList(),
+            // We don't always sort for two reasons:
+            // 1. When applying a Filter we want to also sort that doesn't magically happen by
+            //    setting this as a RelCollation
+            // 2. Awhile ago we saw performance degrade with always sorting.
+            Collections.emptyList());
+        case DIMENSION:
+          return Statistics.of(DIMENSION_TABLE_ROW_COUNT,
             primaryKeys,
             Collections.emptyList(),
             // We don't always sort for two reasons:
@@ -110,24 +150,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
             // 2. Awhile ago we saw performance degrade with always sorting.
             Collections.emptyList());
       }
-      if (tableName.contains(".")) {
-        return Statistics.of(FACT_TABLE_ROW_COUNT,
-                primaryKeys,
-                Collections.emptyList(),
-                // We don't always sort for two reasons:
-                // 1. When applying a Filter we want to also sort that doesn't magically happen by
-                //    setting this as a RelCollation
-                // 2. Awhile ago we saw performance degrade with always sorting.
-                Collections.emptyList());
-      }
-      return Statistics.of(DIMENSION_TABLE_ROW_COUNT,
-                primaryKeys,
-                Collections.emptyList(),
-                // We don't always sort for two reasons:
-                // 1. When applying a Filter we want to also sort that doesn't magically happen by
-                //    setting this as a RelCollation
-                // 2. Awhile ago we saw performance degrade with always sorting.
-                Collections.emptyList());
+      return super.getStatistic();
     }
 
     /**
@@ -199,14 +222,13 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         return new KuduQuery(cluster,
                              cluster.traitSetOf(KuduRelNode.CONVENTION),
                              relOptTable,
-                             this.kuduTable,
-                             this.descendingSortedFieldIndices,
+                             this,
                              this.getRowType(context.getCluster().getTypeFactory()));
     }
 
     /**
      * Run the query against the kudu table {@link kuduTable}. {@link KuduPredicate} are the
-     * filters to apply to the query, {@link kuduFields} are the columns to return in the
+     * filters to apply to the query, {@link columnIndices} are the columns to return in the
      * response and finally {@link limit} is used to limit the results that come back.
      *
      * @param predicates     each member in the first list represents a single scan.
@@ -220,29 +242,13 @@ public final class CalciteKuduTable extends AbstractQueryableTable
      * @return Enumeration on the objects, Fields conform to {@link CalciteKuduTable#getRowType}.
      */
     public KuduEnumerable executeQuery(final List<List<CalciteKuduPredicate>> predicates,
-                                             final List<Integer> columnIndices, final long limit,
-        final long offset, final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag) {
-
-
-        return new KuduEnumerable(
-            predicates, columnIndices, this.client, this.kuduTable,
-            limit, offset, sorted, descendingSortedFieldIndices,
-            groupByLimited, scanStats, cancelFlag);
-    }
-
-    /**
-     * Called while using {@link java.sql.Statement}
-     */
-    public int mutateTuples(final List<String> columnNames,
-                               final List<List<RexLiteral>> tuples) {
-      return new KuduMutation(this, columnNames).mutateTuples(tuples);
-    }
-
-    /**
-     * Called while using {@link java.sql.PreparedStatement}
-     */
-    public int mutateRow(final List<String> columnNames, final List<Object> values) {
-      return new KuduMutation(this, columnNames).mutateRow(values);
+                                       final List<Integer> columnIndices, final long limit,
+                                       final long offset, final boolean sorted,
+                                       final boolean groupByLimited,
+                                       final KuduScanStats scanStats,
+                                       final AtomicBoolean cancelFlag) {
+      return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset,
+        sorted, groupByLimited, scanStats, cancelFlag);
     }
 
     @Override
@@ -251,35 +257,13 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         return new KuduQueryable<>(queryProvider, schema, this, tableName);
     }
 
-    @Override
-    public Collection getModifiableCollection() {
-      return null;
-    }
-
-    @Override
-    public TableModify toModificationRel(RelOptCluster cluster, RelOptTable table,
-                                         Prepare.CatalogReader catalogReader, RelNode child,
-                                         TableModify.Operation operation,
-                                         List<String> updateColumnList,
-                                         List<RexNode> sourceExpressionList, boolean flattened) {
-      if (!operation.equals(TableModify.Operation.INSERT)) {
-        throw new UnsupportedOperationException("Only INSERT statement is supported");
-      }
-      return new KuduWrite(
-        this.kuduTable,
-        cluster,
-        table,
-        catalogReader,
-        child,
-        operation,
-        updateColumnList,
-        sourceExpressionList,
-        flattened);
-    }
-
-    public boolean isColumnSortedDesc(String columnName) {
+    public boolean isColumnOrderedDesc(String columnName) {
       int columnIndex = kuduTable.getSchema().getColumnIndex(columnName);
-      return descendingSortedFieldIndices.contains(columnIndex);
+      return descendingOrderedColumnIndexes.contains(columnIndex);
+    }
+
+    public boolean isColumnOrderedDesc(int columnIndex) {
+      return descendingOrderedColumnIndexes.contains(columnIndex);
     }
 
     public KuduTable getKuduTable() {
@@ -290,7 +274,7 @@ public final class CalciteKuduTable extends AbstractQueryableTable
       return client;
     }
 
-  /** Implementation of {@link Queryable} based on
+   /** Implementation of {@link Queryable} based on
      * a {@link CalciteKuduTable}.
      *
      * @param <T> element type */
@@ -312,6 +296,10 @@ public final class CalciteKuduTable extends AbstractQueryableTable
         // doesn't cause a bunch of messy cast statements
         private CalciteKuduTable getTable() {
             return (CalciteKuduTable) table;
+        }
+
+        private CalciteModifiableKuduTable getModifiableTable() {
+            return (CalciteModifiableKuduTable) table;
         }
 
         /**
@@ -336,16 +324,99 @@ public final class CalciteKuduTable extends AbstractQueryableTable
                 cancelFlag);
         }
 
-        public Enumerable<Object> mutateTuples(final List<String> columnNames,
+        public Enumerable<Object> mutateTuples(final List<Integer> columnIndexes,
                           final List<List<RexLiteral>> tuples) {
-          return Linq4j.singletonEnumerable(getTable().mutateTuples(columnNames, tuples));
+          return Linq4j.singletonEnumerable(getModifiableTable().mutateTuples(columnIndexes, tuples));
         }
 
-    public Enumerable<Object> mutateRow(final List<String> columnNames,
+    public Enumerable<Object> mutateRow(final List<Integer> columnIndexes,
                                      final List<Object> values) {
-      return Linq4j.singletonEnumerable(getTable().mutateRow(columnNames, values));
+      return Linq4j.singletonEnumerable(getModifiableTable().mutateRow(columnIndexes, values));
     }
   }
 
+  /**
+   * Return the Integer indices in the Row Projection that match the primary
+   * key columns and in the order they need to match. This lays out how to
+   * compare two {@code CalciteRow}s and determine which one is smaller.
+   * <p>
+   * As an example, imagine we have a table (A, B, C, D, E) with primary columns in order of
+   * (A, B) and we have a scanner SELECT D, C, E, B, A the projectedSchema will
+   * be D, C, E, B, A and the tableSchema will be A, B, C, D, E *this*
+   * function will return List(4, 3) -- the position's of A and B within the
+   * projection and in the order they need to be sorted by.
+   * <p>
+   * The returned index list is used by the sorted {@link KuduEnumerable} to merge the
+   * results from multiple scanners.
+   */
+  public List<Integer> getPrimaryKeyColumnsInProjection(final Schema projectedSchema) {
+    return getPrimaryKeyColumnsInProjection(kuduTable.getSchema(), projectedSchema);
+  }
+
+  @VisibleForTesting
+  static List<Integer> getPrimaryKeyColumnsInProjection(final Schema schema,
+                                                        final Schema projectedSchema) {
+    final List<Integer> primaryKeyColumnsInProjection = new ArrayList<>();
+    final List<ColumnSchema> columnSchemas = projectedSchema.getColumns();
+
+    // KuduSortRule checks if the prefix of the primary key columns are being filtered and
+    // are set to a constant literal, or if the columns being sorted are a
+    // prefix of the primary key columns.
+    for (ColumnSchema primaryColumnSchema : schema.getPrimaryKeyColumns()) {
+      boolean found = false;
+      for (int columnIdx = 0; columnIdx < projectedSchema.getColumnCount(); columnIdx++) {
+        if (columnSchemas.get(columnIdx).getName().equals(primaryColumnSchema.getName())) {
+          primaryKeyColumnsInProjection.add(columnIdx);
+          found = true;
+          break;
+        }
+      }
+      // If it isn't found, this means this primary key column is not
+      // present in the projection. We keep the existing primary key columns
+      // that were present in the projection in our list.
+      // The list is the order in which rows will be sorted.
+      if (!primaryKeyColumnsInProjection.isEmpty() && !found) {
+        // Once we have matched at least one primary key column, all the remaining
+        // primary key columns that are present in the projection are being sorted on
+        break;
+      }
+    }
+    if (primaryKeyColumnsInProjection.isEmpty()) {
+      throw new IllegalStateException("There should be at least one primary key column in the" +
+        " projection");
+    }
+    return primaryKeyColumnsInProjection;
+  }
+
+  public CubeTableInfo.EventTimeAggregationType getEventTimeAggregationType() {
+    return eventTimeAggregationType;
+  }
+
+  /**
+   * Return the integer indices of the descending sorted columns in the row projection.
+   */
+  public List<Integer> getDescendingColumnsIndicesInProjection(final Schema projectedSchema) {
+    final List<Integer> columnsInProjection = new ArrayList<>();
+    final List<ColumnSchema> columnSchemas = projectedSchema.getColumns();
+
+    for (Integer fieldIndex : descendingOrderedColumnIndexes) {
+      final ColumnSchema columnSchema = kuduTable.getSchema().getColumnByIndex(fieldIndex);
+      for (int columnIdx = 0; columnIdx < projectedSchema.getColumnCount(); columnIdx++) {
+        if (columnSchemas.get(columnIdx).getName().equals(columnSchema.getName())) {
+          columnsInProjection.add(columnIdx);
+          break;
+        }
+      }
+    }
+    return columnsInProjection;
+  }
+
+  public List<CalciteKuduTable> getCubeTables() {
+    return cubeTables;
+  }
+
+  public int getTimestampColumnIndex() {
+    return timestampColumnIndex;
+  }
 
 }

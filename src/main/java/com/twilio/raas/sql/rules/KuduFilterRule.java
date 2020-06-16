@@ -22,12 +22,7 @@ public class KuduFilterRule extends RelOptRule {
               relBuilderFactory, "KuduPushDownFilters");
     }
 
-    public static RexNode transformRowValueExpressions(RexBuilder rexBuilder, RexNode node,
-                                                       List<Integer> descendingSortedFieldIndices) {
-        return node.accept(new RowValueExpressionConverter(rexBuilder, descendingSortedFieldIndices));
-    }
-
-    /**
+  /**
      * When we match, this method needs to transform the
      * {@link RelOptRuleCall} into a new rule with push
      * filters applied.
@@ -39,8 +34,9 @@ public class KuduFilterRule extends RelOptRule {
         if (filter.getTraitSet().contains(Convention.NONE)) {
             final RexBuilder rexBuilder = filter.getCluster().getRexBuilder();
             // expand row value expression into a series of OR-AND expressions
-            final RexNode condition = transformRowValueExpressions(rexBuilder,
-              filter.getCondition(), kuduQuery.descendingSortedFieldIndices);
+          RowValueExpressionConverter visitor = new RowValueExpressionConverter(rexBuilder,
+            kuduQuery.calciteKuduTable);
+          final RexNode condition = filter.getCondition().accept(visitor);
             final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor();
             List<List<CalciteKuduPredicate>> predicates = condition.accept(predicateParser, null);
             if (predicates.isEmpty()) {
@@ -49,11 +45,9 @@ public class KuduFilterRule extends RelOptRule {
                 return;
             }
             final RelNode converted = new KuduFilterRel(filter.getCluster(),
-                                                        filter.getTraitSet().replace(KuduRelNode.CONVENTION),
-                                                        convert(filter.getInput(), KuduRelNode.CONVENTION), // @TODO: what is this call
-                                                        filter.getCondition(),
-                predicates,
-            kuduQuery.openedTable.getSchema());
+              filter.getTraitSet().replace(KuduRelNode.CONVENTION), convert(filter.getInput(),
+              KuduRelNode.CONVENTION), filter.getCondition(), predicates,
+              kuduQuery.calciteKuduTable.getKuduTable().getSchema());
 
             if (predicateParser.areAllFiltersApplied()) {
                 // if we can push down all filters to kudu then we don't need to filter rows in calcite

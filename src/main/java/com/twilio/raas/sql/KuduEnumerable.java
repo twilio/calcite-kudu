@@ -39,7 +39,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.AsyncKuduScanner;
-import org.apache.kudu.client.KuduPredicate;
 import org.apache.kudu.client.KuduScanToken;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.Schema;
@@ -67,13 +66,12 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
   public final boolean groupBySorted;
   public final long limit;
   public final long offset;
-  public final List<Integer> descendingSortedFieldIndices;
   public final KuduScanStats scanStats;
 
   private final List<List<CalciteKuduPredicate>> predicates;
   private final List<Integer> columnIndices;
   private final AsyncKuduClient client;
-  private final KuduTable openedTable;
+  private final CalciteKuduTable calciteKuduTable;
 
   /**
    * A KuduEnumerable is an {@link Enumerable} for Kudu that can be configured to be sorted.
@@ -92,11 +90,10 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
       final List<List<CalciteKuduPredicate>> predicates,
       final List<Integer> columnIndices,
       final AsyncKuduClient client,
-      final KuduTable openedTable,
+      final CalciteKuduTable calciteKuduTable,
       final long limit,
       final long offset,
       final boolean sort,
-      final List<Integer> descendingSortedFieldIndices,
       final boolean groupBySorted,
       final KuduScanStats scanStats,
       final AtomicBoolean cancelFlag) {
@@ -107,7 +104,6 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     // if we have an offset always sort by the primary key to ensure the rows are returned
     // in a predictable order
     this.sort = offset>0 || sort;
-    this.descendingSortedFieldIndices = descendingSortedFieldIndices;
     if (groupBySorted && !this.sort) {
       throw new IllegalArgumentException("If groupBySorted is true the results must need to be " +
           "sorted");
@@ -118,7 +114,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     this.predicates = predicates;
     this.columnIndices = columnIndices;
     this.client = client;
-    this.openedTable = openedTable;
+    this.calciteKuduTable = calciteKuduTable;
   }
 
   @VisibleForTesting
@@ -345,7 +341,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
   }
 
   public Schema getTableSchema() {
-    return this.openedTable.getSchema();
+    return this.calciteKuduTable.getKuduTable().getSchema();
   }
 
   @Override
@@ -359,21 +355,21 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     }
 
     final Schema projectedSchema = scanners.get(0).getProjectionSchema();
-    final Schema tableSchema = openedTable.getSchema();
+    final Schema tableSchema = calciteKuduTable.getKuduTable().getSchema();
 
     if (sort) {
       final List<ScannerCallback> callbacks = scanners
         .stream()
         .map(scanner -> {
               final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>();
-              return new ScannerCallback(scanner,
+              return new ScannerCallback(calciteKuduTable,
+                  scanner,
                   rowResults,
                   scansShouldStop,
                   cancelFlag,
-                  tableSchema,
                   projectedSchema,
-                  descendingSortedFieldIndices,
-                  scanStats);
+                  scanStats,
+                  true);
             })
         .collect(Collectors.toList());
       callbacks
@@ -397,14 +393,14 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     scanners
       .stream()
       .map(scanner -> {
-            return new ScannerCallback(scanner,
+            return new ScannerCallback(calciteKuduTable,
+                scanner,
                 messages,
                 scansShouldStop,
                 cancelFlag,
-                tableSchema,
                 projectedSchema,
-                descendingSortedFieldIndices,
-                scanStats);
+                scanStats,
+                false);
           })
       .forEach(callback -> callback.nextBatch());
 
@@ -503,7 +499,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
         .stream()
         .map(subScan -> {
                 KuduScanToken.KuduScanTokenBuilder tokenBuilder = client.syncClient()
-                    .newScanTokenBuilder(openedTable);
+                    .newScanTokenBuilder(calciteKuduTable.getKuduTable());
                 if (sort) {
                     // Allows for consistent row order in reads as it puts in ORDERED by Pk when
                     // faultTolerant is set to true
@@ -519,10 +515,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
                 }
                 subScan.stream().forEach(predicate -> {
                         tokenBuilder.addPredicate(predicate
-                            .toPredicate(
-                                getTableSchema(),
-                                descendingSortedFieldIndices
-                            ));
+                            .toPredicate(calciteKuduTable));
                     });
                 return tokenBuilder.build();
             })
@@ -532,7 +525,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
                     .map(token -> {
                             try {
                                 return KuduScannerUtil.deserializeIntoAsyncScanner(
-                                    token.serialize(), client, openedTable);
+                                    token.serialize(), client, calciteKuduTable.getKuduTable());
                             } catch (java.io.IOException ioe) {
                                 throw new RuntimeException("Failed to setup scanner from token.", ioe);
                             }
@@ -542,7 +535,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
 
     if (predicates.isEmpty()) {
       // Scan the whole table !
-      final AsyncKuduScanner.AsyncKuduScannerBuilder allBuilder = client.newScannerBuilder(openedTable);
+      final AsyncKuduScanner.AsyncKuduScannerBuilder allBuilder =
+        client.newScannerBuilder(calciteKuduTable.getKuduTable());
       if (!columnIndices.isEmpty()) {
         allBuilder.setProjectedColumnIndexes(columnIndices);
       }
@@ -564,11 +558,10 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
       merged,
       columnIndices,
       client,
-      openedTable,
+      calciteKuduTable,
       limit,
       offset,
       sort,
-      descendingSortedFieldIndices,
       groupBySorted,
       scanStats,
       cancelFlag
