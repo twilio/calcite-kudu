@@ -79,8 +79,8 @@ public class KuduQueryIT {
 
   @Test
   public void queryBaseTableForMessageSid() throws Exception {
-    final CalciteKuduTable relTable = new CalciteKuduTable(KuduQueryIT.TABLE,
-							   testHarness.getAsyncClient());
+    final CalciteKuduTable relTable = new CalciteKuduTableBuilder(KuduQueryIT.TABLE,
+      testHarness.getAsyncClient()).build();
 
     final CalciteKuduPredicate filterToSid = new CalciteKuduPredicate(2, KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
     final Enumerable<Object> results =
@@ -97,8 +97,8 @@ public class KuduQueryIT {
 
   @Test
   public void queryBaseTableForAccountSid() throws Exception {
-    final CalciteKuduTable relTable = new CalciteKuduTable(KuduQueryIT.TABLE,
-							   testHarness.getAsyncClient());
+    final CalciteKuduTable relTable = new CalciteKuduTableBuilder(KuduQueryIT.TABLE,
+      testHarness.getAsyncClient()).build();
 
     final CalciteKuduPredicate filterToAccountSid = new CalciteKuduPredicate(0,
             KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.ACCOUNT_SID);
@@ -129,8 +129,8 @@ public class KuduQueryIT {
 
   @Test
   public void queryForInSids() throws Exception {
-    final CalciteKuduTable relTable = new CalciteKuduTable(KuduQueryIT.TABLE,
-							   testHarness.getAsyncClient());
+    final CalciteKuduTable relTable = new CalciteKuduTableBuilder(KuduQueryIT.TABLE,
+      testHarness.getAsyncClient()).build();
 
     // @TODO: we have the columnSchema in the setup, we don't need to grab the table.
     // final KuduPredicate firstSid = KuduPredicate
@@ -168,8 +168,8 @@ public class KuduQueryIT {
 
     @Test
     public void testKuduScannerLimitPushdown() throws Exception {
-        final CalciteKuduTable relTable = new CalciteKuduTable(KuduQueryIT.TABLE,
-                testHarness.getAsyncClient());
+        final CalciteKuduTable relTable = new CalciteKuduTableBuilder(KuduQueryIT.TABLE,
+          testHarness.getAsyncClient()).build();
 
         final CalciteKuduPredicate filterToSid = new CalciteKuduPredicate(
             2, KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
@@ -212,8 +212,8 @@ public class KuduQueryIT {
 
   @Test
   public void cancelQuery() throws Exception {
-    final CalciteKuduTable relTable = new CalciteKuduTable(KuduQueryIT.TABLE,
-        testHarness.getAsyncClient());
+    final CalciteKuduTable relTable = new CalciteKuduTableBuilder(KuduQueryIT.TABLE,
+      testHarness.getAsyncClient()).build();
 
     // @TODO: we have the columnSchema in the setup, we don't need to grab the table.
     // final KuduPredicate firstSid = KuduPredicate

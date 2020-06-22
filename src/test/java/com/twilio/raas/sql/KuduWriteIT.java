@@ -1,5 +1,9 @@
 package com.twilio.raas.sql;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.twilio.kudu.metadata.KuduTableMetadata;
+import com.twilio.raas.sql.schema.KuduTestSchemaFactoryBase;
 import org.apache.calcite.util.TimestampString;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.ColumnTypeAttributes;
@@ -22,6 +26,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -33,11 +38,7 @@ public class KuduWriteIT {
   @ClassRule
   public static KuduTestHarness testHarness = new KuduTestHarness();
   public static final String BASE_TABLE_NAME = "SCHEMA.TABLE";
-  private static final String CUSTOM_TEMPLATE = "jdbc:calcite:model=inline:{version: '1.0'," +
-    "defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql" +
-    ".KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: '" + BASE_TABLE_NAME +
-    "', descendingSortedFields:['UNIXTIME_MICROS_COL']}]}}]};caseSensitive=false;timeZone=UTC";
-
+  private static String JDBC_URL;
 
   public static KuduTable kuduTable;
 
@@ -46,16 +47,17 @@ public class KuduWriteIT {
     ColumnTypeAttributes decimalTypeAttribute =
       new ColumnTypeAttributes.ColumnTypeAttributesBuilder().scale(6).precision(22).build();
     final List<ColumnSchema> columns = Arrays.asList(
+      // mix of upper and lower case column names
       new ColumnSchema.ColumnSchemaBuilder("STRING_COL", Type.STRING).key(true).build(),
-      new ColumnSchema.ColumnSchemaBuilder("UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("unixtime_micros_col", Type.UNIXTIME_MICROS).key(true).build(),
       new ColumnSchema.ColumnSchemaBuilder("INT8_COL", Type.INT8).key(true).build(),
-      new ColumnSchema.ColumnSchemaBuilder("INT16_COL", Type.INT16).nullable(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("int16_col", Type.INT16).nullable(true).build(),
       new ColumnSchema.ColumnSchemaBuilder("INT32_COL", Type.INT32).nullable(true).build(),
-      new ColumnSchema.ColumnSchemaBuilder("INT64_COL", Type.INT64).nullable(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("int64_col", Type.INT64).nullable(true).build(),
       new ColumnSchema.ColumnSchemaBuilder("BINARY_COL", Type.BINARY).nullable(true).build(),
-      new ColumnSchema.ColumnSchemaBuilder("BOOL_COL", Type.BOOL).nullable(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("bool_col", Type.BOOL).nullable(true).build(),
       new ColumnSchema.ColumnSchemaBuilder("FLOAT_COL", Type.FLOAT).nullable(true).build(),
-      new ColumnSchema.ColumnSchemaBuilder("DOUBLE_COL", Type.DOUBLE).nullable(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("double_col", Type.DOUBLE).nullable(true).build(),
       new ColumnSchema.ColumnSchemaBuilder("DECIMAL_COL", Type.DECIMAL).nullable(true)
         .typeAttributes(decimalTypeAttribute).build()
       );
@@ -63,10 +65,32 @@ public class KuduWriteIT {
     testHarness.getClient().createTable(BASE_TABLE_NAME, new Schema(columns),
       new org.apache.kudu.client.CreateTableOptions()
         .addHashPartitions(Arrays.asList("INT8_COL"), 2)
-        .setRangePartitionColumns(Arrays.asList("UNIXTIME_MICROS_COL"))
+        .setRangePartitionColumns(Arrays.asList("unixtime_micros_col"))
         .setNumReplicas(1));
 
     kuduTable = testHarness.getClient().openTable(BASE_TABLE_NAME);
+
+    JDBC_URL = String.format(JDBCUtil.CALCITE_TEST_MODEL_TEMPLATE,
+      KuduTestSchemaFactory.class.getName(), testHarness.getMasterAddressesAsString());
+  }
+
+  public static class KuduTestSchemaFactory extends KuduTestSchemaFactoryBase {
+    private static final Map<String, KuduTableMetadata> kuduTableConfigMap =
+      new ImmutableMap.Builder<String, KuduTableMetadata>()
+        .put(BASE_TABLE_NAME,
+          new KuduTableMetadata.KuduTableMetadataBuilder()
+            .setDescendingOrderedColumnNames(Lists.newArrayList("unixtime_micros_col"))
+            .build()
+        )
+        .build();
+
+    // Public singleton, per factory contract.
+    public static final DescendingSortedWithNonDateTimeFieldsIT.KuduTestSchemaFactory INSTANCE =
+      new DescendingSortedWithNonDateTimeFieldsIT.KuduTestSchemaFactory(kuduTableConfigMap);
+
+    public KuduTestSchemaFactory(Map<String, KuduTableMetadata> kuduTableConfigMap) {
+      super(kuduTableConfigMap);
+    }
   }
 
   @AfterClass
@@ -76,9 +100,7 @@ public class KuduWriteIT {
 
   @Test
   public void testPreparedStatement() throws Exception {
-    String url = String.format(CUSTOM_TEMPLATE,
-      testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String stringVal = "ACCOUNT1";
 
       // Create prepared statement that can be reused
@@ -98,6 +120,7 @@ public class KuduWriteIT {
       BigDecimal bigDecimalVal1 = new BigDecimal("1234567890.123456");
       insertRow(stmt, stringVal, timestampVal1, byteVal1, shortVal1, intVal1, longVal1, bytesVal1
         , boolVal1, floatVal1, doubleVal1, bigDecimalVal1);
+      conn.commit();
 
       // insert second row
       Timestamp timestampVal2 = new Timestamp(System.currentTimeMillis());
@@ -112,6 +135,7 @@ public class KuduWriteIT {
       BigDecimal bigDecimalVal2 = new BigDecimal("9999.999999");
       insertRow(stmt, stringVal, timestampVal2, byteVal2, shortVal2, intVal2, longVal2, bytesVal2
         , boolVal2, floatVal2, doubleVal2, bigDecimalVal2);
+      conn.commit();
 
       // validate rows are returned in reverse order
       String sql = "SELECT * FROM \"" + BASE_TABLE_NAME +
@@ -173,32 +197,32 @@ public class KuduWriteIT {
     stmt.execute();
   }
 
-  @Ignore("Upgrade to calcite 1.22")
   @Test
   public void testInsert() throws Exception {
-    String url = String.format(CUSTOM_TEMPLATE,
-      testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       long currentTime = System.currentTimeMillis();
       // the TIMESTAMP function truncates the milliseconds
       long expectedTime = currentTime / 1000 * 1000;
       TimestampString ts = TimestampString.fromMillisSinceEpoch(currentTime);
       // insert one row
-      String sql = "INSERT INTO \"" + BASE_TABLE_NAME + "\"(STRING_COL, UNIXTIME_MICROS_COL, INT8_COL)" +
-        " VALUES ('ACCOUNT2', TIMESTAMP '" + ts + "', 1)";
+      String sql = "INSERT INTO \"" + BASE_TABLE_NAME + "\"(STRING_COL, UNIXTIME_MICROS_COL, INT8_COL, BOOL_COL)" +
+        " VALUES ('ACCOUNT2', TIMESTAMP '" + ts + "', 1, true)";
       conn.createStatement().execute(sql);
+      conn.commit();
       // validate row was written
-      ResultSet rs = conn.createStatement().executeQuery("SELECT STRING_COL, UNIXTIME_MICROS_COL, INT8_COL " +
-        "FROM \"" + BASE_TABLE_NAME + "\" WHERE STRING_COL='ACCOUNT2'");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT STRING_COL, UNIXTIME_MICROS_COL," +
+        " INT8_COL, BOOL_COL FROM \"" + BASE_TABLE_NAME + "\" WHERE STRING_COL='ACCOUNT2'");
       assertTrue(rs.next());
       assertEquals("ACCOUNT2", rs.getString(1));
       assertEquals(new Timestamp(expectedTime), rs.getTimestamp(2));
       assertEquals(1, rs.getInt(3));
+      assertTrue(rs.getBoolean(4));
       assertFalse(rs.next());
 
       // insert the same row again
       try {
         conn.createStatement().execute(sql);
+        conn.commit();
         fail("Inserting same row twice should fail.");
       }
       catch (Exception e) {
@@ -236,9 +260,7 @@ public class KuduWriteIT {
   @Ignore("TODO enable once we handle RexCalls")
   @Test
   public void testInsertSelect() throws Exception {
-    String url = String.format(CUSTOM_TEMPLATE,
-      testHarness.getMasterAddressesAsString());
-    try (Connection conn = DriverManager.getConnection(url)) {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       long currentTime = System.currentTimeMillis();
       // the TIMESTAMP function truncates the milliseconds
       long expectedTime = currentTime / 1000 * 1000;
@@ -253,7 +275,13 @@ public class KuduWriteIT {
         " SELECT STRING_COL, CURRENT_TIME, 2*INT8_COL FROM \"" + BASE_TABLE_NAME + "\"";
       conn.createStatement().execute(sql);
     }
+  }
 
+  @Test(expected = UnsupportedOperationException.class)
+  public void testAutoCommitFails() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      conn.setAutoCommit(true);
+    }
   }
 
 }

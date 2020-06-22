@@ -3,6 +3,7 @@ package com.twilio.raas.sql;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.Type;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -25,25 +26,28 @@ public final class SortedTest {
                 foreignKey));
 
         assertEquals("Expected to find just account_id from projection",
-            Arrays.asList(1), CalciteRow.findPrimaryKeyColumnsInProjection(
+            Arrays.asList(1), CalciteKuduTable.getPrimaryKeyColumnsInProjection(
+                tableSchema,
                 new Schema(Arrays.asList(
                         foreignKey,
-                        accountIdColumn)),
-                tableSchema));
+                        accountIdColumn))
+                ));
 
         assertEquals("Expected to find account_id and date from projection",
-            Arrays.asList(2, 1), CalciteRow.findPrimaryKeyColumnsInProjection(
+            Arrays.asList(2, 1), CalciteKuduTable.getPrimaryKeyColumnsInProjection(
+                tableSchema,
                 new Schema(Arrays.asList(
                         foreignKey,
                         dateColumn,
-                        accountIdColumn)),
-                tableSchema));
+                        accountIdColumn))
+                ));
 
-        assertEquals("Expected Empty list as it doesn't contain account sid in projection",
-            Collections.<Integer>emptyList(), CalciteRow.findPrimaryKeyColumnsInProjection(
+        assertEquals("Expected to find dateColumn from projection",
+            Arrays.asList(1), CalciteKuduTable.getPrimaryKeyColumnsInProjection(
+                tableSchema,
                 new Schema(Arrays.asList(
                         foreignKey,
-                        dateColumn)),
-                tableSchema));
+                        dateColumn))
+                ));
     }
 }

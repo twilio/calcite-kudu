@@ -67,11 +67,11 @@ public abstract class KuduSortRule extends RelOptRule {
 
     for (final RelFieldCollation sortField: collation.getFieldCollations()) {
       // Reject for descending sorted fields if sort direction is not Descending
-      if ((query.descendingSortedFieldIndices.contains(sortField.getFieldIndex()) &&
+      if ((query.calciteKuduTable.isColumnOrderedDesc(sortField.getFieldIndex()) &&
               sortField.direction != RelFieldCollation.Direction.DESCENDING &&
               sortField.direction != RelFieldCollation.Direction.STRICTLY_DESCENDING) ||
           // Else Reject if sort order is not ascending
-          (!query.descendingSortedFieldIndices.contains(sortField.getFieldIndex()) &&
+          (!query.calciteKuduTable.isColumnOrderedDesc(sortField.getFieldIndex()) &&
               sortField.direction != RelFieldCollation.Direction.ASCENDING &&
               sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING))
         {
@@ -127,7 +127,7 @@ public abstract class KuduSortRule extends RelOptRule {
     @Override
     public void onMatch(final RelOptRuleCall call) {
       final KuduQuery query = (KuduQuery)call.getRelList().get(2);
-      final KuduTable openedTable = query.openedTable;
+      final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
       final Sort originalSort = (Sort)call.getRelList().get(0);
 
       perform(call, originalSort, query, openedTable, Optional.<Filter>empty());
@@ -148,7 +148,7 @@ public abstract class KuduSortRule extends RelOptRule {
     public void onMatch(final RelOptRuleCall call) {
       final KuduQuery query = (KuduQuery)call.getRelList().get(3);
       final Filter filter = (Filter) call.getRelList().get(2);
-      final KuduTable openedTable = query.openedTable;
+      final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
       final Sort originalSort = (Sort)call.getRelList().get(0);
 
       perform(call, originalSort, query, openedTable, Optional.of(filter));

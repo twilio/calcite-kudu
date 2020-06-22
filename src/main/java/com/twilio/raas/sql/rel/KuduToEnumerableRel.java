@@ -1,6 +1,5 @@
 package com.twilio.raas.sql.rel;
 
-import com.google.common.collect.Lists;
 import com.twilio.raas.sql.CalciteKuduTable;
 import com.twilio.raas.sql.KuduMethod;
 import com.twilio.raas.sql.KuduRelNode;
@@ -29,12 +28,10 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.util.BuiltInMethod;
-import org.apache.calcite.util.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 
 public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel {
     public KuduToEnumerableRel(RelOptCluster cluster,
@@ -149,8 +146,8 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
     kuduImplementor.visitChild(0, getInput());
 
     // Now build the Java code to execute the mutation
-    final Expression columnNames = list.append("columnNames",
-      implementor.stash(kuduImplementor.columnNames, List.class));
+    final Expression columnNames = list.append("columnIndexes",
+      implementor.stash(kuduImplementor.columnIndexes, List.class));
 
     final Expression table =
       list.append("table",

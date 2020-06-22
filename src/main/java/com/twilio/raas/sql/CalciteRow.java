@@ -21,60 +21,6 @@ public final class CalciteRow implements Comparable<CalciteRow> {
     public final List<Integer> descendingSortedFieldIndices;
 
     /**
-     * Return the Integer indices in the Row Projection that match the primary
-     * key columns and in the order they need to match. This lays out how to
-     * compare two {@code CalciteRow}s and determine which one is smaller.
-     *
-     * As an example, imagine we have a table with primary column in order of
-     * A, B and we have a scanner SELECT D, C, E, B, A the projectedSchema will
-     * be D, C, E, B, A and the tableSchema will be A, B, C, D, E *this*
-     * function will return List(4, 3) -- the position's of A and B within the
-     * projection and in the order they need to be sorted by.
-     */
-    public static List<Integer> findPrimaryKeyColumnsInProjection(final Schema projectedSchema, final Schema tableSchema ) {
-        final List<Integer> primaryKeyColumnsInProjection = new ArrayList<>();
-        final List<ColumnSchema> columnSchemas = projectedSchema.getColumns();
-
-        for (ColumnSchema primaryColumnSchema: tableSchema.getPrimaryKeyColumns()) {
-            boolean found = false;
-            for (int columnIdx = 0; columnIdx < projectedSchema.getColumnCount(); columnIdx++) {
-                if (columnSchemas.get(columnIdx).getName().equals(primaryColumnSchema.getName())) {
-                    primaryKeyColumnsInProjection.add(columnIdx);
-                    found = true;
-                    break;
-                }
-            }
-            // If it isn't found, this means the *next* primary key is not
-            // present in the projection. We keep the existing primary keys
-            // that were present in the projection in our list. The list is in
-            // order -- the order in which it will be sorted.
-            if (!found) {
-                break;
-            }
-        }
-        return primaryKeyColumnsInProjection;
-    }
-
-    /**
-     * Return the Integer indices of the tableIndices in the Row Projection.
-     */
-    public static List<Integer> findColumnsIndicesInProjection(final Schema projectedSchema, final List<Integer> tableIndices, final Schema tableSchema) {
-        final List<Integer> columnsInProjection = new ArrayList<>();
-        final List<ColumnSchema> columnSchemas = projectedSchema.getColumns();
-
-        for (Integer fieldIndex : tableIndices) {
-            final ColumnSchema columnSchema = tableSchema.getColumnByIndex(fieldIndex);
-            for (int columnIdx = 0; columnIdx < projectedSchema.getColumnCount(); columnIdx++) {
-                if (columnSchemas.get(columnIdx).getName().equals(columnSchema.getName())) {
-                    columnsInProjection.add(columnIdx);
-                    break;
-                }
-            }
-        }
-        return columnsInProjection;
-    }
-
-    /**
      * Create a Calcite row with provided rowData. Used for Testing.
      *
      * @param rowSchema The schema of the query projection

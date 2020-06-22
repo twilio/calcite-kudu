@@ -1,5 +1,6 @@
 package com.twilio.raas.sql.rules;
 
+import com.twilio.raas.sql.CalciteKuduTable;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
@@ -14,7 +15,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
-import java.util.Collections;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class RowValueExpressionConverterTest {
   @Test
@@ -62,8 +65,8 @@ public class RowValueExpressionConverterTest {
     RexCall orAndExps = (RexCall) builder.makeCall(SqlStdOperatorTable.OR,
       Arrays.asList(exp1, exp2, exp3));
 
-    RowValueExpressionConverter converter = new RowValueExpressionConverter(builder,
-      Collections.emptyList());
+    CalciteKuduTable kuduTable = mock(CalciteKuduTable.class);
+    RowValueExpressionConverter converter = new RowValueExpressionConverter(builder, kuduTable);
     Assert.assertEquals("Row value expression was not converted correctly",
       orAndExps, converter.visitCall(call));
 
@@ -83,7 +86,9 @@ public class RowValueExpressionConverterTest {
     orAndExps = (RexCall) builder.makeCall(SqlStdOperatorTable.OR,
       Arrays.asList(exp1, exp2, exp3));
 
-    converter = new RowValueExpressionConverter(builder, Arrays.asList(0, 2));
+    when(kuduTable.isColumnOrderedDesc(0)).thenReturn(true);
+    when(kuduTable.isColumnOrderedDesc(2)).thenReturn(true);
+    converter = new RowValueExpressionConverter(builder, kuduTable);
     Assert.assertEquals("Row value expression was not converted correctly",
       orAndExps, converter.visitCall(call));
   }

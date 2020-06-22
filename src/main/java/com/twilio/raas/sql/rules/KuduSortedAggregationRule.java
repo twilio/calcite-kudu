@@ -75,7 +75,7 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
      * A query that does GROUP BY A, C ORDER BY A cannot use this rule.
      */
     for (Integer groupedOrdinal: originalAggregate.getGroupSet()) {
-      if (groupedOrdinal < query.openedTable.getSchema().getPrimaryKeyColumnCount()) {
+      if (groupedOrdinal < query.calciteKuduTable.getKuduTable().getSchema().getPrimaryKeyColumnCount()) {
         boolean found = false;
         for (RelFieldCollation fieldCollation : originalSort.getCollation().getFieldCollations()) {
           if (fieldCollation.getFieldIndex() == groupedOrdinal) {
@@ -112,7 +112,7 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
         .plus(Convention.NONE);
 
     // Check the new trait set to see if we can apply the sort against this.
-    if (!canApply(traitSet, query, query.openedTable, Optional.of(filter))) {
+    if (!canApply(traitSet, query, query.calciteKuduTable.getKuduTable(), Optional.of(filter))) {
       return;
     }
 

@@ -1,5 +1,10 @@
 package com.twilio.raas.sql;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.twilio.kudu.metadata.KuduTableMetadata;
+import com.twilio.raas.sql.schema.KuduSchemaFactory;
+import com.twilio.raas.sql.schema.KuduTestSchemaFactoryBase;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.Type;
@@ -14,45 +19,42 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
 public class DescendingSortedWithNonDateTimeFieldsIT {
-  private static final Logger logger = LoggerFactory.getLogger(JDBCQueryIT.class);
-
   private static String ACCOUNT_SID = "AC1234567";
 
   @ClassRule
   public static KuduTestHarness testHarness = new KuduTestHarness();
   private static final String descendingSortTableName = "DescendingSortTestTable";
-  private static final String customTemplate = "jdbc:calcite:model=inline:{version: '1.0',defaultSchema:'kudu',schemas:[{name: 'kudu',type:'custom',factory:'com.twilio.raas.sql.KuduSchemaFactory',operand:{connect:'%s',kuduTableConfigs:[{tableName: 'DescendingSortTestTable', descendingSortedFields:['reverse_byte_field', 'reverse_short_field', 'reverse_int_field', 'reverse_long_field']}]}}]};caseSensitive=false;timeZone=UTC";
+  private static String JDBC_URL;
 
   @BeforeClass
   public static void setup() throws Exception {
     final List<ColumnSchema> columns = Arrays.asList(
-        new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("reverse_byte_field", Type.INT8).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("reverse_short_field", Type.INT16).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("reverse_int_field", Type.INT32).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("reverse_long_field", Type.INT64).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("resource_type", Type.STRING).build());
+      new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("reverse_byte_field", Type.INT8).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("reverse_short_field", Type.INT16).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("reverse_int_field", Type.INT32).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("reverse_long_field", Type.INT64).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("resource_type", Type.STRING).build());
 
     Schema schema = new Schema(columns);
 
     testHarness.getClient().createTable(descendingSortTableName, schema,
-        new org.apache.kudu.client.CreateTableOptions()
-            .addHashPartitions(Arrays.asList("account_sid"), 5)
-            .setNumReplicas(1));
+      new org.apache.kudu.client.CreateTableOptions()
+        .addHashPartitions(Arrays.asList("account_sid"), 5)
+        .setNumReplicas(1));
     final KuduTable descendingSortTestTable = testHarness.getClient().openTable(descendingSortTableName);
     final AsyncKuduSession insertSession = testHarness.getAsyncClient().newSession();
 
@@ -75,6 +77,29 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
     secondRowWrite.addLong("reverse_long_field", Long.MAX_VALUE - 1001L);
     secondRowWrite.addString("resource_type", "message-body");
     insertSession.apply(secondRowOp).join();
+
+    JDBC_URL = String.format(JDBCUtil.CALCITE_TEST_MODEL_TEMPLATE,
+      KuduTestSchemaFactory.class.getName(), testHarness.getMasterAddressesAsString());
+  }
+
+  public static class KuduTestSchemaFactory extends KuduTestSchemaFactoryBase {
+    private static final Map<String, KuduTableMetadata> kuduTableConfigMap =
+    new ImmutableMap.Builder<String, KuduTableMetadata>()
+        .put("DescendingSortTestTable",
+          new KuduTableMetadata.KuduTableMetadataBuilder()
+            .setDescendingOrderedColumnNames(Lists.newArrayList("reverse_byte_field",
+              "reverse_short_field", "reverse_int_field", "reverse_long_field"))
+          .build()
+        )
+        .build();
+
+    // Public singleton, per factory contract.
+    public static final KuduTestSchemaFactory INSTANCE =
+      new KuduTestSchemaFactory(kuduTableConfigMap);
+
+    public KuduTestSchemaFactory(Map<String, KuduTableMetadata> kuduTableConfigMap) {
+      super(kuduTableConfigMap);
+    }
   }
 
   @AfterClass
@@ -84,7 +109,7 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
 
   @Test
   public void testDescendingSortWithReverseSortedFields() throws Exception {
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBC_URL, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
           + "WHERE account_sid = '%s' "
@@ -120,7 +145,7 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
 
   @Test
   public void testAscendingSortWithReverseSortedFields() throws Exception {
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBC_URL, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
           + "ORDER BY account_sid, reverse_byte_field, reverse_short_field, reverse_int_field, reverse_long_field asc";
@@ -152,7 +177,7 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
 
   @Test
   public void testDescendingSortWithFilter() throws Exception {
-    String url = String.format(customTemplate, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBC_URL, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
           + "WHERE account_sid = '%s' and reverse_byte_field > CAST(3 AS TINYINT) and reverse_short_field > CAST(32 AS SMALLINT) and reverse_int_field > 100 and reverse_long_field > CAST(1000 AS BIGINT) "

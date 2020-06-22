@@ -20,7 +20,7 @@ import org.junit.Test;
  */
 public final class CalciteKuduPredicateCastTest {
   @Test
-  public void integerToBigDecimal() throws Exception {
+  public void integerToBigDecimal() {
     final CalciteKuduPredicate predicate = new CalciteKuduPredicate(0,
         KuduPredicate.ComparisonOp.EQUAL, Integer.valueOf(7));
     final ColumnSchema columnSchema = new ColumnSchemaBuilder("amount", Type.DECIMAL)
@@ -28,11 +28,7 @@ public final class CalciteKuduPredicateCastTest {
           new ColumnTypeAttributes.ColumnTypeAttributesBuilder().scale(6).precision(22)
           .build())
       .build();
-    final KuduPredicate rpcPredicate = predicate.toPredicate(new Schema(
-            Arrays.asList(
-                columnSchema
-            )),
-        Collections.emptyList());
+    final KuduPredicate rpcPredicate = predicate.toPredicate(columnSchema ,false);
     final BigDecimal expectedLiteral = BigDecimal.valueOf(7L);
     assertEquals(
         "Kudu Predicate didn't match expected predicate",
@@ -42,7 +38,7 @@ public final class CalciteKuduPredicateCastTest {
   }
 
   @Test
-  public void longToBigDecimal() throws Exception {
+  public void longToBigDecimal() {
     final CalciteKuduPredicate predicate = new CalciteKuduPredicate(0,
         KuduPredicate.ComparisonOp.EQUAL, Long.valueOf(7));
     final ColumnSchema columnSchema = new ColumnSchemaBuilder("amount", Type.DECIMAL)
@@ -50,11 +46,7 @@ public final class CalciteKuduPredicateCastTest {
           new ColumnTypeAttributes.ColumnTypeAttributesBuilder().scale(6).precision(22)
           .build())
       .build();
-    final KuduPredicate rpcPredicate = predicate.toPredicate(new Schema(
-            Arrays.asList(
-                columnSchema
-            )),
-        Collections.emptyList());
+    final KuduPredicate rpcPredicate = predicate.toPredicate(columnSchema ,false);
     final BigDecimal expectedLiteral = BigDecimal.valueOf(7L);
     assertEquals(
         "Kudu Predicate didn't match expected predicate",
