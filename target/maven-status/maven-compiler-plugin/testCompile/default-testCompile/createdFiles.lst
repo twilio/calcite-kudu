@@ -1,13 +1,17 @@
 com/twilio/raas/sql/PaginationIT.class
+com/twilio/raas/sql/PaginationIT$KuduTestSchemaFactory.class
 com/twilio/raas/sql/TestUtil.class
 com/twilio/raas/sql/CalciteKuduPredicateCastTest.class
 com/twilio/raas/sql/SortedTest.class
 com/twilio/raas/sql/DescendingSortedWithNonDateTimeFieldsIT.class
 com/twilio/raas/sql/rules/RowValueExpressionConverterTest.class
 com/twilio/raas/sql/rules/NumberFilterTest.class
+com/twilio/raas/sql/KuduWriteIT$KuduTestSchemaFactory.class
 com/twilio/raas/sql/SortedAggregationIT.class
 com/twilio/raas/sql/KuduQueryIT.class
 com/twilio/raas/sql/DescendingSortedOnDatetimeIT.class
+com/twilio/raas/sql/SortedAggregationIT$KuduTestSchemaFactory.class
 com/twilio/raas/sql/CalciteKuduEnumerableTest.class
+com/twilio/raas/sql/DescendingSortedWithNonDateTimeFieldsIT$KuduTestSchemaFactory.class
 com/twilio/raas/sql/KuduWriteIT.class
 com/twilio/raas/sql/JDBCQueryIT.class
