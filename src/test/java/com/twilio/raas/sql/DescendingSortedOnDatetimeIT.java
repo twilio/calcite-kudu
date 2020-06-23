@@ -180,9 +180,9 @@ public final class DescendingSortedOnDatetimeIT {
       assertTrue(rs.next());
       assertEquals("Record's account sid should match",
         ACCOUNT_SID, rs.getString("account_sid"));
-      assertTrue("Record's datetime is of third upserted record",
-        Instant.ofEpochMilli(rs.getLong("event_date"))
-          .equals(Instant.parse("2019-01-01T01:00:00.000Z")));
+      assertEquals(String.format("Record's datetime is of third upserted record: %d", rs.getLong("event_date")),
+          Instant.parse("2019-01-01T01:00:00.000Z"),
+          Instant.ofEpochMilli(rs.getLong("event_date")));
       assertFalse(rs.next());
     }
   }

@@ -22,6 +22,7 @@ import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.tools.RelBuilderFactory;
 
 import java.util.Collections;
@@ -30,6 +31,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * In recent Calcite Release, I believe this rule can be replaced.
+ */
 public abstract class KuduSortedAggregationRule extends KuduSortRule {
 
   private static final RelOptRuleOperand SIMPLE_OPERAND =
@@ -78,7 +82,7 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
       if (groupedOrdinal < query.calciteKuduTable.getKuduTable().getSchema().getPrimaryKeyColumnCount()) {
         boolean found = false;
         for (RelFieldCollation fieldCollation : originalSort.getCollation().getFieldCollations()) {
-          if (fieldCollation.getFieldIndex() == groupedOrdinal) {
+          if (fieldCollation.getFieldIndex() == groupedOrdinal && project.getProjects().get(fieldCollation.getFieldIndex()).getKind() == SqlKind.INPUT_REF) {
             found = true;
             break;
           }

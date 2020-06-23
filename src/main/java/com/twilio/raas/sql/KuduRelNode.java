@@ -5,12 +5,15 @@ import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.type.RelDataType;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.calcite.linq4j.tree.Blocks;
 import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexNode;
 import org.apache.kudu.client.KuduTable;
 
 /**
@@ -43,6 +46,9 @@ public interface KuduRelNode extends RelNode {
     class Implementor {
         public KuduTable kuduTable;
         public RelOptTable table;
+        public List<RexNode> projections;
+        public RelDataType tableDataType;
+        public List<Integer> descendingColumns = Collections.emptyList();
 
         // information required for executing a query
         public final List<Integer> kuduProjectedColumns  = new ArrayList<>();

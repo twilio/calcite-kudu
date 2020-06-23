@@ -73,6 +73,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
   private final AsyncKuduClient client;
   private final CalciteKuduTable calciteKuduTable;
 
+  private final Function1<Object, Object> projection;
+
   /**
    * A KuduEnumerable is an {@link Enumerable} for Kudu that can be configured to be sorted.
    *
@@ -96,11 +98,13 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
       final boolean sort,
       final boolean groupBySorted,
       final KuduScanStats scanStats,
-      final AtomicBoolean cancelFlag) {
+      final AtomicBoolean cancelFlag,
+      final Function1<Object, Object> projection) {
     this.scansShouldStop = new AtomicBoolean(false);
     this.cancelFlag = cancelFlag;
     this.limit = limit;
     this.offset = offset;
+    this.projection = projection;
     // if we have an offset always sort by the primary key to ensure the rows are returned
     // in a predictable order
     this.sort = offset>0 || sort;
@@ -355,7 +359,6 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     }
 
     final Schema projectedSchema = scanners.get(0).getProjectionSchema();
-    final Schema tableSchema = calciteKuduTable.getKuduTable().getSchema();
 
     if (sort) {
       final List<ScannerCallback> callbacks = scanners
@@ -369,7 +372,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
                   cancelFlag,
                   projectedSchema,
                   scanStats,
-                  true);
+                  true,
+                  projection);
             })
         .collect(Collectors.toList());
       callbacks
@@ -400,7 +404,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
                 cancelFlag,
                 projectedSchema,
                 scanStats,
-                false);
+                false,
+                projection);
           })
       .forEach(callback -> callback.nextBatch());
 
@@ -564,7 +569,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
       sort,
       groupBySorted,
       scanStats,
-      cancelFlag
+      cancelFlag,
+      projection
     );
   }
 

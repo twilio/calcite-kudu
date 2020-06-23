@@ -21,7 +21,7 @@ import org.apache.calcite.rex.RexLiteral;
  */
 public enum KuduMethod {
     KUDU_QUERY_METHOD(CalciteKuduTable.KuduQueryable.class, "query", List.class,
-        List.class, int.class, int.class, boolean.class, boolean.class, KuduScanStats.class, AtomicBoolean.class),
+        List.class, int.class, int.class, boolean.class, boolean.class, KuduScanStats.class, AtomicBoolean.class, Function1.class),
     KUDU_MUTATE_TUPLES_METHOD(CalciteKuduTable.KuduQueryable.class, "mutateTuples", List.class,
       List.class),
     KUDU_MUTATE_ROW_METHOD(CalciteKuduTable.KuduQueryable.class, "mutateRow", List.class,

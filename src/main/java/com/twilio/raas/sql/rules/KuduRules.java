@@ -2,9 +2,6 @@ package com.twilio.raas.sql.rules;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.rel.core.RelFactories;
-import org.apache.calcite.rel.logical.LogicalFilter;
-import org.apache.calcite.rel.logical.LogicalJoin;
-import org.apache.calcite.rel.logical.LogicalSort;
 
 import java.util.Arrays;
 import java.util.List;
@@ -40,7 +37,6 @@ public class KuduRules {
             NESTED_JOIN_OVER_SORT,
             NESTED_JOIN_OVER_LIMIT,
             NESTED_JOIN_OVER_LIMIT_SORT_FILTER,
-            KuduProjectMergeRule.INSTANCE,
             KuduToEnumerableConverter.INSTANCE
     );
 }

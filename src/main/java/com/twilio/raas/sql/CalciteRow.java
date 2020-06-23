@@ -28,7 +28,6 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
      * @param descendingSortedFieldIndices  Index of the descending sorted fields in the rowSchema projection
      */
-    @VisibleForTesting
     public CalciteRow(final Schema rowSchema,
                       final Object[] rowData,
                       final List<Integer> primaryKeyColumnsInProjection,

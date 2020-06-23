@@ -2,6 +2,7 @@ package com.twilio.raas.sql.rel;
 
 import com.twilio.raas.sql.CalciteKuduTable;
 import com.twilio.raas.sql.KuduMethod;
+import com.twilio.raas.sql.KuduPhysType;
 import com.twilio.raas.sql.KuduRelNode;
 import com.twilio.raas.sql.KuduScanStats;
 import com.twilio.raas.sql.KuduWrite;
@@ -13,23 +14,38 @@ import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.adapter.enumerable.JavaRowFormat;
 import org.apache.calcite.adapter.enumerable.PhysType;
 import org.apache.calcite.adapter.enumerable.PhysTypeImpl;
+import org.apache.calcite.adapter.enumerable.RexToLixTranslator;
+import org.apache.calcite.adapter.enumerable.RexToLixTranslator.InputGetter;
+import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.tree.BlockBuilder;
+import org.apache.calcite.linq4j.tree.Blocks;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.linq4j.tree.MethodCallExpression;
+import org.apache.calcite.linq4j.tree.ParameterExpression;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
+import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexProgram;
+import org.apache.calcite.rex.RexProgramBuilder;
 import org.apache.calcite.runtime.Hook;
+import org.apache.calcite.sql.SqlExplainFormat;
+import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.util.BuiltInMethod;
+import org.apache.calcite.util.Pair;
+import org.apache.kudu.client.RowResult;
 
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -117,13 +133,50 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
                   AtomicBoolean.class)
       );
 
+      final Expression mapFunction;
+      if (kuduImplementor.projections != null && !kuduImplementor.projections.isEmpty()) {
+          final BlockBuilder projectExpressionBlock = new BlockBuilder();
+
+          final PhysType tablePhystype = new KuduPhysType(kuduImplementor.kuduTable.getSchema(), kuduImplementor.tableDataType,
+              kuduImplementor.descendingColumns, kuduImplementor.kuduProjectedColumns);
+          final ParameterExpression inputRow = Expressions.parameter(Object.class);
+
+          List<Pair<RexNode, String>> namedProjects = Pair.zip(kuduImplementor.projections, getRowType().getFieldNames());
+          final RexProgramBuilder builder = new RexProgramBuilder(tablePhystype.getRowType(), getCluster().getRexBuilder());
+
+          namedProjects
+              .stream()
+              .forEach(pair -> builder.addProject(pair.left, pair.right));
+
+
+          final Expression castToRow = Expressions.convert_(inputRow, RowResult.class);
+
+          final InputGetter inputGetter = new RexToLixTranslator.InputGetterImpl(
+              Collections.singletonList(Pair.of(castToRow, tablePhystype)));
+          final RexProgram projectionFunctions = builder.getProgram();
+          final List<Expression> projectionExpressions = RexToLixTranslator.translateProjects(projectionFunctions, implementor.getTypeFactory(),
+              implementor.getConformance(), projectExpressionBlock, tablePhystype, DataContext.ROOT, inputGetter, null);
+
+          projectExpressionBlock.add(Expressions.return_(null, physType.record(projectionExpressions)));
+
+          mapFunction = Expressions.new_(
+              Function1.class,
+              Collections.emptyList(),
+              Expressions.methodDecl(Modifier.PUBLIC,
+                  Object.class,
+                  "apply",
+                  Collections.singletonList(inputRow),
+                  projectExpressionBlock.toBlock()
+              )
+          );
+      }
+      else {
+          mapFunction = Expressions.constant(null);
+      }
+
       Expression enumerable = list.append("enumerable",
-              Expressions.call(table,
-                      KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit,
-                      offset, sorted,
-                      Expressions.constant(kuduImplementor.groupByLimited),
-                  scanStats,
-                  cancelBoolean));
+              Expressions.call(table, KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit, offset, sorted,
+                  Expressions.constant(kuduImplementor.groupByLimited), scanStats, cancelBoolean, mapFunction));
 
       Hook.QUERY_PLAN.run(predicates);
       list.add(
@@ -199,5 +252,3 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
   }
 
 }
-
-
