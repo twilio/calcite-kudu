@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.twilio.raas.sql.PaginationIT
--------------------------------------------------------------------------------
-Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 11.931 s - in com.twilio.raas.sql.PaginationIT

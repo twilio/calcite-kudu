@@ -1,1 +1,0 @@
-packageSearchIndex = [{"l":"All Packages","url":"allpackages-index.html"},{"l":"com.twilio.raas.sql"},{"l":"com.twilio.raas.sql.rel"},{"l":"com.twilio.raas.sql.rules"},{"l":"org.apache.calcite.plan.volcano"}]

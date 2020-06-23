@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.twilio.raas.sql.SortedAggregationIT
--------------------------------------------------------------------------------
-Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 6.63 s - in com.twilio.raas.sql.SortedAggregationIT
