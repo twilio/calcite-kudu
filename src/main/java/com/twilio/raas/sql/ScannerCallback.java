@@ -1,7 +1,6 @@
 package com.twilio.raas.sql;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.concurrent.BlockingQueue;
 import com.stumbleupon.async.Callback;
 import org.apache.kudu.client.RowResultIterator;
@@ -12,6 +11,7 @@ import org.apache.kudu.client.Partition;
 import java.util.List;
 
 import org.apache.calcite.linq4j.function.Function1;
+import org.apache.calcite.linq4j.function.Predicate1;
 import org.apache.kudu.Schema;
 
 import com.stumbleupon.async.Deferred;
@@ -42,6 +42,7 @@ final public class ScannerCallback
     final List<Integer> descendingSortedFieldIndices;
     final KuduScanStats scanStats;
     final Function1<Object, Object> projectionMapper;
+    final Predicate1<Object> filterFunction;
 
     public ScannerCallback(final CalciteKuduTable calciteKuduTable,
                            final AsyncKuduScanner scanner,
@@ -51,7 +52,8 @@ final public class ScannerCallback
                            final Schema projectedSchema,
                            final KuduScanStats scanStats,
         final boolean isScannerSorted,
-        final Function1<Object, Object> projectionMapper) {
+        final Function1<Object, Object> projectionMapper,
+        final Predicate1<Object> filterFunction) {
 
         this.scanner = scanner;
         this.rowResults = rowResults;
@@ -68,6 +70,7 @@ final public class ScannerCallback
         this.cancelFlag = cancelFlag;
 
         this.projectionMapper = projectionMapper;
+        this.filterFunction = filterFunction;
 
         logger.debug("ScannerCallback created for scanner" + scanner);
     }
@@ -110,6 +113,9 @@ final public class ScannerCallback
             if (!earlyExit.get()) {
                 while (nextBatch != null && nextBatch.hasNext()) {
                     final RowResult row = nextBatch.next();
+                    if (filterFunction != null && !filterFunction.apply(row)) {
+                        continue;
+                    }
                     final CalciteScannerMessage<CalciteRow> wrappedRow;
                     if (projectionMapper != null) {
                         if (row.getSchema().getColumnCount() > 1) {

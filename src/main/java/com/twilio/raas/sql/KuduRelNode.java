@@ -46,9 +46,11 @@ public interface KuduRelNode extends RelNode {
     class Implementor {
         public KuduTable kuduTable;
         public RelOptTable table;
-        public List<RexNode> projections;
+        public List<RexNode> projections = Collections.emptyList();
         public RelDataType tableDataType;
         public List<Integer> descendingColumns = Collections.emptyList();
+        public List<Integer> filterProjections = Collections.emptyList();
+        public RexNode inMemoryCondition = null;
 
         // information required for executing a query
         public final List<Integer> kuduProjectedColumns  = new ArrayList<>();

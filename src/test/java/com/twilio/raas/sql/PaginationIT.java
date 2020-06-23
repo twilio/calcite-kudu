@@ -277,17 +277,17 @@ public class PaginationIT {
             String sql = String.format(sqlFormat, tableName, ACCOUNT1);
 
             // verify that account_sid is pushed down to kudu
-            String expectedPlanFormat = "EnumerableCalc(expr#0..3=[{inputs}], " +
-              "expr#4=['%s':VARCHAR], expr#5=[=($t0, $t4)], expr#6=['%%0'], expr#7=[LIKE" +
-              "($t3, $t6)], expr#8=[AND($t5, $t7)], proj#0..3=[{exprs}], $condition=[$t8])\n" +
-              "  KuduToEnumerableRel\n" +
-              "    KuduFilterRel(ScanToken 1=[account_sid EQUAL ACCOUNT1])\n" +
-              "      KuduQuery(table=[[kudu, %s]])\n";
+            // NOTE: '%%0' is because this string is passed into String.format().
+            String expectedPlanFormat =
+              "KuduToEnumerableRel\n" +
+              "  KuduFilterRel(ScanToken 1=[account_sid EQUAL ACCOUNT1], MemoryFilters=[AND(=($0, 'ACCOUNT1'), LIKE($3, '%%0'))])\n" +
+              "    KuduQuery(table=[[kudu, %s]])\n";
 
-            String expectedPlan = String.format(expectedPlanFormat, ACCOUNT1, tableName);
+            String expectedPlan = String.format(expectedPlanFormat, tableName);
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
             String plan = SqlUtil.getExplainPlan(rs);
-            assertEquals("Unexpected plan ", expectedPlan, plan);
+            assertEquals(String.format("Unexpected plan\n%s", plan),
+                expectedPlan, plan);
 
             // query should return 15 rows with phone numbers ending in 0
             rs = conn.createStatement().executeQuery(sql);

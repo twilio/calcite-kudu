@@ -19,6 +19,7 @@ import org.apache.calcite.linq4j.Linq4j;
 import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Function2;
+import org.apache.calcite.linq4j.function.Predicate1;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.sql.SqlKind;
@@ -74,6 +75,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
   private final CalciteKuduTable calciteKuduTable;
 
   private final Function1<Object, Object> projection;
+  private final Predicate1<Object> filterFunction;
 
   /**
    * A KuduEnumerable is an {@link Enumerable} for Kudu that can be configured to be sorted.
@@ -99,7 +101,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
       final boolean groupBySorted,
       final KuduScanStats scanStats,
       final AtomicBoolean cancelFlag,
-      final Function1<Object, Object> projection) {
+      final Function1<Object, Object> projection,
+      final Predicate1<Object> filterFunction) {
     this.scansShouldStop = new AtomicBoolean(false);
     this.cancelFlag = cancelFlag;
     this.limit = limit;
@@ -119,6 +122,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     this.columnIndices = columnIndices;
     this.client = client;
     this.calciteKuduTable = calciteKuduTable;
+    this.filterFunction = filterFunction;
   }
 
   @VisibleForTesting
@@ -373,7 +377,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
                   projectedSchema,
                   scanStats,
                   true,
-                  projection);
+                  projection,
+                  filterFunction);
             })
         .collect(Collectors.toList());
       callbacks
@@ -405,7 +410,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
                 projectedSchema,
                 scanStats,
                 false,
-                projection);
+                projection,
+                filterFunction);
           })
       .forEach(callback -> callback.nextBatch());
 
@@ -570,7 +576,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
       groupBySorted,
       scanStats,
       cancelFlag,
-      projection
+      projection,
+      filterFunction
     );
   }
 

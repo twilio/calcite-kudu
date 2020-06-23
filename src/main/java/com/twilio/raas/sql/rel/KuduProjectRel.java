@@ -70,22 +70,7 @@ public class KuduProjectRel extends Project implements KuduRelNode {
                 .flatMap(Collection::stream)
                 .distinct() // @TODO: this might not be the right idea.
                 .collect(Collectors.toList()));
-        // Since KuduProjectRel has a cost of zero, if we have a KuduProjectRel that wraps
-        // another KuduProjectRel ProjectRemoveRule will not be able to combine them since the
-        // the cost would not decrease
-        // We always chose the columns that are projected by the outermost KuduProjectRel
-        if (!implementor.kuduProjectedColumns.isEmpty()) {
-            List<Integer> prevProjectedColumns =
-                    Lists.newArrayList(implementor.kuduProjectedColumns);
-            implementor.kuduProjectedColumns.clear();
-            projectedColumnsIndexes.stream().forEach(
-                    index -> {
-                        implementor.kuduProjectedColumns.add(prevProjectedColumns.get(index));
-                    });
-        }
-        else {
-            implementor.kuduProjectedColumns.addAll(projectedColumnsIndexes);
-        }
+        implementor.kuduProjectedColumns.addAll(projectedColumnsIndexes);
 
         // Provide the RexNodes needed for the projection
         implementor.projections = getProjects();

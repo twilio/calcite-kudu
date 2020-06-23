@@ -49,6 +49,7 @@ import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Statistics;
 import org.apache.calcite.linq4j.Queryable;
 import org.apache.calcite.linq4j.function.Function1;
+import org.apache.calcite.linq4j.function.Predicate1;
 import org.apache.calcite.schema.impl.AbstractTableQueryable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -251,9 +252,10 @@ public class CalciteKuduTable extends AbstractQueryableTable
                                        final boolean groupByLimited,
                                        final KuduScanStats scanStats,
                                        final AtomicBoolean cancelFlag,
-                                       final Function1<Object, Object> projection) {
+                                       final Function1<Object, Object> projection,
+                                       final Predicate1<Object> filterFunction) {
       return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset,
-          sorted, groupByLimited, scanStats, cancelFlag, projection);
+          sorted, groupByLimited, scanStats, cancelFlag, projection, filterFunction);
     }
 
     @Override
@@ -293,7 +295,7 @@ public class CalciteKuduTable extends AbstractQueryableTable
             //noinspection unchecked
             final Enumerable<T> enumerable =
                 (Enumerable<T>) getTable().executeQuery(Collections.emptyList(),
-                    Collections.emptyList(), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false), null);
+                    Collections.emptyList(), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false), null, null);
             return enumerable.enumerator();
         }
 
@@ -313,7 +315,7 @@ public class CalciteKuduTable extends AbstractQueryableTable
                                         final boolean groupByLimited,
                                         final KuduScanStats scanStats,
             final AtomicBoolean cancelFlag) {
-            return query(predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats, cancelFlag, null);
+            return query(predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats, cancelFlag, null, null);
         }
 
         /**
@@ -326,7 +328,8 @@ public class CalciteKuduTable extends AbstractQueryableTable
                                         final boolean groupByLimited,
                                         final KuduScanStats scanStats,
                                         final AtomicBoolean cancelFlag,
-                                        final Function1<Object, Object> projection) {
+                                        final Function1<Object, Object> projection,
+                                        final Predicate1<Object> filterFunction) {
             return getTable()
                 .executeQuery(
                 predicates,
@@ -337,7 +340,8 @@ public class CalciteKuduTable extends AbstractQueryableTable
                 groupByLimited,
                 scanStats,
                 cancelFlag,
-                projection);
+                projection,
+                filterFunction);
         }
 
         public Enumerable<Object> mutateTuples(final List<Integer> columnIndexes,

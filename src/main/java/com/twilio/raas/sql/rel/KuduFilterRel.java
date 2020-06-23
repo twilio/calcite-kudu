@@ -2,6 +2,8 @@ package com.twilio.raas.sql.rel;
 
 import com.twilio.raas.sql.CalciteKuduPredicate;
 import com.twilio.raas.sql.KuduRelNode;
+import com.twilio.raas.sql.rel.KuduProjectRel.KuduColumnVisitor;
+
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
@@ -14,21 +16,26 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate.ComparisonOp;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class KuduFilterRel extends Filter implements KuduRelNode {
     public final List<List<CalciteKuduPredicate>> scanPredicates;
     public final Schema kuduSchema;
+    public final boolean useInMemoryFiltering;
 
     public KuduFilterRel(final RelOptCluster cluster,
                          final RelTraitSet traitSet,
                          final RelNode child,
                          final RexNode condition,
         final List<List<CalciteKuduPredicate>> predicates,
-        final Schema kuduSchema) {
+        final Schema kuduSchema,
+        boolean useInMemoryFiltering) {
         super(cluster, traitSet, child, condition);
         this.scanPredicates = predicates;
         this.kuduSchema = kuduSchema;
+        this.useInMemoryFiltering = useInMemoryFiltering;
     }
 
     @Override
@@ -43,13 +50,21 @@ public class KuduFilterRel extends Filter implements KuduRelNode {
     public KuduFilterRel copy(final RelTraitSet traitSet, final RelNode input,
                               final RexNode condition) {
         return new KuduFilterRel(getCluster(), traitSet, input, condition,
-            this.scanPredicates, kuduSchema);
+            this.scanPredicates, kuduSchema, useInMemoryFiltering);
     }
 
     @Override
     public void implement(final Implementor implementor) {
         implementor.visitChild(0, getInput());
         implementor.predicates.addAll(this.scanPredicates);
+
+        final KuduColumnVisitor columnExtractor = new KuduColumnVisitor();
+
+
+        if (useInMemoryFiltering) {
+            implementor.inMemoryCondition = getCondition();
+            implementor.filterProjections = getCondition().accept(columnExtractor);
+        }
     }
 
     @Override
@@ -76,6 +91,9 @@ public class KuduFilterRel extends Filter implements KuduRelNode {
                         predicate.rightHandValue));
             }
             pw.item("ScanToken " + scanCount++, sb.toString());
+        }
+        if (useInMemoryFiltering) {
+            pw.item("MemoryFilters", getCondition());
         }
         return pw;
     }
