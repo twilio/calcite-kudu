@@ -54,6 +54,8 @@ import org.slf4j.LoggerFactory;
 
 // This class resides in this project under the org.apache namespace
 
+// This class resides in this project under the org.apache namespace
+
 
 /**
  * A {@code CalciteKuduTable} is responsible for returning rows of Objects back.

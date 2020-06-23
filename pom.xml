@@ -77,6 +77,11 @@
         <artifactId>mockito-all</artifactId>
         <scope>test</scope>
       </dependency>
+        <dependency>
+            <groupId>com.twilio.kudu</groupId>
+            <artifactId>dataset</artifactId>
+            <version>1.24.5</version>
+        </dependency>
 
     </dependencies>
 </project>
