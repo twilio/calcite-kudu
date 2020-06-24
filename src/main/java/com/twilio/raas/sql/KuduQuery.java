@@ -63,6 +63,16 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
         // see WirelessUsageIt.testPaginationOverFactAggregation for why this rule is removed
         // disable ReduceExpressionsRule until RC-1274 is implemented
         planner.removeRule(ReduceExpressionsRule.FILTER_INSTANCE);
+
+        // Join Commute Rule reorders the left and right tables of inner joins preventing KuduSortRel
+        // from being applied to the large table.
+        // {@link org.apache.calcite.rel.metadata.RelMdCollation#enumerableJoin0(org.apache.calcite.rel.metadata.RelMetadataQuery)}
+        planner.removeRule(org.apache.calcite.rel.rules.JoinCommuteRule.INSTANCE);
+
+        // After removing the Join Commute Rule, Merge Join is chosen over Hash Join, negating the
+        // work down to push the KuduSortRel into the large table.
+        planner.removeRule(org.apache.calcite.adapter.enumerable.EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
+
         for (RelOptRule rule : KuduRules.RULES) {
           planner.addRule(rule);
         }
