@@ -12,6 +12,7 @@ import org.apache.calcite.adapter.enumerable.EnumUtils;
 import org.apache.calcite.adapter.enumerable.JavaRowFormat;
 import org.apache.calcite.adapter.enumerable.PhysType;
 import org.apache.calcite.linq4j.function.Function1;
+import org.apache.calcite.linq4j.function.Predicate1;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.linq4j.tree.ParameterExpression;
@@ -25,6 +26,13 @@ import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.RowResult;
 
+/**
+ * A partially implemented implementation of {@link PhysType}. This class produces
+ * {@link Expressions} that take as input a {@link RowResult} and fetch various fields out of it.
+ *
+ * Primarily used to construct {@link Function1} and {@link Predicate1} that can be used filter
+ * and project the kudu rpc result.
+ */
 public final class KuduPhysType implements PhysType {
     private static Method LONG_METHOD = Types.lookupMethod(RowResult.class, "getLong", int.class);
     private static Method STRING_METHOD = Types.lookupMethod(RowResult.class, "getString", int.class);
@@ -116,9 +124,19 @@ public final class KuduPhysType implements PhysType {
     public Expression fieldReference(final Expression expression, final int ord) {
         final int field = this.kuduColumnProjections.indexOf(ord);
         final ColumnSchema columnSchema = tableSchema.getColumns().get(ord);
+
+        // This optional Expression is used to generate the Max value for the data type. This Max
+        // value is used to reverse the value stored in Kudu for descending sorted columns.
         Expression descendingSortMax = null;
+
+        // This required Expression retrieves / fetches the raw value from the Kudu RPC.
+        // Most of the value types use the static methods defined in this class.
         final Expression rawFetch;
+
+        // This required Expression records the integer the in the RowResult's schema.
         final Expression columnRef = Expressions.constant(field);
+
+        // Each type of ColumnSchema has a different method for the value.
         switch(columnSchema.getType()) {
         case INT8:
             rawFetch = Expressions.call(expression, BYTE_METHOD, columnRef);
