@@ -144,7 +144,7 @@ public final class KuduSchema extends AbstractSchema {
       return Optional.of(client.openTable(tableName).join());
     }
     catch (Exception e) {
-        //logger.error("Unable to open table " + tableName, e);
+      logger.error("Unable to open table " + tableName, e);
       return Optional.empty();
     }
   }
