@@ -48,6 +48,8 @@ import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Statistics;
 import org.apache.calcite.linq4j.Queryable;
+import org.apache.calcite.linq4j.function.Function1;
+import org.apache.calcite.linq4j.function.Predicate1;
 import org.apache.calcite.schema.impl.AbstractTableQueryable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -158,8 +160,8 @@ public class CalciteKuduTable extends AbstractQueryableTable
      */
     @Override
     public RelDataType getRowType(final RelDataTypeFactory typeFactory) {
+        final Schema kuduSchema = this.getKuduTable().getSchema();
         final RelDataTypeFactory.Builder builder = new RelDataTypeFactory.Builder(typeFactory);
-        final Schema kuduSchema = this.kuduTable.getSchema();
 
         for (int i = 0; i < kuduSchema.getColumnCount(); i++) {
             final ColumnSchema currentColumn = kuduSchema.getColumnByIndex(i);
@@ -246,9 +248,11 @@ public class CalciteKuduTable extends AbstractQueryableTable
                                        final long offset, final boolean sorted,
                                        final boolean groupByLimited,
                                        final KuduScanStats scanStats,
-                                       final AtomicBoolean cancelFlag) {
+                                       final AtomicBoolean cancelFlag,
+                                       final Function1<Object, Object> projection,
+                                       final Predicate1<Object> filterFunction) {
       return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset,
-        sorted, groupByLimited, scanStats, cancelFlag);
+          sorted, groupByLimited, scanStats, cancelFlag, projection, filterFunction);
     }
 
     @Override
@@ -288,7 +292,7 @@ public class CalciteKuduTable extends AbstractQueryableTable
             //noinspection unchecked
             final Enumerable<T> enumerable =
                 (Enumerable<T>) getTable().executeQuery(Collections.emptyList(),
-                    Collections.emptyList(), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false));
+                    Collections.emptyList(), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false), null, null);
             return enumerable.enumerator();
         }
 
@@ -302,6 +306,15 @@ public class CalciteKuduTable extends AbstractQueryableTable
             return (CalciteModifiableKuduTable) table;
         }
 
+        public Enumerable<Object> query(final List<List<CalciteKuduPredicate>> predicates,
+                                        final List<Integer> fieldsIndices, final long limit,
+                                        final long offset, final boolean sorted,
+                                        final boolean groupByLimited,
+                                        final KuduScanStats scanStats,
+            final AtomicBoolean cancelFlag) {
+            return query(predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats, cancelFlag, null, null);
+        }
+
         /**
          * This is the method that is called by Code generation to run the query.
          * Code generation happens in {@link KuduToEnumerableConverter}
@@ -311,7 +324,9 @@ public class CalciteKuduTable extends AbstractQueryableTable
                                         final long offset, final boolean sorted,
                                         final boolean groupByLimited,
                                         final KuduScanStats scanStats,
-                                        final AtomicBoolean cancelFlag) {
+                                        final AtomicBoolean cancelFlag,
+                                        final Function1<Object, Object> projection,
+                                        final Predicate1<Object> filterFunction) {
             return getTable()
                 .executeQuery(
                 predicates,
@@ -321,7 +336,9 @@ public class CalciteKuduTable extends AbstractQueryableTable
                 sorted,
                 groupByLimited,
                 scanStats,
-                cancelFlag);
+                cancelFlag,
+                projection,
+                filterFunction);
         }
 
         public Enumerable<Object> mutateTuples(final List<Integer> columnIndexes,

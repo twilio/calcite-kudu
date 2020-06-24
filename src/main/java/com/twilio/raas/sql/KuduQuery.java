@@ -1,6 +1,5 @@
 package com.twilio.raas.sql;
 
-import com.twilio.raas.sql.rules.KuduProjectMergeRule;
 import com.twilio.raas.sql.rules.KuduRules;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.plan.RelOptCluster;
@@ -64,10 +63,6 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
         // see WirelessUsageIt.testPaginationOverFactAggregation for why this rule is removed
         // disable ReduceExpressionsRule until RC-1274 is implemented
         planner.removeRule(ReduceExpressionsRule.FILTER_INSTANCE);
-        // ProjectMergeRule is replaced by KuduProjectMergeRule which does not merge a LogicalCalc
-        // that wraps a LogicalProject that is created by KuduProjectRule to handle expressions
-        // being projected
-        planner.removeRule(ProjectMergeRule.INSTANCE);
         for (RelOptRule rule : KuduRules.RULES) {
           planner.addRule(rule);
         }
@@ -77,6 +72,8 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     public void implement(Implementor impl) {
         // Doesn't call visit child as it is the leaf.
         impl.kuduTable = this.calciteKuduTable.getKuduTable();
+        impl.descendingColumns = this.calciteKuduTable.descendingOrderedColumnIndexes;
         impl.table = this.table;
+        impl.tableDataType = getRowType();
     }
 }

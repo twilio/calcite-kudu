@@ -36,29 +36,24 @@ import java.util.stream.Collectors;
 
 public class KuduProjectRel extends Project implements KuduRelNode {
 
-    private boolean projectExpressions;
     private List<Integer> projectedColumnsIndexes = Lists.newArrayList();
 
     public KuduProjectRel(RelOptCluster cluster, RelTraitSet traitSet,
                           RelNode input, List<? extends RexNode> projects,
-                          RelDataType rowType, boolean projectExpressions) {
+                          RelDataType rowType) {
         super(cluster, traitSet, input, projects, rowType);
-        this.projectExpressions = projectExpressions;
     }
 
     @Override
     public Project copy(RelTraitSet traitSet, RelNode input,
                         List<RexNode> projects, RelDataType rowType) {
-        return new KuduProjectRel(getCluster(), traitSet, input, projects, rowType, projectExpressions);
+        return new KuduProjectRel(getCluster(), traitSet, input, projects, rowType);
     }
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner,
                                       RelMetadataQuery mq) {
-      // if the projection includes an expression we replace it with a LogicalCalc wrapping a
-      // KuduProjectRel, so set to cost of the KuduProjectRel to negative so that the overall
-      // cost if lowered
-      double dRows = projectExpressions ? -100000.0 : 1.0;
+      double dRows = 1.0;
       double dCpu = 0;
       double dIo = 0;
       return planner.getCostFactory().makeCost(dRows, dCpu, dIo);
@@ -73,23 +68,12 @@ public class KuduProjectRel extends Project implements KuduRelNode {
                 .stream()
                 .map(expressionNamePair -> expressionNamePair.left.accept(visitor))
                 .flatMap(Collection::stream)
+                .distinct() // @TODO: this might not be the right idea.
                 .collect(Collectors.toList()));
-        // Since KuduProjectRel has a cost of zero, if we have a KuduProjectRel that wraps
-        // another KuduProjectRel ProjectRemoveRule will not be able to combine them since the
-        // the cost would not decrease
-        // We always chose the columns that are projected by the outermost KuduProjectRel
-        if (!implementor.kuduProjectedColumns.isEmpty()) {
-            List<Integer> prevProjectedColumns =
-                    Lists.newArrayList(implementor.kuduProjectedColumns);
-            implementor.kuduProjectedColumns.clear();
-            projectedColumnsIndexes.stream().forEach(
-                    index -> {
-                        implementor.kuduProjectedColumns.add(prevProjectedColumns.get(index));
-                    });
-        }
-        else {
-            implementor.kuduProjectedColumns.addAll(projectedColumnsIndexes);
-        }
+        implementor.kuduProjectedColumns.addAll(projectedColumnsIndexes);
+
+        // Provide the RexNodes needed for the projection
+        implementor.projections = getProjects();
     }
 
     public static class KuduColumnVisitor extends RexVisitorImpl<List<Integer>> {

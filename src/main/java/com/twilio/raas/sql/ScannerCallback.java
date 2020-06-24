@@ -9,6 +9,9 @@ import org.apache.kudu.client.RowResult;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.Partition;
 import java.util.List;
+
+import org.apache.calcite.linq4j.function.Function1;
+import org.apache.calcite.linq4j.function.Predicate1;
 import org.apache.kudu.Schema;
 
 import com.stumbleupon.async.Deferred;
@@ -38,6 +41,8 @@ final public class ScannerCallback
     final List<Integer> primaryKeyColumnsInProjection;
     final List<Integer> descendingSortedFieldIndices;
     final KuduScanStats scanStats;
+    final Function1<Object, Object> projectionMapper;
+    final Predicate1<Object> filterFunction;
 
     public ScannerCallback(final CalciteKuduTable calciteKuduTable,
                            final AsyncKuduScanner scanner,
@@ -46,7 +51,10 @@ final public class ScannerCallback
                            final AtomicBoolean cancelFlag,
                            final Schema projectedSchema,
                            final KuduScanStats scanStats,
-                           final boolean isScannerSorted) {
+        final boolean isScannerSorted,
+        final Function1<Object, Object> projectionMapper,
+        final Predicate1<Object> filterFunction) {
+
         this.scanner = scanner;
         this.rowResults = rowResults;
         this.scansShouldStop = scansShouldStop;
@@ -60,6 +68,9 @@ final public class ScannerCallback
         // @NOTE: this can be NULL. Need to check it.
         // @SEE: org.apache.calcite.plan.AbstractRelOptPlanner(RelOptCostFactory, Context)
         this.cancelFlag = cancelFlag;
+
+        this.projectionMapper = projectionMapper;
+        this.filterFunction = filterFunction;
 
         logger.debug("ScannerCallback created for scanner" + scanner);
     }
@@ -95,7 +106,6 @@ final public class ScannerCallback
     @Override
     public Deferred<Void> call(final RowResultIterator nextBatch) {
         scanStats.incrementScannerRpcCount(1L);
-
         if (nextBatch != null) {
           scanStats.incrementRowsScannedCount(nextBatch.getNumRows());
         }
@@ -103,8 +113,22 @@ final public class ScannerCallback
             if (!earlyExit.get()) {
                 while (nextBatch != null && nextBatch.hasNext()) {
                     final RowResult row = nextBatch.next();
-                    final CalciteScannerMessage<CalciteRow> wrappedRow = new CalciteScannerMessage<>(
-                            new CalciteRow(row, primaryKeyColumnsInProjection, descendingSortedFieldIndices));
+                    if (!filterFunction.apply(row)) {
+                        continue;
+                    }
+                    final CalciteScannerMessage<CalciteRow> wrappedRow;
+                    if (row.getSchema().getColumnCount() > 1) {
+                        wrappedRow = new CalciteScannerMessage<>(
+                            new CalciteRow(row.getSchema(), ((Object[]) projectionMapper.apply(row)),
+                                primaryKeyColumnsInProjection, descendingSortedFieldIndices));
+                    }
+                    else {
+                        final Object mapResult = ((Object) projectionMapper.apply(row));
+                        final Object[] rowData = new Object[]{mapResult};
+                        wrappedRow = new CalciteScannerMessage<>(
+                            new CalciteRow(row.getSchema(), rowData,
+                                primaryKeyColumnsInProjection, descendingSortedFieldIndices));
+                    }
                     // Blocks if the queue is full.
                     // @TODO: How to we protect it from locking up here because nothing is consuming
                     // from the queue.
