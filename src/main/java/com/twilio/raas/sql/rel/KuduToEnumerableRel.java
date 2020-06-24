@@ -158,7 +158,7 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
 
       final PhysType tablePhystype = new KuduPhysType(kuduImplementor.kuduTable.getSchema(), kuduImplementor.tableDataType,
           kuduImplementor.descendingColumns, kuduColumnIndices);
-      final ParameterExpression inputRow = Expressions.parameter(Object.class);
+      final ParameterExpression inputRow = Expressions.parameter(Modifier.FINAL, Object.class, "abstractRow");
 
       // If we have selected columns add them to the RexProgram as such.
       final List<Pair<RexNode, String>> namedProjects;

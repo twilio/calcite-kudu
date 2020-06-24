@@ -13,6 +13,7 @@ import org.apache.calcite.adapter.enumerable.JavaRowFormat;
 import org.apache.calcite.adapter.enumerable.PhysType;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Predicate1;
+import org.apache.calcite.linq4j.tree.BlockBuilder;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.linq4j.tree.ParameterExpression;
@@ -44,6 +45,7 @@ public final class KuduPhysType implements PhysType {
     private static Method DOUBLE_METHOD = Types.lookupMethod(RowResult.class, "getDouble", int.class);
     private static Method DECIMAL_METHOD = Types.lookupMethod(RowResult.class, "getDecimal", int.class);
     private static Method BINARY_METHOD = Types.lookupMethod(RowResult.class, "getBinary", int.class);
+    private static Method IS_NULL = Types.lookupMethod(RowResult.class, "isNull", int.class);
 
     private static Method TIMESTAMP_METHOD = Types.lookupMethod(RowResult.class, "getTimestamp", int.class);
     private static Method TO_INSTANT = Types.lookupMethod(Timestamp.class, "toInstant");
@@ -188,15 +190,35 @@ public final class KuduPhysType implements PhysType {
             throw new IllegalArgumentException("Unable to do the thing " + columnSchema.getType());
         }
 
+        final Expression fetchFromRowResult;
         if (descendingSortedFieldIndices.contains(ord)) {
             if (descendingSortMax == null) {
                 throw new IllegalStateException(String.format("Ord %d is of type %s and cannot be descending sorted",
                         field, columnSchema));
             }
-            return Expressions.subtract(descendingSortMax, rawFetch);
+            fetchFromRowResult = Expressions.subtract(descendingSortMax, rawFetch);
         }
         else {
-            return rawFetch;
+            fetchFromRowResult = rawFetch;
+        }
+
+        // When a column is nullable, create a lambda that calls {@link RowResult#isNull(int)}
+        // and returns null if it that is true otherwise it calls the proper method on RowResult
+        // to get the value.
+        if (columnSchema.isNullable()) {
+            final BlockBuilder functionBuilder = new BlockBuilder();
+            functionBuilder.add(
+                Expressions.ifThenElse(
+                    Expressions.call(expression, IS_NULL, columnRef),
+                    Expressions.return_(null, Expressions.constant(null)),
+                    Expressions.return_(null, fetchFromRowResult)));
+            return Expressions.call(
+                Expressions.lambda(functionBuilder.toBlock()),
+                "apply"
+            );
+        }
+        else {
+            return fetchFromRowResult;
         }
     }
     @Override
