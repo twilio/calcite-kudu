@@ -113,27 +113,21 @@ final public class ScannerCallback
             if (!earlyExit.get()) {
                 while (nextBatch != null && nextBatch.hasNext()) {
                     final RowResult row = nextBatch.next();
-                    if (filterFunction != null && !filterFunction.apply(row)) {
+                    if (!filterFunction.apply(row)) {
                         continue;
                     }
                     final CalciteScannerMessage<CalciteRow> wrappedRow;
-                    if (projectionMapper != null) {
-                        if (row.getSchema().getColumnCount() > 1) {
-                            wrappedRow = new CalciteScannerMessage<>(
-                                    new CalciteRow(row.getSchema(), ((Object[]) projectionMapper.apply(row)),
-                                            primaryKeyColumnsInProjection, descendingSortedFieldIndices));
-                        }
-                        else {
-                            final Object mapResult = ((Object) projectionMapper.apply(row));
-                            final Object[] rowData = new Object[]{mapResult};
-                            wrappedRow = new CalciteScannerMessage<>(
-                                    new CalciteRow(row.getSchema(), rowData,
-                                            primaryKeyColumnsInProjection, descendingSortedFieldIndices));
-                        }
+                    if (row.getSchema().getColumnCount() > 1) {
+                        wrappedRow = new CalciteScannerMessage<>(
+                            new CalciteRow(row.getSchema(), ((Object[]) projectionMapper.apply(row)),
+                                primaryKeyColumnsInProjection, descendingSortedFieldIndices));
                     }
                     else {
+                        final Object mapResult = ((Object) projectionMapper.apply(row));
+                        final Object[] rowData = new Object[]{mapResult};
                         wrappedRow = new CalciteScannerMessage<>(
-                                new CalciteRow(row, primaryKeyColumnsInProjection, descendingSortedFieldIndices));
+                            new CalciteRow(row.getSchema(), rowData,
+                                primaryKeyColumnsInProjection, descendingSortedFieldIndices));
                     }
                     // Blocks if the queue is full.
                     // @TODO: How to we protect it from locking up here because nothing is consuming

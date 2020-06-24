@@ -14,6 +14,7 @@ import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.adapter.enumerable.JavaRowFormat;
 import org.apache.calcite.adapter.enumerable.PhysType;
 import org.apache.calcite.adapter.enumerable.PhysTypeImpl;
+import org.apache.calcite.adapter.enumerable.RexImpTable;
 import org.apache.calcite.adapter.enumerable.RexToLixTranslator;
 import org.apache.calcite.adapter.enumerable.RexToLixTranslator.InputGetter;
 import org.apache.calcite.linq4j.function.Function1;
@@ -34,10 +35,12 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexLocalRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexProgram;
 import org.apache.calcite.rex.RexProgramBuilder;
+import org.apache.calcite.rex.RexTableInputRef;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.sql.SqlExplainFormat;
 import org.apache.calcite.sql.SqlExplainLevel;
@@ -145,104 +148,94 @@ public class KuduToEnumerableRel extends ConverterImpl  implements EnumerableRel
                   }
               });
       }
-      // If the query is SELECT * _BUT_ we have in memory Filter columns, add all columns int the
-      // Kudu Table.
-      else if (!kuduImplementor.filterProjections.isEmpty()) {
+      // If the query is SELECT *
+      else {
           kuduColumnIndices = IntStream.range(0, kuduImplementor.kuduTable.getSchema().getColumnCount())
                   .boxed().collect(Collectors.toList());
       }
-      // SELECT * without any in memory filter.
-      else {
-          kuduColumnIndices = Collections.emptyList();
-      }
-      final Expression mapFunction;
-      final Expression filterFunction;
 
-      // If we have a Projection -- because column projection or because of an in memory filter
-      if (!kuduColumnIndices.isEmpty()) {
-          final BlockBuilder projectExpressionBlock = new BlockBuilder();
+      final BlockBuilder projectExpressionBlock = new BlockBuilder();
 
-          final PhysType tablePhystype = new KuduPhysType(kuduImplementor.kuduTable.getSchema(), kuduImplementor.tableDataType,
-              kuduImplementor.descendingColumns, kuduColumnIndices);
-          final ParameterExpression inputRow = Expressions.parameter(Object.class);
+      final PhysType tablePhystype = new KuduPhysType(kuduImplementor.kuduTable.getSchema(), kuduImplementor.tableDataType,
+          kuduImplementor.descendingColumns, kuduColumnIndices);
+      final ParameterExpression inputRow = Expressions.parameter(Object.class);
 
-          // If we have selected columns add them to the RexProgram as such.
-          final List<Pair<RexNode, String>> namedProjects;
-          if (!kuduImplementor.projections.isEmpty()) {
-              namedProjects = Pair.zip(kuduImplementor.projections, getRowType().getFieldNames());
-          }
-          else {
-              namedProjects = Collections.emptyList();
-          }
-          final RexProgramBuilder builder = new RexProgramBuilder(tablePhystype.getRowType(), getCluster().getRexBuilder());
-
-          // Adds all the references we will be using. This might be unnecessary as addProject and
-          // addCondition might do this for us.
-          kuduColumnIndices
-              .stream()
-              .map(indx -> new RexLocalRef(indx, kuduImplementor.table.getRowType().getFieldList().get(indx).getType()))
-              .forEach(localRef -> builder.addExpr(localRef));
-
-          namedProjects
-              .stream()
-              .forEach(pair -> builder.addProject(pair.left, pair.right));
-
-          if (kuduImplementor.inMemoryCondition != null) {
-              builder.addCondition(kuduImplementor.inMemoryCondition);
-          }
-
-          final Expression castToRow = Expressions.convert_(inputRow, RowResult.class);
-
-          final InputGetter inputGetter = new RexToLixTranslator.InputGetterImpl(
-              Collections.singletonList(Pair.of(castToRow, tablePhystype)));
-          final RexProgram projectionFunctions = builder.getProgram();
-          final List<Expression> projectionExpressions = RexToLixTranslator.translateProjects(projectionFunctions, implementor.getTypeFactory(),
-              implementor.getConformance(), projectExpressionBlock, tablePhystype, DataContext.ROOT, inputGetter, null);
-
-          projectExpressionBlock.add(Expressions.return_(null, physType.record(projectionExpressions)));
-
-          final BlockBuilder filterBuilder = new BlockBuilder();
-
-          if (! projectionExpressions.isEmpty()) {
-              mapFunction = Expressions.new_(
-                  Function1.class,
-                  Collections.emptyList(),
-                  Expressions.methodDecl(Modifier.PUBLIC,
-                      Object.class,
-                      "apply",
-                      Collections.singletonList(inputRow),
-                      projectExpressionBlock.toBlock()
-                  )
-              );
-          }
-          else {
-              mapFunction = Expressions.constant(null);
-          }
-
-          if (!kuduImplementor.filterProjections.isEmpty()) {
-              final Expression condition = RexToLixTranslator.translateCondition(projectionFunctions, implementor.getTypeFactory(), filterBuilder, inputGetter,
-                  null, implementor.getConformance());
-              filterBuilder.add(Expressions.return_(null, condition));
-           filterFunction =
-              Expressions.new_(
-                  Predicate1.class,
-                  Collections.emptyList(),
-                  Expressions.methodDecl(Modifier.PUBLIC,
-                      boolean.class,
-                      "apply",
-                      Collections.singletonList(inputRow),
-                      filterBuilder.toBlock()
-                  )
-              );
-          }
-          else {
-              filterFunction = Expressions.constant(null);
-          }
+      // If we have selected columns add them to the RexProgram as such.
+      final List<Pair<RexNode, String>> namedProjects;
+      if (!kuduImplementor.projections.isEmpty()) {
+          namedProjects = Pair.zip(kuduImplementor.projections, getRowType().getFieldNames());
       }
       else {
-          mapFunction = Expressions.constant(null);
-          filterFunction = Expressions.constant(null);
+          // Create a Projection that includes every column in the table schema.
+          namedProjects = kuduColumnIndices
+              .stream()
+              .map(indx -> {
+                      final RelDataTypeField field = kuduImplementor.table
+                          .getRowType()
+                          .getFieldList()
+                          .get(indx);
+                      final RexNode ref = new RexLocalRef(indx, field.getType());
+                      return Pair.of(ref, field.getName());
+                  })
+              .collect(Collectors.toList());
       }
+      final RexProgramBuilder builder = new RexProgramBuilder(tablePhystype.getRowType(), getCluster().getRexBuilder());
+
+      // Adds all the references we will be using. This might be unnecessary as addProject and
+      // addCondition might do this for us.
+      kuduColumnIndices
+          .stream()
+          .map(indx -> new RexLocalRef(indx, kuduImplementor.table.getRowType().getFieldList().get(indx).getType()))
+          .forEach(localRef -> builder.addExpr(localRef));
+
+      namedProjects
+          .stream()
+          .forEach(pair -> builder.addProject(pair.left, pair.right));
+
+      if (kuduImplementor.inMemoryCondition != null) {
+          builder.addCondition(kuduImplementor.inMemoryCondition);
+      }
+
+      final Expression castToRow = Expressions.convert_(inputRow, RowResult.class);
+
+      final InputGetter inputGetter = new RexToLixTranslator.InputGetterImpl(
+          Collections.singletonList(Pair.of(castToRow, tablePhystype)));
+      final RexProgram projectionFunctions = builder.getProgram();
+      final List<Expression> projectionExpressions = RexToLixTranslator.translateProjects(projectionFunctions, implementor.getTypeFactory(),
+          implementor.getConformance(), projectExpressionBlock, tablePhystype, DataContext.ROOT, inputGetter, null);
+
+      projectExpressionBlock.add(Expressions.return_(null, physType.record(projectionExpressions)));
+
+      // This is the map function that will always be present. It translates the RowResult into an
+      // Object[]
+      final Expression mapFunction = Expressions.new_(
+          Function1.class,
+          Collections.emptyList(),
+          Expressions.methodDecl(Modifier.PUBLIC,
+              Object.class,
+              "apply",
+              Collections.singletonList(inputRow),
+              projectExpressionBlock.toBlock()
+          )
+      );
+
+      // This is builds a predicate function that will always be present. It checks if the RowResult
+      // should be returned in the KuduEnumerable.
+      final BlockBuilder filterBuilder = new BlockBuilder();
+      final Expression condition;
+      if (!kuduImplementor.filterProjections.isEmpty()) {
+          condition = RexToLixTranslator.translateCondition(projectionFunctions, implementor.getTypeFactory(), filterBuilder, inputGetter,
+              null, implementor.getConformance());
+
+      }
+      else {
+          condition = RexImpTable.TRUE_EXPR;
+      }
+
+      filterBuilder.add(Expressions.return_(null, condition));
+      final Expression filterFunction = Expressions.new_(Predicate1.class, Collections.emptyList(), Expressions.methodDecl(
+              Modifier.PUBLIC, boolean.class, "apply", Collections.singletonList(inputRow), filterBuilder.toBlock()));
+
       final Expression fields = list.append("kuduFields", implementor.stash(kuduColumnIndices, List.class));
 
       Expression enumerable = list.append("enumerable",
