@@ -58,10 +58,8 @@ public class KuduFilterRel extends Filter implements KuduRelNode {
         implementor.visitChild(0, getInput());
         implementor.predicates.addAll(this.scanPredicates);
 
-        final KuduColumnVisitor columnExtractor = new KuduColumnVisitor();
-
-
         if (useInMemoryFiltering) {
+            final KuduColumnVisitor columnExtractor = new KuduColumnVisitor();
             implementor.inMemoryCondition = getCondition();
             implementor.filterProjections = getCondition().accept(columnExtractor);
         }
