@@ -1,6 +1,5 @@
 package org.apache.calcite.jdbc;
 
-import com.twilio.raas.sql.CalciteKuduTable;
 import com.twilio.raas.sql.CalciteModifiableKuduTable;
 import org.apache.calcite.linq4j.Enumerable;
 
