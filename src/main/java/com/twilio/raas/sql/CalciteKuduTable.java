@@ -155,7 +155,12 @@ public class CalciteKuduTable extends AbstractQueryableTable
       return super.getStatistic();
     }
 
-    public static RelDataType kuduSchemaToRelDataType(final RelDataTypeFactory typeFactory, final Schema kuduSchema) {
+    /**
+     * Builds a mapping from Kudu Schema into relational schema names
+     */
+    @Override
+    public RelDataType getRowType(final RelDataTypeFactory typeFactory) {
+        final Schema kuduSchema = this.getKuduTable().getSchema();
         final RelDataTypeFactory.Builder builder = new RelDataTypeFactory.Builder(typeFactory);
 
         for (int i = 0; i < kuduSchema.getColumnCount(); i++) {
@@ -209,14 +214,6 @@ public class CalciteKuduTable extends AbstractQueryableTable
         }
 
         return builder.build();
-    }
-
-    /**
-     * Builds a mapping from Kudu Schema into relational schema names
-     */
-    @Override
-    public RelDataType getRowType(final RelDataTypeFactory typeFactory) {
-        return kuduSchemaToRelDataType(typeFactory, this.getKuduTable().getSchema());
     }
 
     @Override
