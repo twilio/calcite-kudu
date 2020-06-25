@@ -1,12 +1,8 @@
 package com.twilio.raas.sql;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.kudu.Schema;
-import org.apache.kudu.client.RowResult;
 import org.apache.kudu.ColumnSchema;
-import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.ArrayList;
 import java.math.BigDecimal;
 
 /**
@@ -28,7 +24,6 @@ public final class CalciteRow implements Comparable<CalciteRow> {
      * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
      * @param descendingSortedFieldIndices  Index of the descending sorted fields in the rowSchema projection
      */
-    @VisibleForTesting
     public CalciteRow(final Schema rowSchema,
                       final Object[] rowData,
                       final List<Integer> primaryKeyColumnsInProjection,
@@ -37,95 +32,6 @@ public final class CalciteRow implements Comparable<CalciteRow> {
         this.rowData = rowData;
         this.primaryKeyColumnsInProjection = primaryKeyColumnsInProjection;
         this.descendingSortedFieldIndices = descendingSortedFieldIndices;
-    }
-
-    /**
-     * Create a Calcite row from an Scanner result.
-     *
-     * @param rowFromKudu Row returned from the Scanner RPC.
-     * @param primaryKeyColumnsInProjection  Ordered list of primary keys within the Projection.
-     * @param descendingSortedFieldIndices  Index of the descending sorted fields in the rowSchema projection
-     */
-    public CalciteRow(final RowResult rowFromKudu,
-                      final List<Integer> primaryKeyColumnsInProjection,
-                      final List<Integer> descendingSortedFieldIndices) {
-
-        final int columnCount = rowFromKudu.getColumnProjection().getColumns().size();
-        this.rowData = new Object[columnCount];
-        this.rowSchema = rowFromKudu.getSchema();
-        this.primaryKeyColumnsInProjection = primaryKeyColumnsInProjection;
-        this.descendingSortedFieldIndices = descendingSortedFieldIndices;
-
-        int columnIndex = 0;
-        for (ColumnSchema columnType: this.rowSchema.getColumns()) {
-            if (rowFromKudu.isNull(columnIndex)) {
-                this.rowData[columnIndex] = null;
-            }
-            else {
-                switch(columnType.getType()) {
-                case INT8:
-                    if (descendingSortedFieldIndices.contains(columnIndex)) {
-                        this.rowData[columnIndex] = (Byte.MAX_VALUE - rowFromKudu.getByte(columnIndex));
-                    } else {
-                        this.rowData[columnIndex] = rowFromKudu.getByte(columnIndex);
-                    }
-                    break;
-                case INT16:
-                    if (descendingSortedFieldIndices.contains(columnIndex)) {
-                        this.rowData[columnIndex] = (Short.MAX_VALUE - rowFromKudu.getShort(columnIndex));
-                    } else {
-                        this.rowData[columnIndex] = rowFromKudu.getShort(columnIndex);
-                    }
-                    break;
-                case INT32:
-                    if (descendingSortedFieldIndices.contains(columnIndex)) {
-                        this.rowData[columnIndex] = (Integer.MAX_VALUE - rowFromKudu.getInt(columnIndex));
-                    } else {
-                        this.rowData[columnIndex] = rowFromKudu.getInt(columnIndex);
-                    }
-                    break;
-                case INT64:
-                    if (descendingSortedFieldIndices.contains(columnIndex)) {
-                        this.rowData[columnIndex] = (Long.MAX_VALUE - rowFromKudu.getLong(columnIndex));
-                    } else {
-                        this.rowData[columnIndex] = rowFromKudu.getLong(columnIndex);
-                    }
-                    break;
-                case STRING:
-                    this.rowData[columnIndex] = rowFromKudu.getString(columnIndex);
-                    break;
-                case BOOL:
-                    this.rowData[columnIndex] = rowFromKudu.getBoolean(columnIndex);
-                    break;
-                case FLOAT:
-                    this.rowData[columnIndex] = rowFromKudu.getFloat(columnIndex);
-                    break;
-                case DOUBLE:
-                    this.rowData[columnIndex] = rowFromKudu.getDouble(columnIndex);
-                    break;
-                case UNIXTIME_MICROS:
-                    // @TODO: is this the right response type?
-                    if (descendingSortedFieldIndices.contains(columnIndex)) {
-                        this.rowData[columnIndex] = (CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli());
-                    } else {
-                        this.rowData[columnIndex] = rowFromKudu.getTimestamp(columnIndex).toInstant().toEpochMilli();
-                    }
-                    break;
-                case DECIMAL:
-                    // BigDecimal would need a decided upon large value to choose to subtract from, in case if its used for reverse sorting
-                    this.rowData[columnIndex] = rowFromKudu.getDecimal(columnIndex);
-                    break;
-                default:
-                    final ByteBuffer byteBuffer = rowFromKudu.getBinary(columnIndex);
-                    byteBuffer.rewind();
-                    byte[] returnedValue = new byte[byteBuffer.remaining()];
-                    byteBuffer.get(returnedValue);
-                    this.rowData[columnIndex] = returnedValue;
-                    break;
-                }
-            }
-            columnIndex++;
-        }
     }
 
     @Override

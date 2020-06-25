@@ -2,7 +2,6 @@ package com.twilio.raas.sql;
 
 import java.util.Optional;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Type;
 import org.apache.kudu.client.KuduPredicate;

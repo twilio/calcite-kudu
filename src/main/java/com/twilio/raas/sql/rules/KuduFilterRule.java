@@ -47,19 +47,9 @@ public class KuduFilterRule extends RelOptRule {
             final RelNode converted = new KuduFilterRel(filter.getCluster(),
               filter.getTraitSet().replace(KuduRelNode.CONVENTION), convert(filter.getInput(),
               KuduRelNode.CONVENTION), filter.getCondition(), predicates,
-              kuduQuery.calciteKuduTable.getKuduTable().getSchema());
+                kuduQuery.calciteKuduTable.getKuduTable().getSchema(), !predicateParser.areAllFiltersApplied());
 
-            if (predicateParser.areAllFiltersApplied()) {
-                // if we can push down all filters to kudu then we don't need to filter rows in calcite
-                call.transformTo(converted);
-            }
-            else {
-                // push down filters that kudu can handle and let calcite filter as well so that
-                // all filters are evaluated
-                // TODO see if we can remove filters that are handled by kudu so that those filters
-                // are not evaluated a second time in calcite
-                call.transformTo(filter.copy(filter.getTraitSet(), ImmutableList.of(converted)));
-            }
+            call.transformTo(converted);
         }
     }
 }

@@ -74,6 +74,7 @@ public class KuduWrite extends TableModify implements KuduRelNode {
     implementor.visitChild(0, getInput());
     implementor.table = table;
     implementor.kuduTable = kuduTable;
+    implementor.tableDataType = getRowType();
   }
 
 }

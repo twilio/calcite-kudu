@@ -257,8 +257,8 @@ public class KuduWriteIT {
     }
   }
 
-  @Ignore("TODO enable once we handle RexCalls")
   @Test
+  @Ignore("This test fails because CURRENT_TIME set to: CAST(CURRENT_TIME):TIMESTAMP(0) NOT NULL, which isn't a literal or dynamic param")
   public void testInsertSelect() throws Exception {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       long currentTime = System.currentTimeMillis();

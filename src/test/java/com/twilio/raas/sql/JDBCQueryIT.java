@@ -163,15 +163,16 @@ public final class JDBCQueryIT {
                     ".DeliveredMessages\" WHERE account_sid = '%s'";
             String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
             // TODO figure out if costs can be tweaked so that the two KuduProjectRel are merged
-            final String expectedPlan = "EnumerableCalc(expr#0..1=[{inputs}], expr#2=[||($t0, $t1)], expr#3=[||($t1, $t0)], EXPR$0=[$t2], MCC=[$t0], MNC=[$t1], EXPR$3=[$t3])\n" +
-              "  KuduToEnumerableRel\n" +
-              "    KuduProjectRel($1=[$1], $2=[$2])\n" +
-              "      KuduProjectRel(ACCOUNT_SID=[$0], MCC=[$3], MNC=[$4])\n" +
-              "        KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n" +
-              "          KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+            final String expectedPlan =
+                "KuduToEnumerableRel\n"
+                +"  KuduProjectRel(EXPR$0=[||($3, $4)], MCC=[$3], MNC=[$4], EXPR$3=[||($4, $3)])\n"
+                +"    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
+                +"      KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
             String plan = SqlUtil.getExplainPlan(rs);
-            assertEquals("Unexpected plan ", expectedPlan, plan);
+            assertEquals(String.format("Unexpected plan\n%s", plan),
+                expectedPlan, plan);
 
             // since the rows are not ordered just assert that we get the expected number of rows
             rs = conn.createStatement().executeQuery(sql);
