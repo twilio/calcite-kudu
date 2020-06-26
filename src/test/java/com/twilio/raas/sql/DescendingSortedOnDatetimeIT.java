@@ -258,6 +258,38 @@ public final class DescendingSortedOnDatetimeIT {
   }
 
   @Test
+  public void testSortWithFilterAndColumns() throws Exception {
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      String firstBatchSqlFormat = "SELECT sid, account_sid, event_date FROM kudu.\"ReportCenter" +
+          ".AuditEvents\" "
+          + "WHERE account_sid = '%s' "
+          + "ORDER BY event_date desc, account_sid asc ";
+      String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+
+      // verify plan
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+
+      String expectedPlanFormat = "KuduToEnumerableRel\n"
+          +"  KuduProjectRel(SID=[$2], ACCOUNT_SID=[$0], EVENT_DATE=[$1])\n"
+          +"    KuduSortRel(sort0=[$1], sort1=[$0], dir0=[DESC], dir1=[ASC], groupBySorted=[false])\n"
+          +"      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
+          +"        KuduQuery(table=[[kudu, ReportCenter.AuditEvents]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(firstBatchSql);
+
+      assertTrue(rs.next());
+      validateRow(rs, 1546395900000L, DescendingSortedOnDatetimeIT.SECOND_SID);
+      assertTrue(rs.next());
+      validateRow(rs, 1546390800000L, DescendingSortedOnDatetimeIT.FIRST_SID);
+      assertTrue(rs.next());
+      validateRow(rs, 1546304400000L, DescendingSortedOnDatetimeIT.THIRD_SID);
+    }
+  }
+
+  @Test
   public void testAscendingSortOnDescendingFieldWithFilter() throws Exception {
     String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
