@@ -7,6 +7,7 @@ import java.util.List;
 import com.twilio.raas.sql.CalciteKuduPredicate;
 import org.apache.calcite.rex.RexBiVisitor;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.fun.SqlCastFunction;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.rex.RexCall;
 import org.apache.kudu.ColumnSchema;
@@ -191,6 +192,21 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
         return setEmpty();
     }
 
+    private int getColumnIndex(RexNode node) {
+      if (node instanceof RexInputRef) {
+        return ((RexInputRef) node).getIndex();
+      }
+      // if the node is an expression of the form expr#14=[CAST($t3):INTEGER] we need to exptract
+      // the column index from the input to the CAST expression
+      else if (node instanceof RexCall) {
+        RexCall call = (RexCall) node;
+        if (call.getKind() == SqlKind.CAST) {
+          return getColumnIndex(call.getOperands().get(0));
+        }
+      }
+      throw new UnsupportedOperationException("Unable to determine column index from node " + node);
+    }
+
     /**
      * This visit method adds a predicate. this is the leaf of a tree so it
      * gets to create a fresh list of list
@@ -199,9 +215,9 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
         if (parent != null) {
             Optional<KuduPredicate.ComparisonOp> maybeOp = findKuduOp(parent);
             final RexNode left = parent.operands.get(0);
-            final int index = ((RexInputRef) left).getIndex();
 
             if (left.getKind() == SqlKind.INPUT_REF) {
+                final int index = getColumnIndex(left);
                 // The only type that doesn't require maybeOp to be present
                 if (literal.getType().getSqlTypeName() == SqlTypeName.NULL) {
                     return Collections.singletonList(Collections.singletonList(
