@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class KuduSchemaFactory implements SchemaFactory {
@@ -43,4 +44,18 @@ public class KuduSchemaFactory implements SchemaFactory {
     }
     return tableList;
   }
+
+  public Optional<CalciteKuduTable> getTable(String tableName) {
+    for (KuduSchema kuduSchema : schemaCache.values()) {
+      Optional<CalciteKuduTable> calciteKuduTableOptional =
+        kuduSchema.getTableMap().values().stream()
+          .map(CalciteKuduTable.class::cast)
+          .filter( t -> t.getKuduTable().getName().equals(tableName))
+          .findFirst();
+      if (calciteKuduTableOptional.isPresent())
+        return calciteKuduTableOptional;
+    }
+    return Optional.empty();
+  }
+
 }

@@ -13,6 +13,8 @@ import org.apache.kudu.client.KuduSession;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.client.OperationResponse;
 import org.apache.kudu.client.PartialRow;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -21,10 +23,14 @@ import java.util.Map;
 
 public class MutationState {
 
+  private static final Logger logger = LoggerFactory.getLogger(MutationState.class);
+
   protected final KuduClient kuduClient;
   protected final CalciteModifiableKuduTable calciteModifiableKuduTable;
   protected final KuduTable kuduTable;
   protected final KuduSession session;
+
+  private int numFactRowsInBatch = 0;
 
   public MutationState(final CalciteModifiableKuduTable calciteKuduTable) {
     this.calciteModifiableKuduTable = calciteKuduTable;
@@ -142,6 +148,7 @@ public class MutationState {
     }
     try {
       session.apply(insert);
+      ++numFactRowsInBatch;
     } catch (KuduException e) {
       throw new RuntimeException(e);
     }
@@ -153,7 +160,11 @@ public class MutationState {
   }
 
   public void flush() {
+    if (numFactRowsInBatch == 0) {
+      return;
+    }
     try {
+      long startTime = System.currentTimeMillis();
       // flush fact table rows
       List<OperationResponse> responseList = session.flush();
       for (OperationResponse op : responseList) {
@@ -161,10 +172,13 @@ public class MutationState {
           throw new RuntimeException("Row already exists " + op.getRowError().getOperation());
         }
       }
+      logger.info("Flushed " + numFactRowsInBatch +" fact rows in " + (System.currentTimeMillis() - startTime) + " ms");
+      numFactRowsInBatch = 0;
       // flush aggregated values for each cube table
       for (CalciteKuduTable cubeTable : calciteModifiableKuduTable.getCubeTables()) {
-        ((CalciteModifiableKuduTable)cubeTable).getMutationState().flush();
+          ((CalciteModifiableKuduTable) cubeTable).getMutationState().flush();
       }
+
     } catch (KuduException e) {
       throw new RuntimeException(e);
     }

@@ -1,0 +1,94 @@
+{
+  "tableName": "ReportCenter.OutboundMessages",
+  "numRows": 1000,
+  "columnNameToValueGenerator": {
+    "sid" : {
+      "type" : "RandomSidGenerator",
+      "sidPrefix" : "MS"
+    },
+    "account_sid" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : "AC3b1ebbfc4cd2fc2485ed634000000001"
+    },
+    "date_created" : {
+      "type" : "UniformLongValueGenerator",
+      "minValue" : "1591046377000",
+      "maxValue" : "1593638377000"
+    },
+    "mcc" : {
+      "type" : "ValueListGenerator",
+      "values" : ["123","919", "858"]
+    },
+    "mnc" : {
+      "type" : "ValueListGenerator",
+      "values" : ["54","333", "8678"]
+    },
+    "sub_account_sid" : {
+      "type": "SidListGenerator",
+      "sidPrefix": "SA",
+      "numValues": 2
+    },
+    "npa_nxx" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : "npa_nxx"
+    },
+    "error_code" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : 0
+    },
+    "status" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : "status"
+    },
+    "sender" : {
+      "type": "PhoneNumberListGenerator",
+      "numValues": 5
+    },
+    "recipient" : {
+      "type": "PhoneNumberListGenerator",
+      "numValues": 5
+    },
+    "phone_number" : {
+      "type": "PhoneNumberListGenerator",
+      "numValues": 5
+    },
+    "from_cc" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : "from_cc"
+    },
+    "channel" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : "channel"
+    },
+    "to_cc" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : "to_cc"
+    },
+    "num_segments" : {
+      "type" : "UniformIntegerValueGenerator",
+      "minValue" : "1",
+      "maxValue" : "10"
+    },
+    "base_price" : {
+      "type" : "UniformBigDecimalValueGenerator",
+      "maxValue" : "10"
+    },
+    "feedback_outcome" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : "feedback_outcome"
+    },
+    "attempt" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : 1
+    },
+    "provide_feedback" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : 0
+    },
+    "msg_app_sid" : {
+      "type": "SidListGenerator",
+      "sidPrefix": "MA",
+      "numValues": 2
+    }
+  }
+}
