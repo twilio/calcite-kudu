@@ -23,6 +23,7 @@ import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexDynamicParam;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.apache.calcite.rex.RexNode;
 import java.math.BigDecimal;
@@ -160,6 +161,31 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                                    .singletonList(new CalciteKuduPredicate(falseColumn.getIndex(),
                                            KuduPredicate.ComparisonOp.EQUAL, Boolean.FALSE)));
             }
+        case IN:
+          if (call.operands.get(0) instanceof RexInputRef) {
+            if (call.operands.get(1) instanceof RexCall) {
+              final RexCall right = (RexCall) call.operands.get(1);
+              if (right.getKind() == SqlKind.ARRAY_VALUE_CONSTRUCTOR) {
+                final boolean nonLiteral = right.getOperands()
+                  .stream()
+                  .filter(rexNode -> ! rexNode.isA(SqlKind.LITERAL))
+                  .findAny()
+                  .isPresent();
+
+                // inPredicate only handles literals, it doesn't handle scans
+                if (!nonLiteral) {
+                  final List<Object> castedLiterals = right.getOperands().stream()
+                    .map(l -> castLiteral((RexLiteral) l))
+                    .collect(Collectors.toList());
+                  final RexInputRef idx = (RexInputRef) call.operands.get(0);
+                  return Collections.singletonList(
+                      Collections.singletonList(
+                          new CalciteKuduPredicate(
+                              idx.getIndex(), castedLiterals)));
+                }
+              }
+            }
+          }
         }
         return setEmpty();
     }
@@ -207,6 +233,34 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
       throw new UnsupportedOperationException("Unable to determine column index from node " + node);
     }
 
+  private Object castLiteral(RexLiteral literal) {
+    switch(literal.getType().getSqlTypeName()) {
+    case BOOLEAN:
+      return RexLiteral.booleanValue(literal);
+    case DECIMAL:
+      return literal.getValueAs(BigDecimal.class);
+    case DOUBLE:
+      return literal.getValueAs(Double.class);
+    case FLOAT:
+      return literal.getValueAs(Float.class);
+    case TIMESTAMP:
+      // multiplied by 1000 as TIMESTAMP is in milliseconds and Kudu want's microseconds.
+      return literal.getValueAs(Long.class) * 1000;
+    case CHAR:
+    case VARCHAR:
+      return literal.getValueAs(String.class);
+    case TINYINT:
+    case SMALLINT:
+    case INTEGER:
+      return literal.getValueAs(Integer.class);
+    case BIGINT:
+      return literal.getValueAs(Long.class);
+    case BINARY:
+      return (((ByteBuffer) literal.getValue4()).array());
+    }
+    throw new IllegalArgumentException(String.format("Unable to cast literal to Kudu: %s", literal));
+  }
+
     /**
      * This visit method adds a predicate. this is the leaf of a tree so it
      * gets to create a fresh list of list
@@ -227,74 +281,16 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                 else if (!maybeOp.isPresent()) {
                     return setEmpty();
                 }
-
-                switch(literal.getType().getSqlTypeName()) {
-                case BOOLEAN:
+                else {
                   return Collections.singletonList(
                       Collections.singletonList(
                           new CalciteKuduPredicate(
                               index,
                               maybeOp.get(),
-                              RexLiteral.booleanValue(literal))));
-                case DECIMAL:
-                  return Collections.singletonList(
-                      Collections.singletonList(
-                          new CalciteKuduPredicate(
-                              index,
-                              maybeOp.get(),
-                              literal.getValueAs(BigDecimal.class))));
-                case DOUBLE:
-                  return Collections.singletonList(
-                      Collections.singletonList(
-                          new CalciteKuduPredicate(
-                              index,
-                              maybeOp.get(),
-                              literal.getValueAs(Double.class))));
-                case FLOAT:
-                  return Collections.singletonList(
-                      Collections.singletonList(
-                          new CalciteKuduPredicate(
-                              index,
-                              maybeOp.get(),
-                              literal.getValueAs(Float.class))));
-                case TIMESTAMP:
-                    // multiplied by 1000 as TIMESTAMP is in milliseconds and Kudu want's microseconds.
-                    return Collections.singletonList(
-                      Collections.singletonList(
-                          new CalciteKuduPredicate(
-                              index,
-                              maybeOp.get(),
-                              literal.getValueAs(Long.class) * 1000)));
-                case CHAR:
-                case VARCHAR:
-                  return Collections.singletonList(
-                      Collections.singletonList(
-                          new CalciteKuduPredicate(
-                              index,
-                              maybeOp.get(),
-                              literal.getValueAs(String.class))));
-                case TINYINT:
-                case SMALLINT:
-                case INTEGER:
-                    return Collections.singletonList(
-                      Collections.singletonList(
-                          new CalciteKuduPredicate(
-                              index,
-                              maybeOp.get(),
-                              literal.getValueAs(Integer.class))));
-                case BIGINT:
-                    return Collections.singletonList(
-                      Collections.singletonList(
-                          new CalciteKuduPredicate(
-                              index,
-                              maybeOp.get(),
-                              literal.getValueAs(Long.class))));
-                case BINARY:
-                    return Collections.singletonList(
-                        Collections.singletonList(
-                            new CalciteKuduPredicate(index, maybeOp.get(),
-                                (((ByteBuffer) literal.getValue4()).array()))));
-
+                              castLiteral(literal)
+                          )
+                      )
+                  );
                 }
             }
         }

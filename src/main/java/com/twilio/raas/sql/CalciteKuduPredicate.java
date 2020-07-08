@@ -1,6 +1,8 @@
 package com.twilio.raas.sql;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Type;
@@ -29,12 +31,21 @@ public final class CalciteKuduPredicate {
     public final Optional<KuduPredicate.ComparisonOp> operation;
     public final Object rightHandValue;
 
+    private final boolean inList;
+
     public CalciteKuduPredicate(final int columnIdx, final KuduPredicate.ComparisonOp operation, final Object rightHandValue) {
         this.columnIdx = columnIdx;
         this.operation = Optional.ofNullable(operation);
         this.rightHandValue = rightHandValue;
+        inList = false;
     }
 
+    public CalciteKuduPredicate(final int columnIdx, List<Object> rightHandValues) {
+        this.columnIdx = columnIdx;
+        this.operation = Optional.empty();
+        this.inList = true;
+        this.rightHandValue = rightHandValues;
+    }
 
     /**
      * Transforms this POJO into a proper {@link KuduPredicate}
@@ -45,6 +56,86 @@ public final class CalciteKuduPredicate {
      * @return {@code KuduPredicate} that represents this POJO
      */
     public KuduPredicate toPredicate(ColumnSchema columnSchema, boolean invertValue) {
+        if (inList) {
+            switch(columnSchema.getType()) {
+            case STRING:
+                final List<String> stringValues = ((List<Object>) this.rightHandValue)
+                    .stream()
+                    .map(o -> o.toString())
+                    .collect(Collectors.toList());
+                return KuduPredicate
+                    .newInListPredicate(columnSchema, stringValues);
+            case BOOL:
+                final List<Boolean> booleanValues = ((List<Object>) this.rightHandValue)
+                    .stream()
+                    .map(o -> (Boolean) o)
+                    .collect(Collectors.toList());
+                return KuduPredicate
+                        .newInListPredicate(columnSchema, booleanValues);
+            case INT8:
+                final List<Byte> byteValues = ((List<Object>) this.rightHandValue).stream().map(o -> (Byte) o)
+                        .collect(Collectors.toList());
+                return KuduPredicate.newInListPredicate(columnSchema, byteValues);
+
+            case INT16:
+                final List<Short> shortValues = ((List<Object>) this.rightHandValue)
+                    .stream()
+                    .map(o -> (Short) o)
+                    .collect(Collectors.toList());
+                return KuduPredicate.newInListPredicate(columnSchema, shortValues);
+
+            case INT32:
+                final List<Integer> intValues = ((List<Object>) this.rightHandValue)
+                    .stream()
+                    .map(o -> (Integer) o)
+                    .collect(Collectors.toList());
+                return KuduPredicate.newInListPredicate(columnSchema, intValues);
+
+            case INT64:
+            case UNIXTIME_MICROS:
+                final List<Long> longValues = ((List<Object>) this.rightHandValue)
+                    .stream()
+                    .map(o -> (Long) o)
+                    .collect(Collectors.toList());
+                return KuduPredicate.newInListPredicate(columnSchema, longValues);
+
+            case FLOAT:
+                final List<Float> floatValues = ((List<Object>) this.rightHandValue)
+                    .stream()
+                    .map(o -> (Float) o)
+                    .collect(Collectors.toList());
+
+                return KuduPredicate
+                        .newInListPredicate(columnSchema, floatValues);
+
+            case DOUBLE:
+                final List<Double> doubleValues  = ((List<Object>) this.rightHandValue)
+                    .stream()
+                    .map(o -> (Double) o)
+                    .collect(Collectors.toList());
+                return KuduPredicate
+                        .newInListPredicate(columnSchema, doubleValues);
+
+            case DECIMAL:
+                final List<BigDecimal> decimalValues = ((List<Object>) this.rightHandValue)
+                    .stream()
+                    .map(o -> (BigDecimal) o)
+                    .collect(Collectors.toList());
+                return KuduPredicate.newInListPredicate(columnSchema, decimalValues);
+
+            case BINARY:
+                // @TODO: this is weird.
+                final List<byte[]> binaryValues = ((List<Object>) this.rightHandValue)
+                    .stream()
+                    .map(o -> (byte[]) o)
+                    .collect(Collectors.toList());
+                return KuduPredicate
+                        .newInListPredicate(columnSchema, binaryValues);
+            default:
+                throw new IllegalArgumentException(
+                        String.format("Cannot use in list with type %s", columnSchema.getType()));
+            }
+        }
         return this.operation
             .map(op -> {
                     if (rightHandValue instanceof Boolean) {

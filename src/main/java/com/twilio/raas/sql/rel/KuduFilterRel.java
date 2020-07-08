@@ -75,10 +75,10 @@ public class KuduFilterRel extends Filter implements KuduRelNode {
             for (final CalciteKuduPredicate predicate : scanPredicate) {
                 final String optionalComparator = predicate.operation
                     .map(ComparisonOp::name)
-                    .orElse("");
+                    .orElse("IN");
 
                 if (first) {
-                    first =false;
+                    first = false;
                 }
                 else {
                     sb.append(", ");
