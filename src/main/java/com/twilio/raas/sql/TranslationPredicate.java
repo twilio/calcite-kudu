@@ -1,33 +1,22 @@
 package com.twilio.raas.sql;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
-import org.apache.calcite.linq4j.AbstractEnumerable;
-import org.apache.calcite.linq4j.Enumerable;
-import org.apache.calcite.linq4j.Enumerator;
-import org.apache.calcite.linq4j.JoinType;
-import org.apache.calcite.linq4j.function.Function2;
-import org.apache.calcite.rel.core.Join;
-import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.util.TimestampString;
 import org.apache.kudu.Schema;
-import org.apache.kudu.client.KuduPredicate;
 import org.apache.kudu.client.KuduPredicate.ComparisonOp;
 
 public class TranslationPredicate {
     private final int leftKuduIndex;
     private final int rightKuduIndex;
     private final ComparisonOp operation;
+    // @TODO: remove this property it is no longer used
     private final Schema tableSchema;
 
     public TranslationPredicate(final int leftOrdinal, final int rightOrdinal, final RexCall functionCall,
@@ -59,7 +48,7 @@ public class TranslationPredicate {
     }
 
     public CalciteKuduPredicate toPredicate(final Object[] leftRow) {
-        return new CalciteKuduPredicate(
+        return new ComparisonPredicate(
             rightKuduIndex,
             operation,
             leftRow[leftKuduIndex]);

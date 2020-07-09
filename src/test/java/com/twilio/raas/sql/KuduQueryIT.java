@@ -112,7 +112,7 @@ public class KuduQueryIT {
     final CalciteKuduTable relTable = new CalciteKuduTableBuilder(KuduQueryIT.TABLE,
       testHarness.getAsyncClient()).build();
 
-    final CalciteKuduPredicate filterToSid = new CalciteKuduPredicate(2, KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
+    final CalciteKuduPredicate filterToSid = new ComparisonPredicate(2, KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
     final Enumerable<Object> results =
         relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_ONE_STRING, ALWAYS_TRUE);
     Iterator<Object> resultIter = results.iterator();
@@ -130,7 +130,7 @@ public class KuduQueryIT {
     final CalciteKuduTable relTable = new CalciteKuduTableBuilder(KuduQueryIT.TABLE,
       testHarness.getAsyncClient()).build();
 
-    final CalciteKuduPredicate filterToAccountSid = new CalciteKuduPredicate(0,
+    final CalciteKuduPredicate filterToAccountSid = new ComparisonPredicate(0,
             KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.ACCOUNT_SID);
     final Enumerable<Object> results = relTable.executeQuery(Collections.singletonList(Collections.singletonList(filterToAccountSid)),
         Arrays.asList(2, 0), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, ALWAYS_TRUE);
@@ -165,12 +165,12 @@ public class KuduQueryIT {
     // @TODO: we have the columnSchema in the setup, we don't need to grab the table.
     // final KuduPredicate firstSid = KuduPredicate
     //   .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn(2), KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.FIRST_SID);
-    final CalciteKuduPredicate firstSid = new CalciteKuduPredicate(
+    final CalciteKuduPredicate firstSid = new ComparisonPredicate(
         2,
         KuduPredicate.ComparisonOp.EQUAL,
         KuduQueryIT.FIRST_SID);
 
-    final CalciteKuduPredicate secondSid = new CalciteKuduPredicate(2, KuduPredicate.ComparisonOp.EQUAL,
+    final CalciteKuduPredicate secondSid = new ComparisonPredicate(2, KuduPredicate.ComparisonOp.EQUAL,
             KuduQueryIT.SECOND_SID);
 
     final List<List<CalciteKuduPredicate>> predicateQuery = new ArrayList<>();
@@ -201,7 +201,7 @@ public class KuduQueryIT {
         final CalciteKuduTable relTable = new CalciteKuduTableBuilder(KuduQueryIT.TABLE,
           testHarness.getAsyncClient()).build();
 
-        final CalciteKuduPredicate filterToSid = new CalciteKuduPredicate(
+        final CalciteKuduPredicate filterToSid = new ComparisonPredicate(
             2, KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
 
         // since we are not sorting assert that the limit is not pushed down into the kudu scanner
@@ -248,12 +248,12 @@ public class KuduQueryIT {
     // @TODO: we have the columnSchema in the setup, we don't need to grab the table.
     // final KuduPredicate firstSid = KuduPredicate
     //   .newComparisonPredicate(KuduQueryIT.TABLE.getSchema().getColumn(2), KuduPredicate.ComparisonOp.EQUAL, KuduQueryIT.FIRST_SID);
-    final CalciteKuduPredicate firstSid = new CalciteKuduPredicate(
+    final CalciteKuduPredicate firstSid = new ComparisonPredicate(
         2,
         KuduPredicate.ComparisonOp.EQUAL,
         KuduQueryIT.FIRST_SID);
 
-    final CalciteKuduPredicate secondSid = new CalciteKuduPredicate(2, KuduPredicate.ComparisonOp.EQUAL,
+    final CalciteKuduPredicate secondSid = new ComparisonPredicate(2, KuduPredicate.ComparisonOp.EQUAL,
             KuduQueryIT.SECOND_SID);
 
     final List<List<CalciteKuduPredicate>> predicateQuery = new ArrayList<>();

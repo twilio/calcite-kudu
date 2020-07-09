@@ -15,6 +15,8 @@ import org.junit.Test;
 import java.math.BigDecimal;
 import java.util.Arrays;
 
+import com.twilio.raas.sql.ComparisonPredicate;
+
 /**
  * This test confirms the behavior of the push down filter parses the numeric literal into a proper
  * push down filter.
@@ -33,11 +35,12 @@ public final class NumberFilterTest {
         Arrays.asList(fieldRef, amountFilter));
 
     final KuduPredicatePushDownVisitor visitor = new KuduPredicatePushDownVisitor();
+
+    final ComparisonPredicate predicate = (ComparisonPredicate) visitor.visitLiteral(amountFilter, call)
+      .get(0)
+      .get(0);
     Assert.assertEquals("The amount should match what was passed in",
         new BigDecimal("0.5"),
-        visitor.visitLiteral(amountFilter, call)
-        .get(0)
-        .get(0)
-        .rightHandValue);
+        predicate.rightHandValue);
   }
 }

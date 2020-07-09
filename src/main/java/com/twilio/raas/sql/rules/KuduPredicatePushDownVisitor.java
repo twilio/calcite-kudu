@@ -5,6 +5,10 @@ import java.util.Collections;
 import java.util.List;
 
 import com.twilio.raas.sql.CalciteKuduPredicate;
+import com.twilio.raas.sql.ComparisonPredicate;
+import com.twilio.raas.sql.InListPredicate;
+import com.twilio.raas.sql.NullPredicate;
+
 import org.apache.calcite.rex.RexBiVisitor;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlCastFunction;
@@ -158,7 +162,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                 RexInputRef falseColumn = (RexInputRef) call.operands.get(0);
                 return Collections
                     .singletonList(Collections
-                                   .singletonList(new CalciteKuduPredicate(falseColumn.getIndex(),
+                                   .singletonList(new ComparisonPredicate(falseColumn.getIndex(),
                                            KuduPredicate.ComparisonOp.EQUAL, Boolean.FALSE)));
             }
         case IN:
@@ -180,7 +184,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                   final RexInputRef idx = (RexInputRef) call.operands.get(0);
                   return Collections.singletonList(
                       Collections.singletonList(
-                          new CalciteKuduPredicate(
+                          new InListPredicate(
                               idx.getIndex(), castedLiterals)));
                 }
               }
@@ -210,7 +214,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     public List<List<CalciteKuduPredicate>> visitInputRef(RexInputRef inputRef, RexCall parent) {
         return Collections
             .singletonList(Collections
-                           .singletonList(new CalciteKuduPredicate(
+                           .singletonList(new ComparisonPredicate(
                                 inputRef.getIndex(), KuduPredicate.ComparisonOp.EQUAL, Boolean.TRUE)));
     }
 
@@ -272,10 +276,10 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
 
             if (left.getKind() == SqlKind.INPUT_REF) {
                 final int index = getColumnIndex(left);
-                // The only type that doesn't require maybeOp to be present
+
                 if (literal.getType().getSqlTypeName() == SqlTypeName.NULL) {
                     return Collections.singletonList(Collections.singletonList(
-                            new CalciteKuduPredicate(index, null, null)));
+                            new NullPredicate(index, false)));
                 }
                 // everything else requires op to be set.
                 else if (!maybeOp.isPresent()) {
@@ -284,7 +288,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                 else {
                   return Collections.singletonList(
                       Collections.singletonList(
-                          new CalciteKuduPredicate(
+                          new ComparisonPredicate(
                               index,
                               maybeOp.get(),
                               castLiteral(literal)

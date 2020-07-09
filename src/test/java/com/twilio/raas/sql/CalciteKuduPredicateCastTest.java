@@ -3,12 +3,9 @@ package com.twilio.raas.sql;
 import static org.junit.Assert.assertEquals;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
-import java.util.Collections;
 
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.ColumnTypeAttributes;
-import org.apache.kudu.Schema;
 import org.apache.kudu.Type;
 import org.apache.kudu.ColumnSchema.ColumnSchemaBuilder;
 import org.apache.kudu.client.KuduPredicate;
@@ -21,7 +18,7 @@ import org.junit.Test;
 public final class CalciteKuduPredicateCastTest {
   @Test
   public void integerToBigDecimal() {
-    final CalciteKuduPredicate predicate = new CalciteKuduPredicate(0,
+    final CalciteKuduPredicate predicate = new ComparisonPredicate(0,
         KuduPredicate.ComparisonOp.EQUAL, Integer.valueOf(7));
     final ColumnSchema columnSchema = new ColumnSchemaBuilder("amount", Type.DECIMAL)
       .typeAttributes(
@@ -39,7 +36,7 @@ public final class CalciteKuduPredicateCastTest {
 
   @Test
   public void longToBigDecimal() {
-    final CalciteKuduPredicate predicate = new CalciteKuduPredicate(0,
+    final CalciteKuduPredicate predicate = new ComparisonPredicate(0,
         KuduPredicate.ComparisonOp.EQUAL, Long.valueOf(7));
     final ColumnSchema columnSchema = new ColumnSchemaBuilder("amount", Type.DECIMAL)
       .typeAttributes(

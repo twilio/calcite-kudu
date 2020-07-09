@@ -73,9 +73,6 @@ public class KuduFilterRel extends Filter implements KuduRelNode {
             final StringBuilder sb = new StringBuilder();
             boolean first = true;
             for (final CalciteKuduPredicate predicate : scanPredicate) {
-                final String optionalComparator = predicate.operation
-                    .map(ComparisonOp::name)
-                    .orElse("IN");
 
                 if (first) {
                     first = false;
@@ -83,10 +80,9 @@ public class KuduFilterRel extends Filter implements KuduRelNode {
                 else {
                     sb.append(", ");
                 }
-                sb.append(String.format("%s %s %s",
-                        kuduSchema.getColumnByIndex(predicate.columnIdx).getName(),
-                        optionalComparator,
-                        predicate.rightHandValue));
+
+                sb.append(predicate.explainPredicate(kuduSchema.getColumnByIndex(
+                            predicate.getColumnIdx())));
             }
             pw.item("ScanToken " + scanCount++, sb.toString());
         }
