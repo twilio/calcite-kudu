@@ -3,6 +3,13 @@ package com.twilio.raas.sql;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.client.KuduPredicate;
 
+/**
+ * An implementation of {@link CalciteKuduPredicate} that pushes down both NOT NULL and IS NULL to
+ * Kudu.
+ *
+ * @see {@link KuduPredicate#newIsNullPredicate(ColumnSchema)}
+ * @see {@link KuduPredicate#newIsNotNullPredicate(ColumnSchema)}
+ */
 public final class NullPredicate extends CalciteKuduPredicate {
   public final int columnIdx;
   private boolean not;
