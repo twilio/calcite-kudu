@@ -1,0 +1,57 @@
+{
+  "tableName": "ReportCenter.UsageReportTransactions",
+  "numRows": 1000,
+  "columnNameToValueGenerator": {
+    "transaction_id" : {
+      "type" : "RandomSidGenerator",
+      "sidPrefix" : "TX"
+    },
+    "usage_account_sid" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : "AC1231ebbfc4cd2fc2485ed634000001001"
+    },
+    "date_initiated" : {
+      "type" : "UniformLongValueGenerator",
+      "minValue" : "1591046377000",
+      "maxValue" : "1592179200000"
+    },
+    "units" : {
+      "type" : "ConstantValueGenerator",
+      "columnValue" : 3
+    },
+    "billable_item" : {
+      "type": "SidListGenerator",
+      "sidPrefix": "BI",
+      "numValues": 38
+    },
+    "calculated_sid" : {
+      "type" : "RandomSidGenerator",
+      "sidPrefix" : "CA"
+    },
+    "sub_account_sid" : {
+      "type": "SidListGenerator",
+      "sidPrefix": "SA",
+      "numValues": 2
+    },
+    "phonenumber" : {
+      "type": "PhoneNumberListGenerator",
+      "numValues": 1000000
+    },
+    "to" : {
+      "type": "PhoneNumberListGenerator",
+      "numValues": 1000000
+    },
+    "from" : {
+      "type": "PhoneNumberListGenerator",
+      "numValues": 1000000
+    },
+    "amount" : {
+      "type" : "UniformBigDecimalValueGenerator",
+      "maxValue" : "10"
+    },
+    "quantity" : {
+      "type" : "UniformBigDecimalValueGenerator",
+      "maxValue" : "10"
+    }
+  }
+}

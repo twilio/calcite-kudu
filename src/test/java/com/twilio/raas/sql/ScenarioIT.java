@@ -1,5 +1,4 @@
 package com.twilio.raas.sql;
-
 import com.twilio.raas.dataloader.DataLoader;
 import com.twilio.raas.dataloader.Scenario;
 import org.apache.kudu.ColumnSchema;
@@ -25,7 +24,8 @@ import static org.junit.Assert.assertTrue;
 
 public class ScenarioIT {
 
-  private static final String DATASET_NAME = "ReportCenter.OutboundMessages";
+  private static final String OUTBOUND_MESSAGES = "ReportCenter.OutboundMessages";
+  private static final String USAGE_REPORT_TRANSACTIONS = "ReportCenter.UsageReportTransactions";
   public static final String ACCOUNT_SID = "AC3b1ebbfc4cd2fc2485ed634000000001";
 
   @ClassRule
@@ -62,7 +62,7 @@ public class ScenarioIT {
       new ColumnSchema.ColumnSchemaBuilder("provide_feedback", Type.INT8).nullable(true).build()
     );
 
-    testHarness.getClient().createTable(DATASET_NAME, new Schema(columns),
+    testHarness.getClient().createTable(OUTBOUND_MESSAGES, new Schema(columns),
       new org.apache.kudu.client.CreateTableOptions()
         .addHashPartitions(Arrays.asList("account_sid"), 2)
         .setRangePartitionColumns(Arrays.asList("date_created"))
@@ -157,19 +157,50 @@ public class ScenarioIT {
         .setRangePartitionColumns(Arrays.asList("date_created"))
         .setNumReplicas(1));
 
-    final Schema carrierNetworkSchema = new Schema(
-      Arrays.asList(new ColumnSchema.ColumnSchemaBuilder("mcc", Type.STRING).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("mnc", Type.STRING).key(true).build(),
-        new ColumnSchema.ColumnSchemaBuilder("network", Type.STRING).build(),
-        new ColumnSchema.ColumnSchemaBuilder("country", Type.STRING).build()));
-    final org.apache.kudu.client.CreateTableOptions tableOptions = new org.apache.kudu.client.CreateTableOptions()
-      .addHashPartitions(Arrays.asList("mcc", "mnc"), 2).setNumReplicas(1);
-    testHarness.getClient()
-      .createTable("CarrierLocation", carrierNetworkSchema, tableOptions);
+    // create the usage report transactions table
+    final List<ColumnSchema> usageColumns = Arrays.asList(
+      new ColumnSchema.ColumnSchemaBuilder("usage_account_sid", Type.STRING).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("date_initiated", Type.UNIXTIME_MICROS).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("transaction_id", Type.STRING).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("units", Type.INT16).build(),
+      new ColumnSchema.ColumnSchemaBuilder("billable_item", Type.STRING).build(),
+      new ColumnSchema.ColumnSchemaBuilder("calculated_sid", Type.STRING).build(),
+      new ColumnSchema.ColumnSchemaBuilder("sub_account_sid", Type.STRING).build(),
+      new ColumnSchema.ColumnSchemaBuilder("phonenumber", Type.STRING).build(),
+      new ColumnSchema.ColumnSchemaBuilder("to", Type.STRING).build(),
+      new ColumnSchema.ColumnSchemaBuilder("from", Type.STRING).build(),
+      new ColumnSchema.ColumnSchemaBuilder("amount", Type.DECIMAL).typeAttributes(decimalTypeAttribute).build(),
+      new ColumnSchema.ColumnSchemaBuilder("quantity", Type.DECIMAL).typeAttributes(decimalTypeAttribute).build()
+    );
+
+    testHarness.getClient().createTable(USAGE_REPORT_TRANSACTIONS, new Schema(usageColumns),
+      new org.apache.kudu.client.CreateTableOptions()
+        .addHashPartitions(Arrays.asList("usage_account_sid"), 2)
+        .setRangePartitionColumns(Arrays.asList("date_initiated"))
+        .setNumReplicas(1));
+
+    // create the usage dailly index  table
+    final List<ColumnSchema> dailyIndexColumns = Arrays.asList(
+      new ColumnSchema.ColumnSchemaBuilder("usage_account_sid", Type.STRING).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("date_initiated", Type.UNIXTIME_MICROS).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("billable_item", Type.STRING).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("units", Type.INT16).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("sub_account_sid", Type.STRING).key(true).build(),
+      new ColumnSchema.ColumnSchemaBuilder("sum_amount", Type.DECIMAL).typeAttributes(decimalTypeAttribute).build(),
+      new ColumnSchema.ColumnSchemaBuilder("sum_quantity", Type.DECIMAL).typeAttributes(decimalTypeAttribute).build(),
+      new ColumnSchema.ColumnSchemaBuilder("count_records", Type.INT64).build()
+    );
+
+    testHarness.getClient().createTable("UsageReportTransactions-Daily-Aggregation", new Schema(dailyIndexColumns),
+      new org.apache.kudu.client.CreateTableOptions()
+        .addHashPartitions(Arrays.asList("usage_account_sid"), 2)
+        .setRangePartitionColumns(Arrays.asList("date_initiated"))
+        .setNumReplicas(1));
+
   }
 
   @Test
-  public void testScenario() throws IOException, SQLException {
+  public void testOutboundMessages() throws IOException, SQLException {
     Scenario scenario = Scenario.loadScenario(this.getClass().getResource("/scenarios/ReportCenter" +
       ".OutboundMessages.json"));
     String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
@@ -180,7 +211,26 @@ public class ScenarioIT {
     // verify data was written
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs =
-        conn.createStatement().executeQuery("SELECT COUNT(*) FROM \"" + DATASET_NAME + "\"");
+        conn.createStatement().executeQuery("SELECT COUNT(*) FROM \"" + OUTBOUND_MESSAGES + "\"");
+      assertTrue(rs.next());
+      assertEquals(scenario.getNumRows(), rs.getInt(1));
+      assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testUsageReportTransactions() throws IOException, SQLException {
+    Scenario scenario = Scenario.loadScenario(this.getClass().getResource("/scenarios/ReportCenter" +
+      ".UsageReportTransactions.json"));
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
+      testHarness.getMasterAddressesAsString());
+
+    // load data
+    new DataLoader(url, scenario).loadData();
+    // verify data was written
+    try (Connection conn = DriverManager.getConnection(url)) {
+      ResultSet rs =
+        conn.createStatement().executeQuery("SELECT COUNT(*) FROM \"" + USAGE_REPORT_TRANSACTIONS + "\"");
       assertTrue(rs.next());
       assertEquals(scenario.getNumRows(), rs.getInt(1));
       assertFalse(rs.next());

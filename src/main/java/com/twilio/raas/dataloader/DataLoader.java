@@ -46,7 +46,7 @@ public class DataLoader {
       else {
         builder.append(",");
       }
-      builder.append(columnSchema.getName());
+      builder.append("\"").append(columnSchema.getName()).append("\"");
     }
     builder.append(") VALUES (");
     for (int i = 0; i < calciteKuduTable.getKuduTable().getSchema().getColumnCount(); i++) {
@@ -69,10 +69,11 @@ public class DataLoader {
   private void bindValues(PreparedStatement statement) throws SQLException {
     int count = 1;
     for (ColumnSchema columnSchema : calciteKuduTable.getKuduTable().getSchema().getColumns()) {
+      final Object value;
       switch (columnSchema.getType()) {
         case INT8:
           Byte byteValue;
-          Object value = getColumnValueGenerator(columnSchema.getName()).getColumnValue();
+          value = getColumnValueGenerator(columnSchema.getName()).getColumnValue();
           if (value instanceof Byte) {
             byteValue = (Byte) value;
           }
@@ -86,8 +87,14 @@ public class DataLoader {
           }
           break;
         case INT16:
-          Short shortValue =
-            ((ColumnValueGenerator<Short>) getColumnValueGenerator(columnSchema.getName())).getColumnValue();
+          Short shortValue;
+          value = getColumnValueGenerator(columnSchema.getName()).getColumnValue();
+          if (value instanceof Short) {
+            shortValue = (Short) value;
+          }
+          else {
+            shortValue = ((Integer) value).shortValue();
+          }
           if (shortValue == null) {
             statement.setNull(count, Types.SMALLINT);
           } else {
