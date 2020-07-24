@@ -72,7 +72,17 @@ public class MutationState {
     }
   }
 
-  private Object getValue(int colIndex, Object value) {
+  /**
+   * Returns the column value to be stored in kudu. For primary columns that are stored in
+   * descending order, we invert the column value so that they natural ordering is inverted
+   * To invert a column value : COL_MAX_VAL - value + COL_MIN_VAL
+   * This translates the max column value to the min column value, min column value to the max
+   * column value and all the values in between are similarly translated.
+   *
+   * For descending ordered timestamps, we just subtract from  EPOCH_DAY_FOR_REVERSE_SORT
+   * since we don't allow negative timestamps
+   */
+  private Object getColumnValue(int colIndex, Object value) {
     if (value == null) {
       return value;
     }
@@ -80,15 +90,20 @@ public class MutationState {
     if (calciteModifiableKuduTable.isColumnOrderedDesc(colIndex)) {
       switch (col.getType()) {
         case INT8:
-          return (byte) (Byte.MAX_VALUE - (Byte) value);
+          return (byte) (Byte.MAX_VALUE - (byte) value + Byte.MIN_VALUE);
         case INT16:
-          return (short) (Short.MAX_VALUE - (Short) value);
+          return (short) (Short.MAX_VALUE - (short) value + Short.MIN_VALUE);
         case INT32:
-          return (Integer.MAX_VALUE - (Integer) value);
+          return (Integer.MAX_VALUE - (int) value + Integer.MIN_VALUE);
         case INT64:
-          return (Long.MAX_VALUE - (Long) value);
+          return (Long.MAX_VALUE - (long) value + Long.MIN_VALUE);
         case UNIXTIME_MICROS:
-          return (CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (long) value) * 1000;
+          long timestamp =  (long) value;
+          if ( timestamp <0 ) {
+            throw new IllegalArgumentException("Storing negative timstamp values for a column " +
+              "ordered descending is not supported");
+          }
+          return (CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - timestamp) * 1000;
         case BINARY:
           return ((ByteString) value).getBytes();
         default:
@@ -115,7 +130,7 @@ public class MutationState {
       for (int i = 0; i < columnIndexes.size(); ++i) {
         int columnIndex = columnIndexes.get(i);
         Class dataType = getDataType(columnIndexes.get(i));
-        Object value = getValue(columnIndex, tuple.get(i).getValueAs(dataType));
+        Object value = getColumnValue(columnIndex, tuple.get(i).getValueAs(dataType));
         colIndexToValueMap.put(columnIndex, value);
       }
       updateMutationState(colIndexToValueMap);
@@ -130,7 +145,7 @@ public class MutationState {
     Map<Integer, Object> colIndexToValueMap = new HashMap<>();
     for (int i = 0; i < columnIndexes.size(); ++i) {
       int columnIndex = columnIndexes.get(i);
-      colIndexToValueMap.put(columnIndex, getValue(columnIndex, values.get(i)));
+      colIndexToValueMap.put(columnIndex, getColumnValue(columnIndex, values.get(i)));
     }
     updateMutationState(colIndexToValueMap);
     return 1;

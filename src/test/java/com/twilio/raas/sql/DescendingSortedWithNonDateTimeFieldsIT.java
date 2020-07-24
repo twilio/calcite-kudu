@@ -3,15 +3,10 @@ package com.twilio.raas.sql;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.twilio.kudu.metadata.KuduTableMetadata;
-import com.twilio.raas.sql.schema.KuduSchemaFactory;
 import com.twilio.raas.sql.schema.KuduTestSchemaFactoryBase;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.Type;
-import org.apache.kudu.client.AsyncKuduSession;
-import org.apache.kudu.client.KuduTable;
-import org.apache.kudu.client.PartialRow;
-import org.apache.kudu.client.Upsert;
 import org.apache.kudu.test.KuduTestHarness;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -22,12 +17,15 @@ import org.junit.runners.JUnit4;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
@@ -38,6 +36,17 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
   public static KuduTestHarness testHarness = new KuduTestHarness();
   private static final String descendingSortTableName = "DescendingSortTestTable";
   private static String JDBC_URL;
+
+  private static void insertRow(PreparedStatement stmt, byte byteVal, short shortVal, int intVal,
+                                long longVal) throws SQLException {
+    stmt.setString(1, ACCOUNT_SID);
+    stmt.setByte(2, byteVal);
+    stmt.setShort(3, shortVal);
+    stmt.setInt(4, intVal);
+    stmt.setLong(5, longVal);
+    stmt.setString(6, "message-body");
+    stmt.execute();
+  }
 
   @BeforeClass
   public static void setup() throws Exception {
@@ -55,31 +64,27 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
       new org.apache.kudu.client.CreateTableOptions()
         .addHashPartitions(Arrays.asList("account_sid"), 5)
         .setNumReplicas(1));
-    final KuduTable descendingSortTestTable = testHarness.getClient().openTable(descendingSortTableName);
-    final AsyncKuduSession insertSession = testHarness.getAsyncClient().newSession();
-
-    final Upsert firstRowOp = descendingSortTestTable.newUpsert();
-    final PartialRow firstRowWrite = firstRowOp.getRow();
-    firstRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
-    firstRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("3")));
-    firstRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("32")));
-    firstRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 100);
-    firstRowWrite.addLong("reverse_long_field", Long.MAX_VALUE - 1000L);
-    firstRowWrite.addString("resource_type", "message-body");
-    insertSession.apply(firstRowOp).join();
-
-    final Upsert secondRowOp = descendingSortTestTable.newUpsert();
-    final PartialRow secondRowWrite = secondRowOp.getRow();
-    secondRowWrite.addString("account_sid", JDBCQueryIT.ACCOUNT_SID);
-    secondRowWrite.addByte("reverse_byte_field", (byte)(Byte.MAX_VALUE - new Byte("4")));
-    secondRowWrite.addShort("reverse_short_field", (short)(Short.MAX_VALUE - new Short("33")));
-    secondRowWrite.addInt("reverse_int_field", Integer.MAX_VALUE - 101);
-    secondRowWrite.addLong("reverse_long_field", Long.MAX_VALUE - 1001L);
-    secondRowWrite.addString("resource_type", "message-body");
-    insertSession.apply(secondRowOp).join();
 
     JDBC_URL = String.format(JDBCUtil.CALCITE_TEST_MODEL_TEMPLATE,
       KuduTestSchemaFactory.class.getName(), testHarness.getMasterAddressesAsString());
+
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      // Create prepared statement that can be reused
+      PreparedStatement stmt = conn.prepareStatement("INSERT INTO \"" + descendingSortTableName + "\" " +
+        "VALUES (?,?,?,?,?,?)");
+
+      // write rows that store the range of possible values
+      insertRow(stmt, Byte.MIN_VALUE, Short.MIN_VALUE, Integer.MIN_VALUE, Long.MIN_VALUE);
+      insertRow(stmt, (byte) (Byte.MIN_VALUE + 1), (short) (Short.MIN_VALUE + 1), Integer.MIN_VALUE + 1,
+        Long.MIN_VALUE + 1);
+      insertRow(stmt, (byte) -1, (short) -1, -1, -1);
+      insertRow(stmt, (byte) 0, (short) 0, 0, 0);
+      insertRow(stmt, (byte) 1, (short) 1, 1, 1);
+      insertRow(stmt, (byte) (Byte.MAX_VALUE - 1), (short) (Short.MAX_VALUE - 1), Integer.MAX_VALUE - 1,
+        Long.MAX_VALUE - 1);
+      insertRow(stmt, Byte.MAX_VALUE, Short.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE);
+      conn.commit();
+    }
   }
 
   public static class KuduTestSchemaFactory extends KuduTestSchemaFactoryBase {
@@ -130,17 +135,31 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
       rs = conn.createStatement().executeQuery(firstBatchSql);
 
       assertTrue(rs.next());
-      assertEquals("Mismatched byte", new Byte("4"), new Byte(rs.getByte("reverse_byte_field")));
-      assertEquals("Mismatched short", new Short("33"), new Short(rs.getShort("reverse_short_field")));
-      assertEquals("Mismatched int", 101, rs.getInt("reverse_int_field"));
-      assertEquals("Mismatched long", 1001L, rs.getLong("reverse_long_field"));
-
+      validateRow(rs, Byte.MAX_VALUE, Short.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE);
       assertTrue(rs.next());
-      assertEquals("Mismatched byte", new Byte("3"), new Byte(rs.getByte("reverse_byte_field")));
-      assertEquals("Mismatched short", new Short("32"), new Short(rs.getShort("reverse_short_field")));
-      assertEquals("Mismatched int", 100, rs.getInt("reverse_int_field"));
-      assertEquals("Mismatched long", 1000L, rs.getLong("reverse_long_field"));
+      validateRow(rs, (byte) (Byte.MAX_VALUE - 1), (short) (Short.MAX_VALUE - 1), Integer.MAX_VALUE - 1,
+        Long.MAX_VALUE - 1);
+      assertTrue(rs.next());
+      validateRow(rs, (byte) 1, (short) 1, 1, 1);
+      assertTrue(rs.next());
+      validateRow(rs, (byte) 0, (short) 0, 0, 0);
+      assertTrue(rs.next());
+      validateRow(rs, (byte) -1, (short) -1, -1, -1);
+      assertTrue(rs.next());
+      validateRow(rs, (byte) (Byte.MIN_VALUE + 1), (short) (Short.MIN_VALUE + 1),
+        Integer.MIN_VALUE + 1, Long.MIN_VALUE + 1);
+      assertTrue(rs.next());
+      validateRow(rs, Byte.MIN_VALUE, Short.MIN_VALUE, Integer.MIN_VALUE, Long.MIN_VALUE);
+      assertFalse(rs.next());
     }
+  }
+
+  private void validateRow(ResultSet rs, byte byteVal, short shortVal, int intVal, long longVal) throws SQLException {
+    assertEquals("Mismatched byte", byteVal, rs.getByte("reverse_byte_field"));
+    assertEquals("Mismatched short", shortVal, rs.getShort("reverse_short_field"));
+    assertEquals("Mismatched int", intVal, rs.getInt("reverse_int_field"));
+    assertEquals("Mismatched long", longVal, rs.getLong("reverse_long_field"));
+    System.out.println();
   }
 
   @Test
@@ -162,16 +181,22 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
       rs = conn.createStatement().executeQuery(firstBatchSql);
 
       assertTrue(rs.next());
-      assertEquals("Mismatched byte", new Byte("3"), new Byte(rs.getByte("reverse_byte_field")));
-      assertEquals("Mismatched short", new Short("32"), new Short(rs.getShort("reverse_short_field")));
-      assertEquals("Mismatched int", 100, rs.getInt("reverse_int_field"));
-      assertEquals("Mismatched long", 1000L, rs.getLong("reverse_long_field"));
-
+      validateRow(rs, Byte.MIN_VALUE, Short.MIN_VALUE, Integer.MIN_VALUE, Long.MIN_VALUE);
       assertTrue(rs.next());
-      assertEquals("Mismatched byte", new Byte("4"), new Byte(rs.getByte("reverse_byte_field")));
-      assertEquals("Mismatched short", new Short("33"), new Short(rs.getShort("reverse_short_field")));
-      assertEquals("Mismatched int", 101, rs.getInt("reverse_int_field"));
-      assertEquals("Mismatched long", 1001L, rs.getLong("reverse_long_field"));
+      validateRow(rs, (byte) (Byte.MIN_VALUE + 1), (short) (Short.MIN_VALUE + 1),
+        Integer.MIN_VALUE + 1, Long.MIN_VALUE + 1);
+      assertTrue(rs.next());
+      validateRow(rs, (byte) -1, (short) -1, -1, -1);
+      assertTrue(rs.next());
+      validateRow(rs, (byte) 0, (short) 0, 0, 0);
+      assertTrue(rs.next());
+      validateRow(rs, (byte) 1, (short) 1, 1, 1);
+      assertTrue(rs.next());
+      validateRow(rs, (byte) (Byte.MAX_VALUE - 1), (short) (Short.MAX_VALUE - 1), Integer.MAX_VALUE - 1,
+        Long.MAX_VALUE - 1);
+      assertTrue(rs.next());
+      validateRow(rs, Byte.MAX_VALUE, Short.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE);
+      assertFalse(rs.next());
     }
   }
 
@@ -179,31 +204,59 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
   public void testDescendingSortWithFilter() throws Exception {
     String url = String.format(JDBC_URL, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
-      String firstBatchSqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\""
-          + "WHERE account_sid = '%s' and reverse_byte_field > CAST(3 AS TINYINT) and reverse_short_field > CAST(32 AS SMALLINT) and reverse_int_field > 100 and reverse_long_field > CAST(1000 AS BIGINT) "
-          + "ORDER BY account_sid asc, reverse_byte_field desc, reverse_short_field desc, reverse_int_field desc, reverse_long_field desc";
-      String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+      String sqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\" WHERE " +
+        "account_sid = '%s'" +
+        " and reverse_byte_field > CAST(1 AS TINYINT)" +
+        " and reverse_short_field > CAST(1 AS SMALLINT)" +
+        " and reverse_int_field > 1" +
+        " and reverse_long_field > CAST(1 AS BIGINT)" +
+        " ORDER BY account_sid asc, reverse_byte_field desc, reverse_short_field desc, reverse_int_field desc, reverse_long_field desc";
+      String sql = String.format(sqlFormat, ACCOUNT_SID);
 
       // verify plan
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       String expectedPlanFormat = "KuduToEnumerableRel\n" +
-          "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], " +
-              "dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC], " +
-              "groupBySorted=[false])\n" +
-          "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, reverse_byte_field " +
-              "GREATER 3, reverse_short_field GREATER 32, reverse_int_field GREATER 100, " +
-              "reverse_long_field GREATER 1000])\n" +
-          "      KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
+        "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC], groupBySorted=[false])\n" +
+        "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, reverse_byte_field GREATER 1, reverse_short_field GREATER 1, reverse_int_field GREATER 1, reverse_long_field GREATER 1])\n" +
+        "      KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
       String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
       assertEquals("Unexpected plan ", expectedPlan, plan);
-      rs = conn.createStatement().executeQuery(firstBatchSql);
 
+      rs = conn.createStatement().executeQuery(sql);
       assertTrue(rs.next());
-      assertEquals("Mismatched byte", new Byte("4"), new Byte(rs.getByte("reverse_byte_field")));
-      assertEquals("Mismatched short", new Short("33"), new Short(rs.getShort("reverse_short_field")));
-      assertEquals("Mismatched int", 101, rs.getInt("reverse_int_field"));
-      assertEquals("Mismatched long", 1001L, rs.getLong("reverse_long_field"));
+      validateRow(rs, Byte.MAX_VALUE, Short.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE);
+      assertTrue(rs.next());
+      validateRow(rs, (byte) (Byte.MAX_VALUE - 1), (short) (Short.MAX_VALUE - 1), Integer.MAX_VALUE - 1,
+        Long.MAX_VALUE - 1);
+      assertFalse(rs.next());
     }
+  }
+
+  @Test
+  public void testFilterUsingMinMaxValue() throws Exception {
+    String url = String.format(JDBC_URL, testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      String sqlFormat = "SELECT * FROM kudu.\"DescendingSortTestTable\" WHERE account_sid = '%s'" +
+        " and reverse_byte_field = CAST(%d AS TINYINT)" +
+        " and reverse_short_field = CAST(%d AS SMALLINT)" +
+        " and reverse_int_field = %d" +
+        " and reverse_long_field = CAST(%d AS BIGINT)";
+
+      String sql = String.format(sqlFormat, ACCOUNT_SID, Byte.MIN_VALUE, Short.MIN_VALUE,
+        Integer.MIN_VALUE, Long.MIN_VALUE);
+      ResultSet rs = conn.createStatement().executeQuery(sql);
+      assertTrue(rs.next());
+      validateRow(rs, Byte.MIN_VALUE, Short.MIN_VALUE, Integer.MIN_VALUE, Long.MIN_VALUE);
+      assertFalse(rs.next());
+
+      sql = String.format(sqlFormat, ACCOUNT_SID, Byte.MAX_VALUE, Short.MAX_VALUE,
+        Integer.MAX_VALUE, Long.MAX_VALUE);
+      rs = conn.createStatement().executeQuery(sql);
+      assertTrue(rs.next());
+      validateRow(rs, Byte.MAX_VALUE, Short.MAX_VALUE, Integer.MAX_VALUE, Long.MAX_VALUE);
+      assertFalse(rs.next());
+    }
+
   }
 }
