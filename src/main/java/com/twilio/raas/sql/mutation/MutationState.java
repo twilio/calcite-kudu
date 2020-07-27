@@ -76,6 +76,7 @@ public class MutationState {
    * Returns the column value to be stored in kudu. For primary columns that are stored in
    * descending order, we invert the column value so that they natural ordering is inverted
    * To invert a column value : COL_MAX_VAL - value + COL_MIN_VAL
+   * which can be simplified to : -1 - value
    * This translates the max column value to the min column value, min column value to the max
    * column value and all the values in between are similarly translated.
    *
@@ -90,13 +91,13 @@ public class MutationState {
     if (calciteModifiableKuduTable.isColumnOrderedDesc(colIndex)) {
       switch (col.getType()) {
         case INT8:
-          return (byte) (Byte.MAX_VALUE - (byte) value + Byte.MIN_VALUE);
+          return (byte) (-1 - (byte) value);
         case INT16:
-          return (short) (Short.MAX_VALUE - (short) value + Short.MIN_VALUE);
+          return (short) (-1 - (short) value);
         case INT32:
-          return (Integer.MAX_VALUE - (int) value + Integer.MIN_VALUE);
+          return -1 - (int) value;
         case INT64:
-          return (Long.MAX_VALUE - (long) value + Long.MIN_VALUE);
+          return -1l - (long) value;
         case UNIXTIME_MICROS:
           long timestamp =  (long) value;
           if ( timestamp <0 ) {

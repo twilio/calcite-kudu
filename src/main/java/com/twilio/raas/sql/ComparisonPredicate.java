@@ -51,7 +51,7 @@ public final class ComparisonPredicate extends CalciteKuduPredicate {
       return invertValue ?
         KuduPredicate
         .newComparisonPredicate(columnSchema, invertComparisonOp(operation),
-          Byte.MAX_VALUE - (Byte)rightHandValue + Byte.MIN_VALUE) :
+          (byte)(-1 - (Byte)rightHandValue)) :
         KuduPredicate
         .newComparisonPredicate(columnSchema, operation, rightHandValue);
     }
@@ -59,7 +59,7 @@ public final class ComparisonPredicate extends CalciteKuduPredicate {
       return invertValue ?
         KuduPredicate
         .newComparisonPredicate(columnSchema, invertComparisonOp(operation),
-           Short.MAX_VALUE - (Short)rightHandValue + Short.MIN_VALUE) :
+          (short)(-1 - (Short)rightHandValue)) :
         KuduPredicate
         .newComparisonPredicate(columnSchema, operation, rightHandValue);
     }
@@ -72,7 +72,7 @@ public final class ComparisonPredicate extends CalciteKuduPredicate {
         return invertValue ?
           KuduPredicate
             .newComparisonPredicate(columnSchema, invertComparisonOp(operation),
-              Integer.MAX_VALUE - (Integer)rightHandValue + Integer.MIN_VALUE) :
+              -1 - (Integer)rightHandValue) :
           KuduPredicate
             .newComparisonPredicate(columnSchema, operation, rightHandValue);
       }
@@ -90,7 +90,7 @@ public final class ComparisonPredicate extends CalciteKuduPredicate {
               CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - (long)rightHandValue) :
           KuduPredicate
           .newComparisonPredicate(columnSchema, invertComparisonOp(operation),
-              Long.MAX_VALUE - (Long)rightHandValue + Long.MIN_VALUE );
+              -1l - (Long)rightHandValue);
       }
       else  {
         return KuduPredicate

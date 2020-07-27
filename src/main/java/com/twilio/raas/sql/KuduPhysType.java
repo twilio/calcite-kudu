@@ -131,7 +131,6 @@ public final class KuduPhysType implements PhysType {
         // These values are used to invert the value stored in Kudu for descending ordered columns.
         // (see MutationState.getColumnValue())
         Expression descendingMaxValue = null;
-        Expression descendingMinValue = null;
 
         // This required Expression retrieves / fetches the raw value from the Kudu RPC.
         // Most of the value types use the static methods defined in this class.
@@ -144,23 +143,19 @@ public final class KuduPhysType implements PhysType {
         switch(columnSchema.getType()) {
         case INT8:
             rawFetch = Expressions.call(expression, BYTE_METHOD, columnRef);
-            descendingMaxValue = Expressions.constant(Byte.MAX_VALUE, Byte.class);
-            descendingMinValue = Expressions.constant(Byte.MIN_VALUE, Byte.class);
+            descendingMaxValue = Expressions.constant(-1, Byte.class);
             break;
         case INT16:
             rawFetch = Expressions.call(expression, SHORT_METHOD, columnRef);
-            descendingMaxValue = Expressions.constant(Short.MAX_VALUE, Short.class);
-            descendingMinValue = Expressions.constant(Short.MIN_VALUE, Short.class);
+            descendingMaxValue = Expressions.constant(-1, Short.class);
             break;
         case INT32:
             rawFetch = Expressions.call(expression, INT_METHOD, columnRef);
-            descendingMaxValue = Expressions.constant(Integer.MAX_VALUE, Integer.class);
-            descendingMinValue = Expressions.constant(Integer.MIN_VALUE, Integer.class);
+            descendingMaxValue = Expressions.constant(-1, Integer.class);
             break;
         case INT64:
             rawFetch = Expressions.call(expression, LONG_METHOD, columnRef);
-            descendingMaxValue = Expressions.constant(Long.MAX_VALUE, Long.class);
-            descendingMinValue = Expressions.constant(Long.MIN_VALUE, Long.class);
+            descendingMaxValue = Expressions.constant(-1, Long.class);
             break;
         case UNIXTIME_MICROS:
             final Expression timestamp = Expressions.call(expression, TIMESTAMP_METHOD, columnRef);
@@ -202,11 +197,7 @@ public final class KuduPhysType implements PhysType {
                 throw new IllegalStateException(String.format("Ord %d is of type %s and cannot be descending sorted",
                         field, columnSchema));
             }
-            if (descendingMinValue != null) {
-              fetchFromRowResult = Expressions.add(Expressions.subtract(descendingMaxValue,
-                rawFetch), descendingMinValue);
-            } else {
-              // this is only for the timestamp data type
+            else {
               fetchFromRowResult = Expressions.subtract(descendingMaxValue, rawFetch);
             }
         }
