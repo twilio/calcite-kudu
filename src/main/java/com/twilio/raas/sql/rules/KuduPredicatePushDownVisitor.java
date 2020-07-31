@@ -282,10 +282,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                             new NullPredicate(index, false)));
                 }
                 // everything else requires op to be set.
-                else if (!maybeOp.isPresent()) {
-                    return setEmpty();
-                }
-                else {
+                else if (maybeOp.isPresent()) {
                   return Collections.singletonList(
                       Collections.singletonList(
                           new ComparisonPredicate(
@@ -295,6 +292,24 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                           )
                       )
                   );
+                }
+            }
+            if (left.getKind() == SqlKind.FLOOR) {
+                final RexCall floorCall = (RexCall) left;
+                if (floorCall.operands.get(0).getKind() == SqlKind.INPUT_REF) {
+                    // In this case we can push down the filter to Kudu *BUT* preserve the in memory filter
+                    allExpressionsConverted = false;
+
+                    final int index = getColumnIndex(floorCall.operands.get(0));
+                    if (maybeOp.isPresent()) {
+                        return Collections.singletonList(
+                                Collections.singletonList(
+                                   new ComparisonPredicate(index,
+                                                           maybeOp.get(),
+                                                           castLiteral(literal))
+                                )
+                        );
+                    }
                 }
             }
         }
