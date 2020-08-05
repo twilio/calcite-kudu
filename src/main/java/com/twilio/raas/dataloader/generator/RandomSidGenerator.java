@@ -12,7 +12,7 @@ public class RandomSidGenerator extends ColumnValueGenerator<String> {
   }
 
   @Override
-  public String getColumnValue() {
+  public synchronized String getColumnValue() {
     return com.twilio.sids.SidUtil.generateGUID(sidPrefix);
   }
 

@@ -29,8 +29,8 @@ public class CubeMutationState extends MutationState {
   // used so that we limit the data being upserted to each cube that is maintained
   private final Set<Map<Integer, Object>> currentBatchAggregations = new HashSet<>();
 
-  public CubeMutationState(CalciteModifiableKuduTable calciteKuduTable) {
-    super(calciteKuduTable);
+  public CubeMutationState(CalciteModifiableKuduTable calciteModifiableKuduTable) {
+    super(calciteModifiableKuduTable);
   }
 
   private Object increment(int columnIndex, Object currentValue, Object deltaValue) {
@@ -116,8 +116,8 @@ public class CubeMutationState extends MutationState {
       // clear the list of cube pk values
       currentBatchAggregations.clear();
     }
-    logger.info("Flushed " + mutationCount +" cube rows in " + (System.currentTimeMillis() - startTime) + " ms.");
-    logger.info("Map size " + aggregatedValues.size() +" rows.");
+    logger.info("Map size " + aggregatedValues.size() +" rows. Flushed " + mutationCount +" cube " +
+      "rows in " + (System.currentTimeMillis() - startTime) + " ms.");
   }
 
 }

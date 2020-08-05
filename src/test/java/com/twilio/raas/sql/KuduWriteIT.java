@@ -102,6 +102,9 @@ public class KuduWriteIT {
   public void testPreparedStatement() throws Exception {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String stringVal = "ACCOUNT1";
+    }
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String stringVal = "ACCOUNT1";
 
       // Create prepared statement that can be reused
       PreparedStatement stmt = conn.prepareStatement("INSERT INTO \"" + BASE_TABLE_NAME + "\" " +

@@ -2,14 +2,11 @@ package com.twilio.raas.sql;
 
 import com.twilio.kudu.metadata.CubeTableInfo;
 import com.twilio.raas.sql.mutation.CubeMaintainer;
-import com.twilio.raas.sql.mutation.CubeMutationState;
-import com.twilio.raas.sql.mutation.MutationState;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.prepare.Prepare;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableModify;
-import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.ModifiableTable;
 import org.apache.kudu.client.AsyncKuduClient;
@@ -19,9 +16,6 @@ import java.util.Collection;
 import java.util.List;
 
 public class CalciteModifiableKuduTable extends CalciteKuduTable implements ModifiableTable {
-
-  // used to keep track of state required to write rows to the kudu table
-  protected final MutationState mutationState;
 
   // used to compute the aggregated values that will be written to the kudu cube table
   private CubeMaintainer cubeMaintainer;
@@ -44,8 +38,6 @@ public class CalciteModifiableKuduTable extends CalciteKuduTable implements Modi
                                      final TableType tableType, final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType) {
     super(kuduTable, client, descendingOrderColumnIndexes, timestampColumnIndex, cubeTables,
       tableType, eventTimeAggregationType);
-    this.mutationState = tableType == TableType.CUBE ? new CubeMutationState(this) :
-      new MutationState(this);
   }
 
   @Override
@@ -86,22 +78,4 @@ public class CalciteModifiableKuduTable extends CalciteKuduTable implements Modi
     return cubeMaintainer;
   }
 
-  public MutationState getMutationState() {
-    return mutationState;
-  }
-
-  /**
-   * Called while using {@link java.sql.Statement}
-   */
-  public int mutateTuples(final List<Integer> columnIndexes,
-                          final List<List<RexLiteral>> tuples) {
-    return getMutationState().mutateTuples(columnIndexes, tuples);
-  }
-
-  /**
-   * Called while using {@link java.sql.PreparedStatement}
-   */
-  public int mutateRow(final List<Integer> columnIndexes, final List<Object> values) {
-    return getMutationState().mutateRow(columnIndexes, values);
-  }
 }

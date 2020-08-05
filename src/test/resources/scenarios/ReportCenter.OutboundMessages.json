@@ -1,6 +1,6 @@
 {
   "tableName": "ReportCenter.OutboundMessages",
-  "numRows": 1000,
+  "numRows": 1024,
   "columnNameToValueGenerator": {
     "sid" : {
       "type" : "RandomSidGenerator",

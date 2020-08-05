@@ -2,9 +2,9 @@ package com.twilio.raas.sql.schema;
 
 import com.twilio.kudu.metadata.CubeTableInfo;
 import com.twilio.kudu.metadata.KuduTableMetadata;
-import com.twilio.raas.sql.CalciteKuduTable;
 import com.twilio.raas.sql.CalciteKuduTableBuilder;
 import com.twilio.raas.sql.CalciteModifiableKuduTable;
+import com.twilio.raas.sql.CalciteKuduTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.kudu.client.AsyncKuduClient;

@@ -1,11 +1,16 @@
 package org.apache.calcite.jdbc;
 
 import com.twilio.raas.sql.CalciteModifiableKuduTable;
-import org.apache.calcite.linq4j.Enumerable;
+import com.twilio.raas.sql.mutation.MutationState;
 
-import java.lang.reflect.Field;
+import java.util.HashMap;
+import java.util.Map;
 
 public class KuduMetaImpl extends CalciteMetaImpl {
+
+  // used to keep track of state required to write rows to the kudu table
+  // map from table name to mutation state
+  private final Map<String, MutationState> mutationStateMap = new HashMap<>();
 
   public KuduMetaImpl(CalciteConnectionImpl connection) {
     super(connection);
@@ -13,24 +18,8 @@ public class KuduMetaImpl extends CalciteMetaImpl {
 
   @Override
   public void commit(ConnectionHandle ch) {
-    // TODO figure out if there is a way to use only the table(s) that were changed in the
-    //  current connection
-    Enumerable<MetaTable> metaTables = tables("KUDU");
-    for (MetaTable metaTable : metaTables) {
-      try {
-        final Class<?> calciteMetaTableClass = Class.forName(CalciteMetaImpl.class.getName()+
-          "$CalciteMetaTable");
-        Field calciteTableField = calciteMetaTableClass.getDeclaredField("calciteTable");
-        calciteTableField.setAccessible(true);
-        Object table = calciteTableField.get(calciteMetaTableClass.cast(metaTable));
-        if (table instanceof  CalciteModifiableKuduTable) {
-          CalciteModifiableKuduTable calciteKuduTable = (CalciteModifiableKuduTable) table;
-          // flush all pending mutations
-          calciteKuduTable.getMutationState().flush();
-        }
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
+    for (MutationState mutationState : mutationStateMap.values()) {
+      mutationState.flush();
     }
   }
 
@@ -40,6 +29,11 @@ public class KuduMetaImpl extends CalciteMetaImpl {
       throw new UnsupportedOperationException("Autocommit is not supported");
     }
     return super.connectionSync(ch, connProps);
+  }
+
+  public MutationState getMutationState(CalciteModifiableKuduTable calciteKuduTable) {
+    return mutationStateMap.computeIfAbsent(calciteKuduTable.getKuduTable().getName(),
+      (k) -> new MutationState(calciteKuduTable));
   }
 
 }

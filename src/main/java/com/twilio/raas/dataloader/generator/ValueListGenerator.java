@@ -16,7 +16,7 @@ public class ValueListGenerator extends ColumnValueGenerator<String> {
   }
 
   @Override
-  public String getColumnValue() {
+  public synchronized String getColumnValue() {
     return values.get(rand.nextInt(values.size()));
   }
 

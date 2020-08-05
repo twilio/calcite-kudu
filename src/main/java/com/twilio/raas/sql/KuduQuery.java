@@ -1,7 +1,6 @@
 package com.twilio.raas.sql;
 
 import com.twilio.raas.sql.rules.KuduRules;
-import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -10,7 +9,6 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
-import org.apache.calcite.rel.rules.ProjectMergeRule;
 import org.apache.calcite.rel.rules.ReduceExpressionsRule;
 import org.apache.calcite.rel.type.RelDataType;
 
@@ -82,7 +80,7 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     public void implement(Implementor impl) {
         // Doesn't call visit child as it is the leaf.
         impl.kuduTable = this.calciteKuduTable.getKuduTable();
-        impl.descendingColumns = this.calciteKuduTable.descendingOrderedColumnIndexes;
+        impl.descendingColumns = this.calciteKuduTable.getDescendingOrderedColumnIndexes();
         impl.table = this.table;
         impl.tableDataType = getRowType();
     }

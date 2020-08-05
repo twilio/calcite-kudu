@@ -16,7 +16,7 @@ public class UniformBigDecimalValueGenerator extends ColumnValueGenerator<BigDec
   }
 
   @Override
-  public BigDecimal getColumnValue() {
+  public synchronized BigDecimal getColumnValue() {
     return new BigDecimal(String.valueOf(Math.round(random.nextDouble() * maxValue) / maxValue));
   }
 

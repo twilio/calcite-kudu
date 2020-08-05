@@ -31,7 +31,7 @@ public class PhoneNumberListGenerator extends ColumnValueGenerator<String> {
   }
 
   @Override
-  public String getColumnValue() {
+  public synchronized String getColumnValue() {
     if (values.isEmpty()) {
       IntStream.range(0, numValues)
         .forEach( index -> values.add(generatePhoneNumber()));

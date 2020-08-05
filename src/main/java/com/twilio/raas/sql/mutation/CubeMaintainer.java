@@ -1,18 +1,14 @@
 package com.twilio.raas.sql.mutation;
 
 import com.twilio.kudu.metadata.CubeTableInfo;
-import com.twilio.raas.sql.CalciteKuduTable;
 import org.apache.calcite.avatica.util.DateTimeUtils;
-import org.apache.calcite.avatica.util.TimeUnitRange;
+import com.twilio.raas.sql.CalciteKuduTable;
 import org.apache.calcite.runtime.SqlFunctions;
 import org.apache.calcite.util.Pair;
 import org.apache.kudu.Schema;
 
-import java.util.Calendar;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Used to calculate aggregated values and upsert rows to the kudu cube tables
@@ -59,7 +55,7 @@ public class CubeMaintainer {
    * TODO support month and year
    * @return the mod value used to truncate the timestamp
    */
-  private long getFloorMod() {
+  public long getFloorMod() {
     switch (eventTimeAggregationType) {
       case second:
         return DateTimeUtils.MILLIS_PER_SECOND;
@@ -104,7 +100,7 @@ public class CubeMaintainer {
         else {
           Long timestamp = (Long) columnValue/ 1000;
           Long truncatedTimestamp =
-            DateTimeUtils.unixTimestampFloor(TimeUnitRange.DAY, timestamp);
+            SqlFunctions.floor(timestamp, getFloorMod());
           pkColumnValuesMap.put(cubeColIndex, truncatedTimestamp * 1000);
         }
       }

@@ -2,27 +2,20 @@ package com.twilio.raas.sql;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.twilio.kudu.metadata.CubeTableInfo;
-import com.twilio.kudu.metadata.KuduTableMetadata;
-import com.twilio.raas.sql.mutation.CubeMaintainer;
-import com.twilio.raas.sql.mutation.CubeMutationState;
-import com.twilio.raas.sql.mutation.MutationState;
 import com.twilio.raas.sql.rules.KuduToEnumerableConverter;
+import org.apache.calcite.jdbc.KuduCalciteConnectionImpl;
+import org.apache.calcite.jdbc.KuduMetaImpl;
 import org.apache.calcite.linq4j.Enumerable;
 
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 import org.apache.calcite.linq4j.Linq4j;
-import org.apache.calcite.prepare.Prepare;
-import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.schema.ModifiableTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.kudu.client.KuduTable;
@@ -54,11 +47,6 @@ import org.apache.calcite.schema.impl.AbstractTableQueryable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-// This class resides in this project under the org.apache namespace
-
-// This class resides in this project under the org.apache namespace
-
-
 /**
  * A {@code CalciteKuduTable} is responsible for returning rows of Objects back.
  * It is responsible for calling the RPC layer of Kudu reparsing them into
@@ -89,6 +77,7 @@ public class CalciteKuduTable extends AbstractQueryableTable
     protected final int timestampColumnIndex;
     // list of cube tables (if this is a fact table)
     protected final List<CalciteKuduTable> cubeTables;
+
     // type of table
     protected final TableType tableType;
 
@@ -99,7 +88,7 @@ public class CalciteKuduTable extends AbstractQueryableTable
    * Create the {@code CalciteKuduTable} for a physical scan over the provided{@link KuduTable}.
    * {@code KuduTable} must exist and be opened.
    *
-   * Use {@link CalciteKuduTableBuilder} to build a table instead of this constructor
+   * Use {@link com.twilio.raas.sql.CalciteKuduTableBuilder to build a table instead of this constructor
    *
    * @param kuduTable the opened kudu table
    * @param client  kudu client that is used to write mutations
@@ -107,7 +96,7 @@ public class CalciteKuduTable extends AbstractQueryableTable
    * @param cubeTables the list of cube tables (if this is a fact table)
    * @param tableType type of this table
    */
-   CalciteKuduTable(final KuduTable kuduTable, final AsyncKuduClient client,
+   public CalciteKuduTable(final KuduTable kuduTable, final AsyncKuduClient client,
                      final List<Integer> descendingOrderColumnIndexes,
                      final int timestampColumnIndex, final List<CalciteKuduTable> cubeTables,
                      final TableType tableType, final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType) {
@@ -344,14 +333,18 @@ public class CalciteKuduTable extends AbstractQueryableTable
         }
 
         public Enumerable<Object> mutateTuples(final List<Integer> columnIndexes,
-                          final List<List<RexLiteral>> tuples) {
-          return Linq4j.singletonEnumerable(getModifiableTable().mutateTuples(columnIndexes, tuples));
+                                               final List<List<RexLiteral>> tuples) {
+          CalciteModifiableKuduTable table = getModifiableTable();
+          KuduMetaImpl kuduMetaImpl = ((KuduCalciteConnectionImpl) queryProvider).getMeta();
+          return Linq4j.singletonEnumerable(kuduMetaImpl.getMutationState(table).mutateTuples(columnIndexes, tuples));
         }
 
-    public Enumerable<Object> mutateRow(final List<Integer> columnIndexes,
-                                     final List<Object> values) {
-      return Linq4j.singletonEnumerable(getModifiableTable().mutateRow(columnIndexes, values));
-    }
+        public Enumerable<Object> mutateRow(final List<Integer> columnIndexes,
+                                            final List<Object> values) {
+          CalciteModifiableKuduTable table = getModifiableTable();
+          KuduMetaImpl kuduMetaImpl = ((KuduCalciteConnectionImpl) queryProvider).getMeta();
+          return Linq4j.singletonEnumerable(kuduMetaImpl.getMutationState(table).mutateRow(columnIndexes, values));
+        }
   }
 
   /**
@@ -373,7 +366,7 @@ public class CalciteKuduTable extends AbstractQueryableTable
   }
 
   @VisibleForTesting
-  static List<Integer> getPrimaryKeyColumnsInProjection(final Schema schema,
+  public static List<Integer> getPrimaryKeyColumnsInProjection(final Schema schema,
                                                         final Schema projectedSchema) {
     final List<Integer> primaryKeyColumnsInProjection = new ArrayList<>();
     final List<ColumnSchema> columnSchemas = projectedSchema.getColumns();
@@ -436,6 +429,14 @@ public class CalciteKuduTable extends AbstractQueryableTable
 
   public int getTimestampColumnIndex() {
     return timestampColumnIndex;
+  }
+
+  public List<Integer> getDescendingOrderedColumnIndexes() {
+    return descendingOrderedColumnIndexes;
+  }
+
+  public TableType getTableType() {
+    return tableType;
   }
 
 }

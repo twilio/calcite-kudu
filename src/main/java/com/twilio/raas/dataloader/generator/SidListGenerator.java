@@ -22,7 +22,7 @@ public class SidListGenerator extends ColumnValueGenerator<String> {
   }
 
   @Override
-  public String getColumnValue() {
+  public synchronized String getColumnValue() {
     if (values.isEmpty()) {
       IntStream.range(0, numValues)
         .forEach( index -> values.add(com.twilio.sids.SidUtil.generateGUID(sidPrefix)));

@@ -17,7 +17,7 @@ public class UniformIntegerValueGenerator extends ColumnValueGenerator<Integer> 
   }
 
   @Override
-  public Integer getColumnValue() {
+  public synchronized Integer getColumnValue() {
     return minValue + (int) (random.nextDouble() * (maxValue - minValue));
   }
   

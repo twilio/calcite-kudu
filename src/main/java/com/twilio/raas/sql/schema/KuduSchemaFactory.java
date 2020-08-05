@@ -5,7 +5,6 @@ import com.twilio.raas.sql.CalciteKuduTable;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaFactory;
 import org.apache.calcite.schema.SchemaPlus;
-import org.apache.kudu.client.KuduTable;
 
 import java.util.ArrayList;
 import java.util.HashMap;

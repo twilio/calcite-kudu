@@ -1,6 +1,6 @@
 {
   "tableName": "ReportCenter.UsageReportTransactions",
-  "numRows": 1000,
+  "numRows": 1024,
   "columnNameToValueGenerator": {
     "transaction_id" : {
       "type" : "RandomSidGenerator",

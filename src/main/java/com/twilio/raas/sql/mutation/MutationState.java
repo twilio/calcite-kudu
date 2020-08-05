@@ -1,13 +1,12 @@
 package com.twilio.raas.sql.mutation;
 
-import com.twilio.raas.sql.CalciteKuduTable;
 import com.twilio.raas.sql.CalciteModifiableKuduTable;
 import org.apache.calcite.avatica.util.ByteString;
+import com.twilio.raas.sql.CalciteKuduTable;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.client.AsyncKuduSession;
 import org.apache.kudu.client.Insert;
-import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduException;
 import org.apache.kudu.client.KuduSession;
 import org.apache.kudu.client.KuduTable;
@@ -17,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,26 +25,29 @@ public class MutationState {
 
   private static final Logger logger = LoggerFactory.getLogger(MutationState.class);
 
-  protected final KuduClient kuduClient;
   protected final CalciteModifiableKuduTable calciteModifiableKuduTable;
   protected final KuduTable kuduTable;
   protected final KuduSession session;
 
   private int numFactRowsInBatch = 0;
 
-  public MutationState(final CalciteModifiableKuduTable calciteKuduTable) {
-    this.calciteModifiableKuduTable = calciteKuduTable;
-    this.kuduClient = calciteKuduTable.getClient().syncClient();
-    this.kuduTable = calciteKuduTable.getKuduTable();
-    this.session = kuduClient.newSession();
+  private List<CubeMutationState> cubeMutationStateList = new ArrayList<>();
+
+  public MutationState(final CalciteModifiableKuduTable calciteModifiableKuduTable) {
+    this.calciteModifiableKuduTable = calciteModifiableKuduTable;
+    this.kuduTable = calciteModifiableKuduTable.getKuduTable();
+    this.session = calciteModifiableKuduTable.getClient().syncClient().newSession();
     session.setFlushMode(AsyncKuduSession.FlushMode.MANUAL_FLUSH);
+    for (CalciteKuduTable cubeTable : this.calciteModifiableKuduTable.getCubeTables()) {
+      cubeMutationStateList.add(new CubeMutationState((CalciteModifiableKuduTable) cubeTable));
+    }
   }
 
   /**
    * Returns the Java type that a literal should be converted to
    */
   private Class getDataType(int columnIndex) {
-    ColumnSchema col = calciteModifiableKuduTable.getKuduTable().getSchema().getColumnByIndex(columnIndex);
+    ColumnSchema col = kuduTable.getSchema().getColumnByIndex(columnIndex);
     switch (col.getType()) {
       case BOOL:
         return Boolean.class;
@@ -170,8 +173,8 @@ public class MutationState {
     }
 
     // update aggregated values for each cube table
-    for (CalciteKuduTable cubeTable : calciteModifiableKuduTable.getCubeTables()) {
-      ((CalciteModifiableKuduTable)cubeTable).getMutationState().updateMutationState(colIndexToValueMap);
+    for (MutationState cubeMutationState : cubeMutationStateList) {
+      cubeMutationState.updateMutationState(colIndexToValueMap);
     }
   }
 
@@ -191,8 +194,8 @@ public class MutationState {
       logger.info("Flushed " + numFactRowsInBatch +" fact rows in " + (System.currentTimeMillis() - startTime) + " ms");
       numFactRowsInBatch = 0;
       // flush aggregated values for each cube table
-      for (CalciteKuduTable cubeTable : calciteModifiableKuduTable.getCubeTables()) {
-          ((CalciteModifiableKuduTable) cubeTable).getMutationState().flush();
+      for (MutationState cubeMutationState : cubeMutationStateList) {
+        cubeMutationState.flush();
       }
 
     } catch (KuduException e) {
