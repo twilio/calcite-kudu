@@ -1,5 +1,10 @@
 package com.twilio.raas.sql.rules;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -9,12 +14,11 @@ import com.twilio.raas.sql.ComparisonPredicate;
 import com.twilio.raas.sql.InListPredicate;
 import com.twilio.raas.sql.NullPredicate;
 
+import org.apache.calcite.avatica.util.TimeUnitRange;
 import org.apache.calcite.rex.RexBiVisitor;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.fun.SqlCastFunction;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.rex.RexCall;
-import org.apache.kudu.ColumnSchema;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.rex.RexRangeRef;
 import org.apache.calcite.rex.RexLiteral;
@@ -33,7 +37,6 @@ import org.apache.calcite.rex.RexNode;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 
-import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate;
 
 import org.slf4j.Logger;
@@ -144,6 +147,8 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
 
         switch (callType) {
         case EQUALS:
+        case PERIOD_EQUALS:
+        case NOT_EQUALS: //Not equals will still return setEmpty() as findKuduOp method will return Optional.empty()
         case GREATER_THAN:
         case GREATER_THAN_OR_EQUAL:
         case LESS_THAN:
@@ -197,6 +202,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     private Optional<KuduPredicate.ComparisonOp> findKuduOp(RexCall functionCall) {
         final SqlKind callType = functionCall.getOperator().getKind();
         switch(callType) {
+        case PERIOD_EQUALS:
         case EQUALS:
             return Optional.of(KuduPredicate.ComparisonOp.EQUAL);
         case GREATER_THAN:
@@ -265,6 +271,28 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     throw new IllegalArgumentException(String.format("Unable to cast literal to Kudu: %s", literal));
   }
 
+  private Long shiftTimestampByOneInterval(final Long epochMicros, final TimeUnitRange timeUnitRange, final boolean shiftForward) {
+    final Instant currentInstant = Instant.ofEpochMilli(epochMicros/1000L);
+    switch(timeUnitRange) {
+        case MINUTE: return (shiftForward) ?
+                currentInstant.plus(1L, ChronoUnit.MINUTES).toEpochMilli() * 1000L :
+                currentInstant.minus(1L, ChronoUnit.MINUTES).toEpochMilli() * 1000L;
+        case HOUR: return (shiftForward) ?
+                currentInstant.plus(1L, ChronoUnit.HOURS).toEpochMilli() * 1000L:
+                currentInstant.minus(1L, ChronoUnit.HOURS).toEpochMilli() * 1000L;
+        case DAY: return (shiftForward) ?
+                currentInstant.plus(1L, ChronoUnit.DAYS).toEpochMilli() * 1000L :
+                currentInstant.minus(1L, ChronoUnit.DAYS).toEpochMilli() * 1000L;
+        case MONTH: return (shiftForward) ?
+                ZonedDateTime.ofInstant(currentInstant, ZoneOffset.UTC).plus(1L, ChronoUnit.MONTHS).toInstant().toEpochMilli() * 1000L:
+                ZonedDateTime.ofInstant(currentInstant, ZoneOffset.UTC).minus(1L, ChronoUnit.MONTHS).toInstant().toEpochMilli() * 1000L;
+        case YEAR: return (shiftForward) ?
+                ZonedDateTime.ofInstant(currentInstant, ZoneOffset.UTC).plus(1L, ChronoUnit.YEARS).toInstant().toEpochMilli() * 1000L:
+                ZonedDateTime.ofInstant(currentInstant, ZoneOffset.UTC).minus(1L, ChronoUnit.YEARS).toInstant().toEpochMilli() * 1000L;
+        default: throw new IllegalArgumentException(String.format("Unsupported timeUnitRange:%s", timeUnitRange.name()));
+    }
+  }
+
     /**
      * This visit method adds a predicate. this is the leaf of a tree so it
      * gets to create a fresh list of list
@@ -282,10 +310,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                             new NullPredicate(index, false)));
                 }
                 // everything else requires op to be set.
-                else if (!maybeOp.isPresent()) {
-                    return setEmpty();
-                }
-                else {
+                else if (maybeOp.isPresent()) {
                   return Collections.singletonList(
                       Collections.singletonList(
                           new ComparisonPredicate(
@@ -295,6 +320,305 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                           )
                       )
                   );
+                }
+                else if (!maybeOp.isPresent()) {
+                    return setEmpty();
+                }
+            }
+            else if (left.getKind() == SqlKind.FLOOR) {
+                final RexCall floorCall = (RexCall) left;
+                if (floorCall.operands.get(0).getKind() == SqlKind.INPUT_REF) {
+                    final int index = getColumnIndex(floorCall.operands.get(0));
+                    if (floorCall.operands.size() > 1 && floorCall.operands.get(1).getType().getSqlTypeName() == SqlTypeName.SYMBOL) {
+                        // timezone related floor filters
+                        final TimeUnitRange floorToTimeRange = ((RexLiteral)floorCall.operands.get(1)).getValueAs(TimeUnitRange.class);
+                        final Long effectivePushDownTimestamp;
+                        switch(floorToTimeRange) {
+                            // TODO - get timezone from DateContext/Framework
+                            case MINUTE: effectivePushDownTimestamp = Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L)
+                                           .truncatedTo(ChronoUnit.MINUTES).toEpochMilli() * 1000L;
+                                break;
+                            case HOUR: effectivePushDownTimestamp = Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L)
+                                         .truncatedTo(ChronoUnit.HOURS).toEpochMilli()  * 1000L;
+                                break;
+                            case DAY: effectivePushDownTimestamp = Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L)
+                                        .truncatedTo(ChronoUnit.DAYS).toEpochMilli() * 1000L;
+                                break;
+                            case MONTH: // Month & Year require ZonedDateTime as truncation greater than a DAY is not allowed on Instant
+                                effectivePushDownTimestamp = ZonedDateTime.ofInstant(Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L), ZoneOffset.UTC)
+                                        .with(TemporalAdjusters.firstDayOfMonth()).truncatedTo(ChronoUnit.DAYS).toInstant().toEpochMilli() * 1000L;
+                                break;
+                            case YEAR: // Month & Year require ZonedDateTime as truncation greater than a DAY is not allowed on Instant
+                                effectivePushDownTimestamp = ZonedDateTime.ofInstant(Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L), ZoneOffset.UTC)
+                                         .with(TemporalAdjusters.firstDayOfYear()).truncatedTo(ChronoUnit.DAYS).toInstant().toEpochMilli() * 1000L;
+                                break;
+                            default: allExpressionsConverted = false;
+                                return setEmpty();
+                        }
+                        switch (parent.getOperator().getKind()) {
+                            case GREATER_THAN_OR_EQUAL: //Apply default behavior
+                            case LESS_THAN: //Apply default behavior
+                                return Collections.singletonList(
+                                                Collections.singletonList(
+                                                    new ComparisonPredicate(index,
+                                                        maybeOp.get(),
+                                                        effectivePushDownTimestamp)));
+                            case GREATER_THAN: // columnValue >= (effectivePushDownTimestamp + 1 time interval)
+                                return Collections.singletonList(
+                                    Collections.singletonList(
+                                        new ComparisonPredicate(index,
+                                            KuduPredicate.ComparisonOp.GREATER_EQUAL,
+                                            shiftTimestampByOneInterval(effectivePushDownTimestamp, floorToTimeRange, true))));
+                            case LESS_THAN_OR_EQUAL: // columnValue  < (effectivePushDownTimestamp + 1 time interval)
+                                return Collections.singletonList(
+                                    Collections.singletonList(
+                                        new ComparisonPredicate(index,
+                                            KuduPredicate.ComparisonOp.LESS,
+                                            shiftTimestampByOneInterval(effectivePushDownTimestamp, floorToTimeRange, true))));
+                            case PERIOD_EQUALS:
+                            case EQUALS:
+                                //columnValue >= effectivePushTimestamp && columnValue < (effectivePushDownTimestamp + 1 time interval)
+                                return mergePredicateLists(SqlKind.AND,
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.GREATER_EQUAL,
+                                                        effectivePushDownTimestamp))),
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.LESS,
+                                                        shiftTimestampByOneInterval(effectivePushDownTimestamp, floorToTimeRange, true)))));
+                            case NOT_EQUALS:
+                                //columnValue < effectivePushDownTimestamp || columnValue >= (effectivePushDownValue + 1)
+                                return mergePredicateLists(SqlKind.OR,
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.LESS,
+                                                        effectivePushDownTimestamp))),
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.GREATER_EQUAL,
+                                                        shiftTimestampByOneInterval(effectivePushDownTimestamp, floorToTimeRange, true)))));
+                            default:
+                                allExpressionsConverted = false;
+                                return setEmpty();
+                        }
+                    } else {
+                        final Object effectivePushDownFloorValue;
+                        switch(literal.getType().getSqlTypeName()) {
+                            case FLOAT:
+                                effectivePushDownFloorValue = (float)Math.floor((Float)castLiteral(literal));
+                                break;
+                            case DOUBLE:
+                                effectivePushDownFloorValue = Math.floor((Double)castLiteral(literal));
+                                break;
+                            case DECIMAL:
+                                effectivePushDownFloorValue = ((BigDecimal)castLiteral(literal)).setScale(0, BigDecimal.ROUND_FLOOR);
+                                break;
+                            default:allExpressionsConverted = false;
+                                    return setEmpty();
+                        }
+                        switch (parent.getOperator().getKind()) {
+                            case GREATER_THAN_OR_EQUAL: //Apply default behavior
+                            case LESS_THAN: //Apply default behavior
+                                return Collections.singletonList(
+                                    Collections.singletonList(
+                                        new ComparisonPredicate(index,
+                                                                maybeOp.get(),
+                                                                effectivePushDownFloorValue)));
+                            case GREATER_THAN: // columnValue >= (effectivePushDownValue + 1)
+                                return Collections.singletonList(
+                                    Collections.singletonList(
+                                        new ComparisonPredicate(index,
+                                            KuduPredicate.ComparisonOp.GREATER_EQUAL,
+                                            (literal.getType().getSqlTypeName() == SqlTypeName.FLOAT) ? (Float)effectivePushDownFloorValue + new Float(1.0) :
+                                                (literal.getType().getSqlTypeName() == SqlTypeName.DOUBLE) ? (Double)effectivePushDownFloorValue + new Double(1.0):
+                                                ((BigDecimal)effectivePushDownFloorValue).add(new BigDecimal("1")))));
+                            case LESS_THAN_OR_EQUAL: // columnValue  < (effectivePushDownValue + 1)
+                                return Collections.singletonList(
+                                        Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.LESS,
+                                                        (literal.getType().getSqlTypeName() == SqlTypeName.FLOAT) ? (Float)effectivePushDownFloorValue + new Float(1.0) :
+                                                            (literal.getType().getSqlTypeName() == SqlTypeName.DOUBLE) ? (Double)effectivePushDownFloorValue + new Double(1.0):
+                                                            ((BigDecimal)effectivePushDownFloorValue).add(new BigDecimal("1")))));
+                            case EQUALS:
+                                //columnValue >= effectivePushDownValue && columnValue < (effectivePushDownValue + 1)
+                                return mergePredicateLists(SqlKind.AND,
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.GREATER_EQUAL,
+                                                        effectivePushDownFloorValue))),
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.LESS,
+                                                        (literal.getType().getSqlTypeName() == SqlTypeName.FLOAT) ? (Float)effectivePushDownFloorValue + new Float(1.0) :
+                                                            (literal.getType().getSqlTypeName() == SqlTypeName.DOUBLE) ? (Double)effectivePushDownFloorValue + new Double(1.0):
+                                                                ((BigDecimal)effectivePushDownFloorValue).add(new BigDecimal("1"))))));
+                            case NOT_EQUALS:
+                                //columnValue < effectivePushDownValue || columnValue >= (effectivePushDownValue + 1)
+                                return mergePredicateLists(SqlKind.OR,
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.LESS,
+                                                        effectivePushDownFloorValue))),
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.GREATER_EQUAL,
+                                                        (literal.getType().getSqlTypeName() == SqlTypeName.FLOAT) ? (Float)effectivePushDownFloorValue + new Float(1.0) :
+                                                                (literal.getType().getSqlTypeName() == SqlTypeName.DOUBLE) ? (Double)effectivePushDownFloorValue + new Double(1.0):
+                                                                        ((BigDecimal)effectivePushDownFloorValue).add(new BigDecimal("1"))))));
+                            default:
+                                allExpressionsConverted = false;
+                                return setEmpty();
+                        }
+                    }
+                }
+            }
+            else if (left.getKind() == SqlKind.CEIL) {
+                final RexCall floorCall = (RexCall) left;
+                if (floorCall.operands.get(0).getKind() == SqlKind.INPUT_REF) {
+                    final int index = getColumnIndex(floorCall.operands.get(0));
+                    if (floorCall.operands.size() > 1 && floorCall.operands.get(1).getType().getSqlTypeName() == SqlTypeName.SYMBOL) {
+                        // timezone related ceil filters
+                        final TimeUnitRange floorToTimeRange = ((RexLiteral)floorCall.operands.get(1)).getValueAs(TimeUnitRange.class);
+                        final Long effectivePushDownTimestamp;
+                        switch(floorToTimeRange) {
+                            // TODO - get timezone from DateContext/Framework
+                            case MINUTE: effectivePushDownTimestamp = Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L)
+                                           .plus(1L, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.MINUTES).toEpochMilli() * 1000L;
+                                break;
+                            case HOUR: effectivePushDownTimestamp = Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L)
+                                         .plus(1L, ChronoUnit.HOURS).truncatedTo(ChronoUnit.HOURS).toEpochMilli() * 1000L;
+                                break;
+                            case DAY: effectivePushDownTimestamp = Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L)
+                                        .plus(1L, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS).toEpochMilli() * 1000L;
+                                break;
+                            case MONTH: // Month & Year require ZonedDateTime as truncation greater than a DAY is not allowed on Instant
+                                effectivePushDownTimestamp = ZonedDateTime.ofInstant(Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L), ZoneOffset.UTC)
+                                        .plus(1L, ChronoUnit.MONTHS).with(TemporalAdjusters.firstDayOfMonth()).truncatedTo(ChronoUnit.DAYS).toInstant().toEpochMilli() * 1000L;
+                                break;
+                            case YEAR: // Month & Year require ZonedDateTime as truncation greater than a DAY is not allowed on Instant
+                                effectivePushDownTimestamp = ZonedDateTime.ofInstant(Instant.ofEpochMilli(((Long)castLiteral(literal)) / 1000L), ZoneOffset.UTC)
+                                         .plus(1L, ChronoUnit.YEARS).with(TemporalAdjusters.firstDayOfYear()).truncatedTo(ChronoUnit.DAYS).toInstant().toEpochMilli() * 1000L;
+                                break;
+                            default: allExpressionsConverted = false;
+                                return setEmpty();
+                        }
+                        switch (parent.getOperator().getKind()) {
+                            case GREATER_THAN: // Apply default behavior
+                            case LESS_THAN_OR_EQUAL: // Apply default behavior
+                                return Collections.singletonList(
+                                    Collections.singletonList(
+                                        new ComparisonPredicate(index,
+                                                                maybeOp.get(),
+                                                                effectivePushDownTimestamp)));
+                            case GREATER_THAN_OR_EQUAL: // columnValue > (effectivePushDownTimestamp - 1 time interval)
+                                return Collections.singletonList(
+                                    Collections.singletonList(
+                                        new ComparisonPredicate(index,
+                                            KuduPredicate.ComparisonOp.GREATER,
+                                            shiftTimestampByOneInterval(effectivePushDownTimestamp, floorToTimeRange, false))));
+                            case LESS_THAN: // columnValue <= (effectivePushDownTimestamp - 1 time interval)
+                                return Collections.singletonList(
+                                    Collections.singletonList(
+                                        new ComparisonPredicate(index,
+                                            KuduPredicate.ComparisonOp.LESS_EQUAL,
+                                            shiftTimestampByOneInterval(effectivePushDownTimestamp, floorToTimeRange, false))));
+                            case PERIOD_EQUALS:
+                            case EQUALS:
+                                //columnValue > (effectivePushDownTimestamp - 1 time interval) && columnValue <= (effectivePushDownTimestamp)
+                                return mergePredicateLists(SqlKind.AND,
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.GREATER,
+                                                        shiftTimestampByOneInterval(effectivePushDownTimestamp, floorToTimeRange, false)))),
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.LESS_EQUAL,
+                                                        effectivePushDownTimestamp))));
+                            case NOT_EQUALS:
+                                //columnValue <= (effectivePushDownTimestamp - 1) || columnValue > effectivePushDownTimestamp
+                                return mergePredicateLists(SqlKind.OR,
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.LESS_EQUAL,
+                                                        shiftTimestampByOneInterval(effectivePushDownTimestamp, floorToTimeRange, false)))),
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.GREATER,
+                                                        effectivePushDownTimestamp))));
+                            default:
+                                allExpressionsConverted = false;
+                                return setEmpty();
+                        }
+                    } else {
+                        final Object effectivePushDownCeilValue;
+                        switch(literal.getType().getSqlTypeName()) {
+                            case FLOAT:
+                                effectivePushDownCeilValue = (float)Math.ceil((Float)castLiteral(literal));
+                                break;
+                            case DOUBLE:
+                                effectivePushDownCeilValue = Math.ceil((Double)castLiteral(literal));
+                                break;
+                            case DECIMAL:
+                                effectivePushDownCeilValue = ((BigDecimal)castLiteral(literal)).setScale(0, BigDecimal.ROUND_CEILING);
+                                break;
+                            default:allExpressionsConverted = false;
+                                return setEmpty();
+                        }
+                        switch (parent.getOperator().getKind()) {
+                            case GREATER_THAN: // Apply default behavior
+                            case LESS_THAN_OR_EQUAL: //Apply default behavior
+                                return Collections.singletonList(
+                                    Collections.singletonList(
+                                        new ComparisonPredicate(index,
+                                            maybeOp.get(),
+                                            effectivePushDownCeilValue)));
+                            case GREATER_THAN_OR_EQUAL: // columnValue > (effectivePushDownValue - 1 time interval)
+                                return Collections.singletonList(Collections.singletonList(
+                                    new ComparisonPredicate(index,
+                                        KuduPredicate.ComparisonOp.GREATER,
+                                        (literal.getType().getSqlTypeName() == SqlTypeName.FLOAT) ? (Float)effectivePushDownCeilValue - new Float(1.0) :
+                                            (literal.getType().getSqlTypeName() == SqlTypeName.DOUBLE) ? (Double)effectivePushDownCeilValue - new Double(1.0):
+                                            ((BigDecimal)effectivePushDownCeilValue).subtract(new BigDecimal("1")))));
+                            case LESS_THAN: // columnValue <= (effectivePushDownValue - 1 time interval)
+                                return Collections.singletonList(Collections.singletonList(
+                                    new ComparisonPredicate(index,
+                                        KuduPredicate.ComparisonOp.LESS_EQUAL,
+                                        (literal.getType().getSqlTypeName() == SqlTypeName.FLOAT) ? (Float)effectivePushDownCeilValue - new Float(1.0) :
+                                            (literal.getType().getSqlTypeName() == SqlTypeName.DOUBLE) ? (Double)effectivePushDownCeilValue - new Double(1.0):
+                                            ((BigDecimal)effectivePushDownCeilValue).subtract(new BigDecimal("1")))));
+                            case EQUALS:
+                                //columnValue > (effectivePushDownValue - 1) && columnValue <= (effectivePushDownValue)
+                                return mergePredicateLists(SqlKind.AND,
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.GREATER,
+                                                        (literal.getType().getSqlTypeName() == SqlTypeName.FLOAT) ? (Float)effectivePushDownCeilValue - new Float(1.0) :
+                                                                (literal.getType().getSqlTypeName() == SqlTypeName.DOUBLE) ? (Double)effectivePushDownCeilValue - new Double(1.0):
+                                                                ((BigDecimal)effectivePushDownCeilValue).subtract(new BigDecimal("1"))))),
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.LESS_EQUAL,
+                                                        effectivePushDownCeilValue))));
+                            case NOT_EQUALS:
+                                //columnValue <= (effectivePushDownValue - 1) || columnValue > effectivePushDownValue
+                                return mergePredicateLists(SqlKind.OR,
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.LESS_EQUAL,
+                                                        (literal.getType().getSqlTypeName() == SqlTypeName.FLOAT) ? (Float)effectivePushDownCeilValue - new Float(1.0) :
+                                                                (literal.getType().getSqlTypeName() == SqlTypeName.DOUBLE) ? (Double)effectivePushDownCeilValue - new Double(1.0):
+                                                                        ((BigDecimal)effectivePushDownCeilValue).subtract(new BigDecimal("1"))))),
+                                        Collections.singletonList(Collections.singletonList(
+                                                new ComparisonPredicate(index,
+                                                        KuduPredicate.ComparisonOp.GREATER,
+                                                        effectivePushDownCeilValue))));
+                            default:
+                                allExpressionsConverted = false;
+                                return setEmpty();
+                        }
+                    }
                 }
             }
         }
