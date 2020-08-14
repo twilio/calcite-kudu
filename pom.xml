@@ -6,7 +6,7 @@
     <parent>
         <artifactId>data-engine-service</artifactId>
         <groupId>com.twilio.raas</groupId>
-        <version>3.15.53</version>
+        <version>3.15.54</version>
     </parent>
 
     <artifactId>data-engine-sql</artifactId>
