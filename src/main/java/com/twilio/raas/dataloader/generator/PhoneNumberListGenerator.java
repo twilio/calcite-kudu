@@ -5,12 +5,19 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.IntStream;
 
-public class PhoneNumberListGenerator extends ColumnValueGenerator<String> {
+public class PhoneNumberListGenerator extends SingleColumnValueGenerator<String> {
 
   private final Random random = new Random();
 
   public int numValues;
   private List<String> values = new ArrayList<>();
+
+  private PhoneNumberListGenerator(){
+  }
+
+  public PhoneNumberListGenerator(final int numValues) {
+    this.numValues = numValues;
+  }
 
   private String generatePhoneNumber() {
     int leftLimit = 48; // 0
@@ -23,13 +30,6 @@ public class PhoneNumberListGenerator extends ColumnValueGenerator<String> {
     return "+1" + phoneNumber;
   }
 
-  private PhoneNumberListGenerator(){
-  }
-
-  public PhoneNumberListGenerator(final int numValues) {
-    this.numValues = numValues;
-  }
-
   @Override
   public synchronized String getColumnValue() {
     if (values.isEmpty()) {
@@ -38,4 +38,5 @@ public class PhoneNumberListGenerator extends ColumnValueGenerator<String> {
     }
     return values.get(random.nextInt(values.size()));
   }
+
 }

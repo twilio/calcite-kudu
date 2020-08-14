@@ -1,6 +1,6 @@
 package com.twilio.raas.dataloader.generator;
 
-public class ConstantValueGenerator<T> extends ColumnValueGenerator {
+public class ConstantValueGenerator<T> extends SingleColumnValueGenerator {
 
   private T columnValue;
 

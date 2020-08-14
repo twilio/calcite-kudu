@@ -2,7 +2,7 @@ package com.twilio.raas.dataloader.generator;
 
 import java.util.Random;
 
-public class UniformIntegerValueGenerator extends ColumnValueGenerator<Integer> {
+public class UniformIntegerValueGenerator extends SingleColumnValueGenerator<Integer> {
 
   private final Random random = new Random();
   public int minValue;

@@ -1,10 +1,7 @@
 package org.apache.calcite.jdbc;
 
-import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.avatica.AvaticaConnection;
 import org.apache.calcite.avatica.Meta;
-
-import java.util.Properties;
 
 /**
  * Customized driver so that we can use our own meta implementation

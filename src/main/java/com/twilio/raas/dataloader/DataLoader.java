@@ -1,6 +1,7 @@
 package com.twilio.raas.dataloader;
 
 import com.twilio.raas.dataloader.generator.ColumnValueGenerator;
+import com.twilio.raas.dataloader.generator.MultipleColumnValueGenerator;
 import com.twilio.raas.dataloader.generator.UniformLongValueGenerator;
 import com.twilio.raas.sql.CalciteModifiableKuduTable;
 import com.twilio.raas.sql.schema.KuduSchemaFactory;
@@ -19,6 +20,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
@@ -48,7 +50,7 @@ public class DataLoader {
   }
 
   public DataLoader(final String url, final Scenario scenario, Integer threadPoolSize) throws SQLException {
-    // load all the CacliteKuduTables
+    // load all the CalciteKuduTables
     DriverManager.getConnection(url);
     this.scenario = scenario;
     this.calciteKuduTable =
@@ -61,11 +63,14 @@ public class DataLoader {
       calciteKuduTable.getKuduTable().getSchema().getColumnByIndex(1).getName();
     UniformLongValueGenerator timestampGenerator =
       (UniformLongValueGenerator) scenario.getColumnNameToValueGenerator().get(timestampColumnName);
+    // initialize minValue and maxValue if the generator is a TimestampGenerator
+    timestampGenerator.getColumnValue();
     this.scenarioStartTimestamp = timestampGenerator.minValue;
     this.scenarioEndTimestamp = timestampGenerator.maxValue;
     // pick the first cube to determine the FLOOR mod value
     // TODO figure out how to handle a mix of different cube time rollup granularities
-    this.cubeGranularityFloorMod =
+    this.cubeGranularityFloorMod = calciteKuduTable.getCubeTables().isEmpty() ?
+      DateTimeUtils.MILLIS_PER_SECOND :
       ((CalciteModifiableKuduTable) calciteKuduTable.getCubeTables().get(0)).getCubeMaintainer().getFloorMod();
     int numTasks =
       (int) Math.ceil((float) (scenarioEndTimestamp - scenarioStartTimestamp) / cubeGranularityFloorMod);
@@ -111,8 +116,13 @@ public class DataLoader {
     return builder.toString();
   }
 
-  private ColumnValueGenerator<?> getColumnValueGenerator(String columnName) {
+  private ColumnValueGenerator getColumnValueGenerator(String columnName) {
     if (!scenario.getColumnNameToValueGenerator().containsKey(columnName)) {
+      for (MultipleColumnValueGenerator generator : scenario.getMultipleColumnValueGenerators()) {
+        if (generator.getColumnNames().contains(columnName)) {
+          return generator;
+        }
+      }
       throw new IllegalStateException("No generator found for column " + columnName);
     }
     return scenario.getColumnNameToValueGenerator().get(columnName);
@@ -120,13 +130,19 @@ public class DataLoader {
 
   private void bindValues(PreparedStatement statement,
                           UniformLongValueGenerator timestampGenerator) throws SQLException {
+    if (scenario.getMultipleColumnValueGenerators()!=null) {
+      for (MultipleColumnValueGenerator generator : scenario.getMultipleColumnValueGenerators()) {
+        generator.reset();
+      }
+    }
     int count = 1;
     for (ColumnSchema columnSchema : calciteKuduTable.getKuduTable().getSchema().getColumns()) {
       final Object value;
+      String columnName = columnSchema.getName();
       switch (columnSchema.getType()) {
         case INT8:
           Byte byteValue;
-          value = getColumnValueGenerator(columnSchema.getName()).getColumnValue();
+          value = getColumnValueGenerator(columnName).getColumnValue(columnName);
           if (value instanceof Byte) {
             byteValue = (Byte) value;
           }
@@ -141,7 +157,7 @@ public class DataLoader {
           break;
         case INT16:
           Short shortValue;
-          value = getColumnValueGenerator(columnSchema.getName()).getColumnValue();
+          value = getColumnValueGenerator(columnName).getColumnValue(columnName);
           if (value instanceof Short) {
             shortValue = (Short) value;
           }
@@ -155,8 +171,7 @@ public class DataLoader {
           }
           break;
         case INT32:
-          Integer intValue =
-            ((ColumnValueGenerator<Integer>) getColumnValueGenerator(columnSchema.getName())).getColumnValue();
+          Integer intValue = (Integer) getColumnValueGenerator(columnName).getColumnValue(columnName);
           if (intValue == null) {
             statement.setNull(count, Types.INTEGER);
           } else {
@@ -171,8 +186,7 @@ public class DataLoader {
             timestampValue = timestampGenerator.getColumnValue();
           }
           else {
-            timestampValue =
-              ((ColumnValueGenerator<Long>) getColumnValueGenerator(columnSchema.getName())).getColumnValue();
+            timestampValue = (Long) getColumnValueGenerator(columnName).getColumnValue(columnName);
           }
           if (timestampValue == null) {
             statement.setNull(count, Types.BIGINT);
@@ -181,8 +195,7 @@ public class DataLoader {
           }
           break;
         case INT64:
-          Long longValue =
-            ((ColumnValueGenerator<Long>) getColumnValueGenerator(columnSchema.getName())).getColumnValue();
+          Long longValue = (Long) getColumnValueGenerator(columnName).getColumnValue(columnName);
           if (longValue == null) {
             statement.setNull(count, Types.BIGINT);
           } else {
@@ -190,26 +203,23 @@ public class DataLoader {
           }
           break;
         case STRING:
-          String stringValue =
-            ((ColumnValueGenerator<String>) getColumnValueGenerator(columnSchema.getName())).getColumnValue();
-          if (stringValue == null || stringValue.equals("")) {
+          String stringValue = (String) getColumnValueGenerator(columnName).getColumnValue(columnName);
+          if (stringValue == null) {
             statement.setNull(count, Types.VARCHAR);
           } else {
             statement.setString(count, stringValue);
           }
           break;
         case BOOL:
-          Boolean booleanValue =
-            ((ColumnValueGenerator<Boolean>) getColumnValueGenerator(columnSchema.getName())).getColumnValue();
-          if (booleanValue == null || booleanValue.equals("")) {
+          Boolean booleanValue = (Boolean) getColumnValueGenerator(columnName).getColumnValue(columnName);
+          if (booleanValue == null) {
             statement.setNull(count, Types.VARCHAR);
           } else {
             statement.setBoolean(count, booleanValue);
           }
           break;
         case FLOAT:
-          Float floatValue =
-            ((ColumnValueGenerator<Float>) getColumnValueGenerator(columnSchema.getName())).getColumnValue();
+          Float floatValue = (Float) getColumnValueGenerator(columnName).getColumnValue(columnName);
           if (floatValue == null) {
             statement.setNull(count, Types.FLOAT);
           } else {
@@ -217,8 +227,7 @@ public class DataLoader {
           }
           break;
         case DOUBLE:
-          Double doubleVal =
-            ((ColumnValueGenerator<Double>) getColumnValueGenerator(columnSchema.getName())).getColumnValue();
+          Double doubleVal = (Double) getColumnValueGenerator(columnName).getColumnValue(columnName);
           if (doubleVal == null) {
             statement.setNull(count, Types.DOUBLE);
           } else {
@@ -226,8 +235,7 @@ public class DataLoader {
           }
           break;
         case DECIMAL:
-          BigDecimal decimalVal =
-            ((ColumnValueGenerator<BigDecimal>)  getColumnValueGenerator(columnSchema.getName())).getColumnValue();
+          BigDecimal decimalVal = (BigDecimal) getColumnValueGenerator(columnName).getColumnValue(columnName);
           if (decimalVal == null) {
             statement.setNull(count, Types.DOUBLE);
           } else {
@@ -241,13 +249,14 @@ public class DataLoader {
     }
   }
 
-  public void loadData() {
+  public void loadData(final Optional<Integer> numRowsOverrideOption) {
     long startTime = System.currentTimeMillis();
 
     long startTimestamp;
     long endTimestamp = scenarioStartTimestamp;
     long delta = (scenarioEndTimestamp - scenarioStartTimestamp)/threadPoolSize;
     List<CalciteKuduTable> cubeTables = calciteKuduTable.getCubeTables();
+    int numRows = numRowsOverrideOption.orElseGet(scenario::getNumRows);
     for (int t = 0; t < threadPoolSize; ++t) {
       long floorMod = cubeTables.isEmpty() ? DateTimeUtils.MILLIS_PER_SECOND : cubeGranularityFloorMod;
       // for each thread the start time stamp is the previous threads end timestamp (other than
@@ -266,10 +275,10 @@ public class DataLoader {
       Callable<Void> callableObj = () -> {
         logger.info("startTimestamp {}", new Date(finalStartTimestamp));
         logger.info("endTimestamp {}", new Date(finalEndTimestamp));
-        int numRowsWrittenPerThread = scenario.getNumRows() / threadPoolSize;
+        int numRowsWrittenPerThread = numRows / threadPoolSize;
         if (lastThread) {
           // let the last thread write any remaining rows
-          numRowsWrittenPerThread += scenario.getNumRows() % threadPoolSize;
+          numRowsWrittenPerThread += numRows % threadPoolSize;
         }
         long threadStartTime = System.currentTimeMillis();
         // create a timestamp column value generator that generates timestamps for this subset
@@ -309,7 +318,7 @@ public class DataLoader {
         logger.error("Got an exception while writing", e);
       }
     }
-    logger.info("Total number of rows committed {} time taken {} ", scenario.getNumRows(),
+    logger.info("Total number of rows committed {} time taken {} ", numRows,
       (System.currentTimeMillis() - startTime));
     threadPool.shutdown();
   }

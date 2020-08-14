@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.IntStream;
 
-public class SidListGenerator extends ColumnValueGenerator<String> {
+public class SidListGenerator extends SingleColumnValueGenerator<String> {
 
   private final Random rand = new Random();
   private final List<String> values = new ArrayList<>();

@@ -3,7 +3,7 @@ package com.twilio.raas.dataloader.generator;
 import java.util.List;
 import java.util.Random;
 
-public class ValueListGenerator extends ColumnValueGenerator<String> {
+public class ValueListGenerator extends SingleColumnValueGenerator<String> {
 
   private final Random rand = new Random();
   public List<String> values;

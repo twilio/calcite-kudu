@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -207,7 +208,7 @@ public class ScenarioIT {
       testHarness.getMasterAddressesAsString());
 
     // load data
-    new DataLoader(url, scenario).loadData();
+    new DataLoader(url, scenario).loadData(Optional.empty());
     // verify data was written
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs =
@@ -226,7 +227,7 @@ public class ScenarioIT {
       testHarness.getMasterAddressesAsString());
 
     // load data
-    new DataLoader(url, scenario).loadData();
+    new DataLoader(url, scenario).loadData(Optional.empty());
     // verify data was written
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs =

@@ -3,7 +3,7 @@ package com.twilio.raas.dataloader.generator;
 import java.math.BigDecimal;
 import java.util.Random;
 
-public class UniformBigDecimalValueGenerator extends ColumnValueGenerator<BigDecimal> {
+public class UniformBigDecimalValueGenerator extends SingleColumnValueGenerator<BigDecimal> {
 
   public double maxValue;
   private final Random random = new Random();

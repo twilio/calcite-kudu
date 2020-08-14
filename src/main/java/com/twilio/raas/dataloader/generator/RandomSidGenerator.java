@@ -1,6 +1,6 @@
 package com.twilio.raas.dataloader.generator;
 
-public class RandomSidGenerator extends ColumnValueGenerator<String> {
+public class RandomSidGenerator extends SingleColumnValueGenerator<String> {
 
   public String sidPrefix;
 
