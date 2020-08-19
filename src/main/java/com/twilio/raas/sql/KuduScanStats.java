@@ -1,5 +1,6 @@
 package com.twilio.raas.sql;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -21,9 +22,9 @@ public final class KuduScanStats {
 
   private final long startTime;
 
-  private long scannerCount;
+  private long scannerCount = 0L;
 
-  private List<ScannerMetrics> scannerMetricsList;
+  private List<ScannerMetrics> scannerMetricsList = Collections.emptyList();
 
   public KuduScanStats() {
     this.startTime = System.currentTimeMillis();
