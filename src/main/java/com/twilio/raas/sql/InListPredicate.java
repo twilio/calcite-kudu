@@ -208,4 +208,9 @@ public final class InListPredicate extends CalciteKuduPredicate {
             return false;
         return true;
     }
+
+    @Override
+    public String toString() {
+        return "InListPredicate [columnIdx=" + columnIdx + ", values=" + values + "]";
+    }
 }

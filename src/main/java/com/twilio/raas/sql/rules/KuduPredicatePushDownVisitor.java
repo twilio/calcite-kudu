@@ -11,7 +11,6 @@ import java.util.List;
 
 import com.twilio.raas.sql.CalciteKuduPredicate;
 import com.twilio.raas.sql.ComparisonPredicate;
-import com.twilio.raas.sql.InListPredicate;
 import com.twilio.raas.sql.NullPredicate;
 
 import org.apache.calcite.avatica.util.TimeUnitRange;
@@ -31,7 +30,6 @@ import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexDynamicParam;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import org.apache.calcite.rex.RexNode;
 import java.math.BigDecimal;
@@ -170,31 +168,6 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
                                    .singletonList(new ComparisonPredicate(falseColumn.getIndex(),
                                            KuduPredicate.ComparisonOp.EQUAL, Boolean.FALSE)));
             }
-        case IN:
-          if (call.operands.get(0) instanceof RexInputRef) {
-            if (call.operands.get(1) instanceof RexCall) {
-              final RexCall right = (RexCall) call.operands.get(1);
-              if (right.getKind() == SqlKind.ARRAY_VALUE_CONSTRUCTOR) {
-                final boolean nonLiteral = right.getOperands()
-                  .stream()
-                  .filter(rexNode -> ! rexNode.isA(SqlKind.LITERAL))
-                  .findAny()
-                  .isPresent();
-
-                // inPredicate only handles literals, it doesn't handle scans
-                if (!nonLiteral) {
-                  final List<Object> castedLiterals = right.getOperands().stream()
-                    .map(l -> castLiteral((RexLiteral) l))
-                    .collect(Collectors.toList());
-                  final RexInputRef idx = (RexInputRef) call.operands.get(0);
-                  return Collections.singletonList(
-                      Collections.singletonList(
-                          new InListPredicate(
-                              idx.getIndex(), castedLiterals)));
-                }
-              }
-            }
-          }
         }
         return setEmpty();
     }

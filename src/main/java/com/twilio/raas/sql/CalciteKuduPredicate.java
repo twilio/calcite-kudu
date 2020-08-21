@@ -33,6 +33,13 @@ public abstract class CalciteKuduPredicate {
     public abstract String explainPredicate(final ColumnSchema columnSchema);
 
     /**
+     * Returns true or false if this can be considered for in list optimization.
+     */
+    public boolean inListOptimizationAllowed(final int columnIdx) {
+        return false;
+    }
+
+    /**
      * Transforms this POJO into a proper {@link KuduPredicate}
      *
      * @param calciteKuduTable table to use to generate predicate

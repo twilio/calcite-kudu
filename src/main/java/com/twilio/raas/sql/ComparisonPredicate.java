@@ -29,6 +29,11 @@ public final class ComparisonPredicate extends CalciteKuduPredicate {
   }
 
   @Override
+  public boolean inListOptimizationAllowed(final int columnIdx) {
+    return columnIdx == this.columnIdx && operation == KuduPredicate.ComparisonOp.EQUAL;
+  }
+
+  @Override
   public String explainPredicate(final ColumnSchema schema) {
     return String.format("%s %s %s", schema.getName(), operation.name(), rightHandValue);
   }
@@ -131,5 +136,11 @@ public final class ComparisonPredicate extends CalciteKuduPredicate {
     } else if (!rightHandValue.equals(other.rightHandValue))
       return false;
     return true;
+  }
+
+  @Override
+  public String toString() {
+    return "ComparisonPredicate [columnIdx=" + columnIdx + ", operation=" + operation +
+      ", rightHandValue=" + rightHandValue + "]";
   }
 }

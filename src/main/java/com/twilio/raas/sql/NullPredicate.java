@@ -73,4 +73,9 @@ public final class NullPredicate extends CalciteKuduPredicate {
       return false;
     return true;
   }
+
+  @Override
+  public String toString() {
+      return "NullPredicate [columnIdx=" + columnIdx + ", not=" + not + "]";
+  }
 }
