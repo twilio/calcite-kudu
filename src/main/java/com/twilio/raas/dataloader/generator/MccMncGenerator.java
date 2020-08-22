@@ -7,8 +7,8 @@ import java.util.Random;
 public class MccMncGenerator implements MultipleColumnValueGenerator {
 
   private final List<String> columnNames = Arrays.asList("mcc", "mnc");
-  private final List<String> mccList = Arrays.asList("310", "310", "262", "-1");
-  private final List<String> mncList = Arrays.asList("004", "016", "01", "-1");
+  private final List<String> mccList = Arrays.asList("310", "310", "262");
+  private final List<String> mncList = Arrays.asList("004", "016", "01");
 
   private int index;
   private final Random rand = new Random();
