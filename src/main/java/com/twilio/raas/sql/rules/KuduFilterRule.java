@@ -128,8 +128,9 @@ public class KuduFilterRule extends RelOptRule {
         for (Map.Entry<Integer, HashSet<Object>> idxListPair : inPredicates.entrySet()) {
             // If there is only one value, use EQUAL instead of IN LIST.
             if (idxListPair.getValue().size() == 1) {
-                inListScan.add(new ComparisonPredicate(0, KuduPredicate.ComparisonOp.EQUAL,
-                        idxListPair.getValue().iterator().next()));
+                inListScan.add(new ComparisonPredicate(idxListPair.getKey(),
+                                                       KuduPredicate.ComparisonOp.EQUAL,
+                                                       idxListPair.getValue().iterator().next()));
             } else {
                 inListCount++;
                 inListScan.add(new InListPredicate(idxListPair.getKey(),
