@@ -75,7 +75,9 @@ public class KuduFilterRule extends RelOptRule {
         return allFields.stream()
                 .filter(i -> scans.stream().allMatch(
                         subScan -> subScan.stream().filter(p -> p.inListOptimizationAllowed(i))
-                        .findAny().isPresent()))
+                        // Each scan must have this predicate exactly once.
+                        // https://twilioincidents.appspot.com/incident/4859603272597504/view
+                        .count() == 1L))
                 .collect(Collectors.toSet());
     }
 
@@ -145,10 +147,13 @@ public class KuduFilterRule extends RelOptRule {
 
         if (updatedPredicates.isEmpty()) {
             return Collections.singletonList(inListScan);
-        } else {
-            // Similar to {@link KuduPredicatePushDownVisitor#mergePredicateLists(AND, left, right)}
+        } else if (updatedPredicates.size() == 1) {
+          // Similar to {@link KuduPredicatePushDownVisitor#mergePredicateLists(AND, left, right)}
             updatedPredicates.stream().forEach(scan -> scan.addAll(inListScan));
             return new ArrayList<>(updatedPredicates);
+        } else {
+          return original;
         }
+
     }
 }
