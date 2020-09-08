@@ -204,7 +204,7 @@ public class ScenarioIT {
   public void testOutboundMessages() throws IOException, SQLException {
     Scenario scenario = Scenario.loadScenario(this.getClass().getResource("/scenarios/ReportCenter" +
       ".OutboundMessages.json"));
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
       testHarness.getMasterAddressesAsString());
 
     // load data
@@ -223,7 +223,7 @@ public class ScenarioIT {
   public void testUsageReportTransactions() throws IOException, SQLException {
     Scenario scenario = Scenario.loadScenario(this.getClass().getResource("/scenarios/ReportCenter" +
       ".UsageReportTransactions.json"));
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
       testHarness.getMasterAddressesAsString());
 
     // load data

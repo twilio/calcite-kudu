@@ -121,7 +121,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testQueryWithSortDesc() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
       testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs = conn.createStatement().executeQuery("SELECT account_sid, event_date, sid " +
@@ -146,7 +146,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testQueryWithSortAsc() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
       testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs = conn.createStatement().executeQuery("SELECT account_sid, event_date, sid " +
@@ -171,7 +171,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testQueryWithPredicates() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
       testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs = conn.createStatement().executeQuery("SELECT account_sid, event_date, sid " +
@@ -189,7 +189,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testQueryWithPredicatesAndSortAsc() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
       testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs = conn.createStatement().executeQuery("SELECT account_sid, event_date, sid " +
@@ -210,7 +210,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testQueryWithPredicatesAndSortDesc() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
       testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       ResultSet rs = conn.createStatement().executeQuery("SELECT account_sid, event_date, sid " +
@@ -229,7 +229,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testSortWithFilter() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       String firstBatchSqlFormat = "SELECT * FROM kudu.\"ReportCenter" +
           ".AuditEvents\" "
@@ -259,7 +259,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testSortWithFilterAndColumns() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       String firstBatchSqlFormat = "SELECT sid, account_sid, event_date FROM kudu.\"ReportCenter" +
           ".AuditEvents\" "
@@ -291,7 +291,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testAscendingSortOnDescendingFieldWithFilter() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       String firstBatchSqlFormat = "SELECT * FROM kudu.\"ReportCenter" +
           ".AuditEvents\" "
@@ -321,7 +321,7 @@ public final class DescendingSortedOnDatetimeIT {
 
     @Test
     public void testQueryNoRows() throws Exception {
-        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sql = "SELECT * FROM kudu.\"ReportCenter.AuditEvents\" "
                 + "WHERE event_date < TIMESTAMP'2018-01-01 00:00:00'";
@@ -342,7 +342,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testSortWithFilterAndLimit() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       String firstBatchSqlFormat = "SELECT * FROM kudu.\"ReportCenter" +
           ".AuditEvents\" "
@@ -370,7 +370,7 @@ public final class DescendingSortedOnDatetimeIT {
 
   @Test
   public void testSortOnNonPkFieldWithFilter() throws Exception {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
       String firstBatchSqlFormat = "SELECT * FROM kudu.\"ReportCenter" +
           ".AuditEvents\" "

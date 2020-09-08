@@ -20,15 +20,15 @@ import java.util.TimeZone;
  * Factory that uses {@link CalciteJdbc41Factory} as a delegate so that we can create our own
  * {@link KuduCalciteConnectionImpl} that exposes {@link KuduMetaImpl}
  */
-public class KuduCalciteJdbc41Factory extends CalciteFactory {
+public class KuduCalciteFactory extends CalciteFactory {
 
   private final CalciteJdbc41Factory delegate;
 
-  public KuduCalciteJdbc41Factory() {
+  public KuduCalciteFactory() {
     this(4, 1);
   }
 
-  public KuduCalciteJdbc41Factory(int major, int minor) {
+  public KuduCalciteFactory(int major, int minor) {
     super(major, minor);
     delegate = new CalciteJdbc41Factory(major, minor);
   }

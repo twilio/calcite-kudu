@@ -110,7 +110,7 @@ public final class JDBCQueryIT {
 
     @Test
     public void testQuery() throws Exception {
-      String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED,
+      String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
         testHarness.getMasterAddressesAsString());
       try (Connection conn = DriverManager.getConnection(url)) {
         ResultSet rs = conn.createStatement().executeQuery("SELECT account_sid, sid FROM kudu" +
@@ -130,7 +130,7 @@ public final class JDBCQueryIT {
 
     @Test
     public void testProjectionWithFilter() throws Exception {
-        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sqlFormat = "SELECT sid FROM kudu.\"ReportCenter.DeliveredMessages\" WHERE " +
                     "account_sid = '%s'";
@@ -157,7 +157,7 @@ public final class JDBCQueryIT {
 
     @Test
     public void testProjectionWithFunctions() throws Exception {
-        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sqlFormat = "SELECT mcc||mnc, mcc, mnc, mnc||mcc FROM kudu.\"ReportCenter" +
                     ".DeliveredMessages\" WHERE account_sid = '%s'";
@@ -197,7 +197,7 @@ public final class JDBCQueryIT {
 
     @Test
     public void testProjectionWithCountStar() throws Exception {
-        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
             String sqlFormat = "SELECT count(*) FROM kudu.\"ReportCenter.DeliveredMessages\" WHERE account_sid = '%s'";
             String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
@@ -220,7 +220,7 @@ public final class JDBCQueryIT {
 
     @Test
     public void testSortByPrimaryKey() throws Exception {
-        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
 
             String sqlFormat = "SELECT sid FROM kudu.\"ReportCenter.DeliveredMessages\" " +
@@ -259,7 +259,7 @@ public final class JDBCQueryIT {
   }
 
   private void helpTestSortedAggregation(boolean limit) throws SQLException {
-    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
         String sqlFormat = "SELECT account_sid, date_created , count(*) FROM kudu" +
                 ".\"ReportCenter.DeliveredMessages\" " +
@@ -299,7 +299,7 @@ public final class JDBCQueryIT {
 
   @Test
     public void testSortOnSubsetOfGroupByColumns() throws Exception {
-        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_INSERT_ENABLED, testHarness.getMasterAddressesAsString());
+        String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, testHarness.getMasterAddressesAsString());
         try (Connection conn = DriverManager.getConnection(url)) {
 
             String sqlFormat = "SELECT account_sid, error_code , count(*) FROM kudu" +

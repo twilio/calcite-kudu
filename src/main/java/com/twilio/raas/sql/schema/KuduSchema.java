@@ -23,9 +23,9 @@ import java.util.stream.Collectors;
 
 public final class KuduSchema extends AbstractSchema {
 
-    private static final Logger logger = LoggerFactory.getLogger(KuduSchema.class);
+  private static final Logger logger = LoggerFactory.getLogger(KuduSchema.class);
 
-    private final AsyncKuduClient client;
+  private final AsyncKuduClient client;
     private final Map<String, KuduTableMetadata> kuduTableMetadataMap;
     private Optional<Map<String, Table>> cachedTableMap = Optional.empty();
 
@@ -39,6 +39,10 @@ public final class KuduSchema extends AbstractSchema {
         // We disable inserts by default as this feaure is meant for testing purposes
         this.enableInserts = ( enableInsertsString!=null) ? Boolean.valueOf(enableInsertsString)
           : false;
+    }
+
+    public void clearCachedTableMap() {
+      cachedTableMap = Optional.empty();
     }
 
     @Override
@@ -163,6 +167,10 @@ public final class KuduSchema extends AbstractSchema {
       if (timestampColumnName!=null) {
         builder.setTimestampColumnIndex(kuduTable.getSchema().getColumnIndex(timestampColumnName));
       }
+  }
+
+  public AsyncKuduClient getClient() {
+    return client;
   }
 
 }
