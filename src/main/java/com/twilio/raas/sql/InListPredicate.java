@@ -55,9 +55,9 @@ public final class InListPredicate extends CalciteKuduPredicate {
             .stream()
             .map(o -> {
                   if (invertValue) {
-                    return 1L * Byte.MAX_VALUE - (Byte) o;
+                    return (byte) (-1 - ((Number) o).byteValue());
                   }
-                  return (Byte) o;
+                  return ((Number) o).byteValue();
                 })
             .collect(Collectors.toList());
           return KuduPredicate.newInListPredicate(columnSchema, byteValues);
@@ -67,7 +67,7 @@ public final class InListPredicate extends CalciteKuduPredicate {
               .stream()
             .map(o -> {
                   if (invertValue) {
-                    return 1L * Short.MAX_VALUE - ((Number) o).shortValue();
+                    return (short) (-1 - ((Number) o).shortValue());
                   }
                   return ((Number) o).shortValue();
                 })
@@ -79,7 +79,7 @@ public final class InListPredicate extends CalciteKuduPredicate {
               .stream()
             .map(o -> {
                   if (invertValue) {
-                    return 1L * Integer.MAX_VALUE - ((Number) o).intValue();
+                    return (int) (-1 - ((Number) o).intValue());
                   }
                   return ((Number) o).intValue();
                 })
@@ -134,7 +134,7 @@ public final class InListPredicate extends CalciteKuduPredicate {
               .map(o -> {
                     final Long value = ((Number) o).longValue();
                     if (invertValue) {
-                      return Long.MAX_VALUE - value;
+                      return -1L - value;
                     }
                     else {
                       return value;
@@ -146,7 +146,7 @@ public final class InListPredicate extends CalciteKuduPredicate {
       case FLOAT:
           final List<Float> floatValues = this.values
               .stream()
-              .map(o -> (Float) o)
+              .map(o -> ((Number) o).floatValue())
               .collect(Collectors.toList());
 
           return KuduPredicate
@@ -155,7 +155,7 @@ public final class InListPredicate extends CalciteKuduPredicate {
       case DOUBLE:
           final List<Double> doubleValues  = this.values
               .stream()
-              .map(o -> (Double) o)
+              .map(o ->  ((Number) o).doubleValue())
               .collect(Collectors.toList());
           return KuduPredicate
               .newInListPredicate(columnSchema, doubleValues);
