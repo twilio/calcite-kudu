@@ -98,11 +98,11 @@ public class TranslationPredicate {
                         final int rightIndex;
 
                         if (rightSideProjection != null &&
-                            rightSideProjection.getChildExps()
+                            rightSideProjection.getProjects()
                             .get(rightPositionInEnumerable)
                             instanceof RexInputRef) {
                             rightIndex = ((RexInputRef)rightSideProjection
-                                .getChildExps()
+                                .getProjects()
                                 .get(rightPositionInEnumerable))
                                 .getIndex();
                         }

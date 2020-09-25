@@ -8,8 +8,7 @@ import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableScan;
-import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
-import org.apache.calcite.rel.rules.ReduceExpressionsRule;
+import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataType;
 
 import java.util.List;
@@ -57,15 +56,16 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     @Override
     public void register(RelOptPlanner planner) {
         // since kudu is a columnar store we never want to push an aggregate past a project
-        planner.removeRule(AggregateProjectMergeRule.INSTANCE);
+        planner.removeRule(CoreRules.AGGREGATE_PROJECT_MERGE);
         // see WirelessUsageIt.testPaginationOverFactAggregation for why this rule is removed
         // disable ReduceExpressionsRule until RC-1274 is implemented
-        planner.removeRule(ReduceExpressionsRule.FILTER_INSTANCE);
+        planner.removeRule(CoreRules.FILTER_REDUCE_EXPRESSIONS);
 
         // Join Commute Rule reorders the left and right tables of inner joins preventing KuduSortRel
         // from being applied to the large table.
         // {@link org.apache.calcite.rel.metadata.RelMdCollation#enumerableJoin0(org.apache.calcite.rel.metadata.RelMetadataQuery)}
-        planner.removeRule(org.apache.calcite.rel.rules.JoinCommuteRule.INSTANCE);
+        planner.removeRule(CoreRules.JOIN_COMMUTE);
+        planner.removeRule(CoreRules.JOIN_COMMUTE_OUTER);
 
         // After removing the Join Commute Rule, Merge Join is chosen over Hash Join, negating the
         // work down to push the KuduSortRel into the large table.
