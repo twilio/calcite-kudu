@@ -14,7 +14,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 -->
-
+SqlNode SqlCreateMaterializedView() :
+{
+     SqlParserPos pos;
+     SqlIdentifier cubeName;
+     boolean ifNotExists = false;
+     SqlSelect query;
+}
+{
+        <CREATE> { pos = getPos(); }
+        <MATERIALIZED> <VIEW>
+        [
+             <IF> <NOT> <EXISTS> { ifNotExists = true; }
+        ]
+        cubeName = CompoundIdentifier()
+        <AS>
+        query = SqlSelect()
+        {
+            return new SqlCreateMaterializedView(pos.plus(getPos()), cubeName, ifNotExists, query);
+        }
+}
 
 /**
  * Parses statement
@@ -42,7 +61,7 @@ SqlNode SqlCreateTable() :
     <LPAREN>
     columnDefs = ColumnDefList()
     [
-    	<COMMA> <PRIMARY> <KEY>
+        <COMMA> <PRIMARY> <KEY>
         <LPAREN> pkConstraintColumnDefs = PkConstraintColumnDefList() <RPAREN>
     ]
     <RPAREN>
