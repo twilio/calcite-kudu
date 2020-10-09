@@ -130,7 +130,7 @@ public class DataLoader {
 
   private void bindValues(PreparedStatement statement,
                           UniformLongValueGenerator timestampGenerator) throws SQLException {
-    if (scenario.getMultipleColumnValueGenerators()!=null) {
+    if (scenario.getMultipleColumnValueGenerators() != null) {
       for (MultipleColumnValueGenerator generator : scenario.getMultipleColumnValueGenerators()) {
         generator.reset();
       }
@@ -324,4 +324,3 @@ public class DataLoader {
   }
 
 }
-

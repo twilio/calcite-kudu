@@ -25,6 +25,7 @@ import org.codehaus.jackson.map.jsontype.NamedType;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -82,6 +83,9 @@ public class Scenario {
   }
 
   public List<MultipleColumnValueGenerator> getMultipleColumnValueGenerators() {
+    if (multipleColumnValueGenerators == null) {
+      return Collections.emptyList();
+    }
     return multipleColumnValueGenerators;
   }
 
