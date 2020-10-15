@@ -3,6 +3,7 @@ package com.twilio.raas.sql.parser;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.twilio.raas.sql.JDBCUtil;
+import org.apache.calcite.sql.SqlColumnDefNode;
 import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
@@ -14,6 +15,7 @@ import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.client.PartialRow;
 import org.apache.kudu.client.PartitionSchema;
 import org.apache.kudu.test.KuduTestHarness;
+import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.ClassRule;
 import org.junit.FixMethodOrder;
@@ -42,6 +44,39 @@ public class KuduDDLIT {
   public static KuduTestHarness testHarness = new KuduTestHarness();
 
   @Test
+  public void testCreateSchemaTableDescCol() throws SQLException, KuduException {
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
+            testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      String ddl = "CREATE TABLE \"MY_TABLE2\" (" +
+              "STRING_COL VARCHAR " +
+              "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, " +
+              "UNIXTIME_MICROS_COL TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column " +
+              "is the timestamp', " +
+              "\"int64_col\" BIGINT DEFAULT 1234567890, " +
+              "INT8_COL TINYINT not null DEFAULT -128," +
+              "\"int16_col\" SMALLINT not null DEFAULT -32768, " +
+              "INT32_COL INTEGER DESC not null DEFAULT -2147483648, " +
+              "BINARY_COL VARBINARY DEFAULT x'AB'," +
+              "FLOAT_COL FLOAT DEFAULT 0.0123456789," +
+              "\"double_col\" DOUBLE DEFAULT 0.0123456789," +
+              "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, " +
+              "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))" +
+              "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " +
+              "NUM_REPLICAS 1 " +
+              "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+
+      KuduClient client = testHarness.getClient();
+      KuduTable kuduTable = client.openTable("MY_TABLE2");
+      Schema schema = kuduTable.getSchema();
+      validateComment(schema, "UNIXTIME_MICROS_COL",  "{\"isTimeStampColumn\":true,\"isDescendingSortOrder\":false,\"comment\":\"'this column is the timestamp'\"}");
+      validateComment(schema, "INT8_COL",  "");
+      validateComment(schema, "INT32_COL",  "{\"isTimeStampColumn\":false,\"isDescendingSortOrder\":true}");
+    }
+  }
+
+  @Test
   public void testCreateMaterializedViewCountAggregate() throws SQLException, KuduException {
     String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
             testHarness.getMasterAddressesAsString());
@@ -66,18 +101,18 @@ public class KuduDDLIT {
               "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName\" " +
               "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL) " +
               "FROM \"MY_TABLE\" " +
-              "GROUP BY STRING_COL, UNIXTIME_MICROS_COL";
+              "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO hour)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_CUBE\"");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE-CubeName-Hour-Aggregation\"");
       assertFalse(rs.next());
     }
 
     KuduClient client = testHarness.getClient();
-    KuduTable kuduTable = client.openTable("my_schema.MY_CUBE");
+    KuduTable kuduTable = client.openTable("MY_TABLE-CubeName-Hour-Aggregation");
 
     // validate hash partitioning
     List<PartitionSchema.HashBucketSchema> hashBucketSchemas =
@@ -109,7 +144,6 @@ public class KuduDDLIT {
     assertEquals(5000, idColSchema.getDesiredBlockSize());
     ColumnSchema timestampCol = columnSchemas.get(1);
     assertEquals("UNIXTIME_MICROS_COL", timestampCol.getName());
-    assertEquals("this column is the timestamp", timestampCol.getComment());
 
     //validate column attributes
     Schema schema = kuduTable.getSchema();
@@ -143,18 +177,18 @@ public class KuduDDLIT {
               "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_24\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName1\" " +
               "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL), SUM(INT8_COL) " +
               "FROM \"MY_TABLE_24\" " +
-              "GROUP BY STRING_COL, UNIXTIME_MICROS_COL";
+              "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO YEAR)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_CUBE_24\"");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE_24-CubeName1-Year-Aggregation\"");
       assertFalse(rs.next());
     }
 
     KuduClient client = testHarness.getClient();
-    KuduTable kuduTable = client.openTable("my_schema.MY_CUBE_24");
+    KuduTable kuduTable = client.openTable("MY_TABLE_24-CubeName1-Year-Aggregation");
 
     // validate hash partitioning
     List<PartitionSchema.HashBucketSchema> hashBucketSchemas =
@@ -184,7 +218,6 @@ public class KuduDDLIT {
     assertEquals(5000, idColSchema.getDesiredBlockSize());
     ColumnSchema timestampCol = columnSchemas.get(1);
     assertEquals("UNIXTIME_MICROS_COL", timestampCol.getName());
-    assertEquals("this column is the timestamp", timestampCol.getComment());
 
     //validate column attributes
     Schema schema = kuduTable.getSchema();
@@ -219,18 +252,18 @@ public class KuduDDLIT {
               "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_14\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName2\" " +
               "AS SELECT COUNT(INT32_COL) " +
               "FROM \"MY_TABLE_14\" " +
-              "GROUP BY STRING_COL, UNIXTIME_MICROS_COL";
+              "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_CUBE_14\"");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE_14-CubeName2-Day-Aggregation\"");
       assertFalse(rs.next());
     }
 
     KuduClient client = testHarness.getClient();
-    KuduTable kuduTable = client.openTable("my_schema.MY_CUBE");
+    KuduTable kuduTable = client.openTable("MY_TABLE_14-CubeName2-Day-Aggregation");
 
     // validate hash partitioning
     List<PartitionSchema.HashBucketSchema> hashBucketSchemas =
@@ -260,7 +293,6 @@ public class KuduDDLIT {
     assertEquals(5000, idColSchema.getDesiredBlockSize());
     ColumnSchema timestampCol = columnSchemas.get(1);
     assertEquals("UNIXTIME_MICROS_COL", timestampCol.getName());
-    assertEquals("this column is the timestamp", timestampCol.getComment());
 
     //validate column attributes
     Schema schema = kuduTable.getSchema();
@@ -275,10 +307,10 @@ public class KuduDDLIT {
             testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_11\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_11\" " +
               "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL) AS CNT " +
               "FROM \"my_schema.MY_TABLE_11\" " +
-              "GROUP BY STRING_COL, UNIXTIME_MICROS_COL";
+              "GROUP BY STRING_COL, FLOOT(UNIXTIME_MICROS_COL TO DAY";
       // create the cube
       try {
         conn.createStatement().execute(ddl2);
@@ -289,7 +321,7 @@ public class KuduDDLIT {
   }
 
   @Test
-  public void testMaterializedViewIfNotExists() throws SQLException {
+  public void testMaterializedViewInvalidName() throws SQLException {
     String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
             testHarness.getMasterAddressesAsString());
     try (Connection conn = DriverManager.getConnection(url)) {
@@ -316,10 +348,47 @@ public class KuduDDLIT {
       String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_1\" " +
               "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL) " +
               "FROM \"my_schema.MY_TABLE_1\" " +
-              "GROUP BY STRING_COL, UNIXTIME_MICROS_COL";
+              "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
+      try {
+        conn.createStatement().execute(ddl2);
+        fail("Create a cube with invalid name should fail.");
+      } catch (SQLException e) {
+      }
+    }
+  }
+
+  @Test
+  public void testMaterializedViewIfNotExists() throws SQLException {
+    String url = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED,
+            testHarness.getMasterAddressesAsString());
+    try (Connection conn = DriverManager.getConnection(url)) {
+      // create table
+      String ddl = "CREATE TABLE \"MY_TABLE11\" (" +
+              "STRING_COL VARCHAR " +
+              "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, " +
+              "UNIXTIME_MICROS_COL TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column " +
+              "is the timestamp', " +
+              "\"int64_col\" BIGINT DEFAULT 1234567890, " +
+              "INT8_COL TINYINT not null DEFAULT -128," +
+              "\"int16_col\" SMALLINT not null DEFAULT -32768, " +
+              "INT32_COL INTEGER not null DEFAULT -2147483648, " +
+              "BINARY_COL VARBINARY DEFAULT x'AB'," +
+              "FLOAT_COL FLOAT DEFAULT 0.0123456789," +
+              "\"double_col\" DOUBLE DEFAULT 0.0123456789," +
+              "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, " +
+              "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))" +
+              "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " +
+              "NUM_REPLICAS 1 " +
+              "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+
+      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName4\" " +
+              "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL) " +
+              "FROM \"MY_TABLE11\" " +
+              "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO HOUR)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_CUBE_1\"");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE11-CubeName4-Hour-Aggregation\"");
       assertFalse(rs.next());
 
 
@@ -330,10 +399,10 @@ public class KuduDDLIT {
       } catch (SQLException e) {
       }
 
-      String ddl3 = "CREATE MATERIALIZED VIEW IF NOT EXISTS \"my_schema.MY_CUBE_1\" " +
+      String ddl3 = "CREATE MATERIALIZED VIEW IF NOT EXISTS \"CubeName4\" " +
               "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL) AS CNT " +
-              "FROM \"my_schema.MY_TABLE_1\" " +
-              "GROUP BY STRING_COL, UNIXTIME_MICROS_COL";
+              "FROM \"MY_TABLE11\" " +
+              "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO HOUR)";
       // use the IF NOT EXISTS clause and verify an exception is not thrown
       // while trying to create the cube again
       try {
@@ -370,7 +439,7 @@ public class KuduDDLIT {
               "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_10\" ";
+      String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_10\" ";
       try {
         conn.createStatement().execute(ddl2);
         fail("Creating a cube without query should fail");
@@ -404,7 +473,7 @@ public class KuduDDLIT {
               "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_3\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_3\" " +
               "STRING_COL VARCHAR " +
               "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, ";
       try {
@@ -440,7 +509,7 @@ public class KuduDDLIT {
               "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_5\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_5\" " +
               "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) " +
               "FROM \"my_schema.MY_TABLE_5\" ";
       try {
@@ -476,10 +545,10 @@ public class KuduDDLIT {
               "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_6\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_6\" " +
               "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) AS X " +
               "FROM \"my_schema.MY_TABLE_6\" " +
-              "GROUP BY STRING_COL, UNIXTIME_MICROS_COL";
+              "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
       try {
         conn.createStatement().execute(ddl2);
         fail("Creating a cube with aliases for column names should fail");
@@ -513,10 +582,10 @@ public class KuduDDLIT {
               "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_26\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_26\" " +
               "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, MAX(INT32_COL) " +
               "FROM \"my_schema.MY_TABLE_26\" " +
-              "GROUP BY STRING_COL, UNIXTIME_MICROS_COL";
+              "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO HOUR";
       try {
         conn.createStatement().execute(ddl2);
         fail("Aggregate operator not supported.");
@@ -550,18 +619,18 @@ public class KuduDDLIT {
               "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_8\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"LinkName\" " +
               "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) " +
               "FROM \"my_schema.MY_TABLE_8\" " +
-              "GROUP BY STRING_COL, UNIXTIME_MICROS_COL";
+              "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DaY)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_CUBE_8\"");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_8-LinkName-Day-Aggregation\"");
       assertFalse(rs.next());
     }
 
     KuduClient client = testHarness.getClient();
-    KuduTable kuduTable = client.openTable("my_schema.MY_CUBE_8");
+    KuduTable kuduTable = client.openTable("my_schema.MY_TABLE_8-LinkName-Day-Aggregation");
 
     // validate hash partitioning
     List<PartitionSchema.HashBucketSchema> hashBucketSchemas =
@@ -591,7 +660,6 @@ public class KuduDDLIT {
     assertEquals(5000, idColSchema.getDesiredBlockSize());
     ColumnSchema timestampCol = columnSchemas.get(1);
     assertEquals("UNIXTIME_MICROS_COL", timestampCol.getName());
-    assertEquals("this column is the timestamp", timestampCol.getComment());
 
     //validate column attributes
     Schema schema = kuduTable.getSchema();
@@ -626,7 +694,7 @@ public class KuduDDLIT {
       conn.createStatement().execute(ddl);
 
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_7\" " +
+      String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_7\" " +
                      "AS SELECT * " +
               "FROM \"my_schema.MY_TABLE_7\" " +
               "GROUP BY X";
@@ -651,7 +719,7 @@ public class KuduDDLIT {
         "\"int64_col\" BIGINT DEFAULT 1234567890, " +
         "INT8_COL TINYINT not null DEFAULT -128," +
         "\"int16_col\" SMALLINT not null DEFAULT -32768, " +
-        "INT32_COL INTEGER not null DEFAULT -2147483648, " +
+        "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', " +
         "BINARY_COL VARBINARY DEFAULT x'AB'," +
         "FLOAT_COL FLOAT DEFAULT 0.0123456789," +
         "\"double_col\" DOUBLE DEFAULT 0.0123456789," +
@@ -686,6 +754,8 @@ public class KuduDDLIT {
       build();
     assertEquals("Unexpected extra configs", expectedConfig, kuduTable.getExtraConfig());
 
+    Schema schema = kuduTable.getSchema();
+
     // validate primary key
     assertEquals(3, kuduTable.getSchema().getPrimaryKeyColumnCount());
     List<ColumnSchema> columnSchemas = kuduTable.getSchema().getPrimaryKeyColumns();
@@ -697,12 +767,13 @@ public class KuduDDLIT {
     assertEquals(5000, idColSchema.getDesiredBlockSize());
     ColumnSchema timestampCol = columnSchemas.get(1);
     assertEquals("unixtime_micros_col", timestampCol.getName());
-    assertEquals("this column is the timestamp", timestampCol.getComment());
+    validateComment(schema, "unixtime_micros_col",  "{\"isTimeStampColumn\":true,\"isDescendingSortOrder\":false,\"comment\":\"'this column is the timestamp'\"}");
     ColumnSchema int64Col = columnSchemas.get(2);
     assertEquals("int64_col", int64Col.getName());
+    validateComment(schema, "INT8_COL",  "");
+    validateComment(schema, "INT32_COL",  "{\"comment\":\"'INT32 column'\"}");
 
     //validate column attributes
-    Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL",  Type.STRING, false, "abc");
     validateColumnSchema(schema, "unixtime_micros_col",  Type.UNIXTIME_MICROS, false, 1234567890l);
     validateColumnSchema(schema, "int64_col",  Type.INT64, false, 1234567890l);
@@ -731,6 +802,11 @@ public class KuduDDLIT {
         columnSchema.getDefaultValue());
     }
   }
+
+  private void validateComment(Schema schema, String columnName, String expectedComment) {
+    ColumnSchema columnSchema = schema.getColumn(columnName);
+      Assert.assertEquals(columnSchema.getComment(), expectedComment);
+    }
 
   @Test
   public void testCreateTableWithPKColumnAttribute() throws SQLException, KuduException {

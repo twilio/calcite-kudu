@@ -1,6 +1,7 @@
 package com.twilio.raas.sql;
 
 import com.google.common.collect.ImmutableMap;
+import com.twilio.raas.sql.parser.SortOrder;
 import com.twilio.raas.sql.parser.SqlCreateMaterializedView;
 import com.twilio.raas.sql.parser.SqlCreateTable;
 import com.twilio.raas.sql.schema.KuduSchema;
@@ -10,6 +11,8 @@ import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
 import org.apache.calcite.sql.SqlColumnDefNode;
 import org.apache.calcite.sql.SqlColumnNameNode;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
@@ -21,10 +24,10 @@ import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduException;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.client.PartialRow;
+import org.json.JSONObject;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -34,6 +37,15 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 public class KuduPrepareImpl extends CalcitePrepareImpl {
+
+  public enum TimeAggregationType {
+    YEAR("Year"), MONTH("Month"), DAY("Day"), HOUR("Hour"), MINUTE("Minute"), SECOND("Second");
+
+    String interval;
+    TimeAggregationType(String interval) {
+      this.interval = interval;
+    }
+  }
 
   @Override
   public void executeDdl(Context context, SqlNode node) {
@@ -70,6 +82,27 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
               if (pkConstraintColumns.contains(((SqlColumnDefNode) columnDefNode).columnName.getSimple())) {
                 builder.key(true);
                 builder.nullable(false);
+              }
+
+              //If column is descending order or timestamp column , then add the metadata as json string in comment.
+              boolean isDescendingSortOrder = ((SqlColumnDefNode) columnDefNode).sortOrder.equals(SortOrder.DESC);
+              boolean isTimeStampColumn = ((SqlColumnDefNode) columnDefNode).isRowTimestamp;
+              SqlNode commentNode = ((SqlColumnDefNode) columnDefNode).comment;
+              if(isTimeStampColumn || isDescendingSortOrder || commentNode!=null)
+              {
+                JSONObject jsonObject = new JSONObject();
+
+                if(isTimeStampColumn || isDescendingSortOrder) {
+                  jsonObject.put("isTimeStampColumn", isTimeStampColumn)
+                          .put("isDescendingSortOrder", isDescendingSortOrder);
+                }
+                
+                if(commentNode!=null) {
+                  String comment = commentNode.toString();
+                  jsonObject.put("comment", comment);
+                }
+
+                builder.comment(jsonObject.toString());
               }
               return builder.build();
             })
@@ -157,9 +190,13 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           SqlNodeList selectList = (createMaterializedViewNode.query).getSelectList();
           KuduTable kuduTable = kuduClient.openTable(fromNode.toString());
 
-          // return if the cube already exists
-          if (createMaterializedViewNode.ifNotExists && kuduClient.tableExists(createMaterializedViewNode.cubeName.toString())) {
-            return;
+          String cubeName = createMaterializedViewNode.cubeName.toString();
+
+          //verify cubeName is not of the form MySchema.MyCube
+          String[] cubeNameSplit = cubeName.split("\\.");
+          if(cubeNameSplit.length > 1)
+          {
+            throw new IllegalArgumentException("CubeName must not be of form MySchema.MyCube");
           }
 
           if(groupByNode == null) {
@@ -170,10 +207,47 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
             throw new IllegalArgumentException("Select list should not be a copy of fact table");
           }
 
+          boolean groupByContainsFloor = false;
+          String interval = "";
           //group by columns become the primary key of the cube.
           List<String> pkColumns = new ArrayList<>();
           for (SqlNode sqlnode : groupByNode.getList()) {
-            pkColumns.add(sqlnode.toString());
+            //sqlnode contains Floor
+            if(sqlnode instanceof SqlBasicCall){
+              if(((SqlBasicCall) sqlnode).getOperator().getName().equals("FLOOR")){
+                groupByContainsFloor = true;
+                for(SqlNode operand : ((SqlBasicCall) sqlnode).operands)
+                {
+                  if(operand instanceof SqlIntervalQualifier)
+                  {
+                    interval = TimeAggregationType.valueOf(operand.toString().toUpperCase()).interval;
+                  }else if(operand instanceof SqlIdentifier)
+                  {
+                    pkColumns.add(operand.toString());
+                  }
+                }
+              }
+
+            }else {
+              pkColumns.add(sqlnode.toString());
+            }
+          }
+
+          if(!groupByContainsFloor)
+          {
+            throw new IllegalArgumentException("GROUP BY clause should contain a FLOOR function on the timestamp column");
+          }
+
+          if(interval.isEmpty())
+          {
+            throw new IllegalArgumentException("GROUP BY clause should contain a FLOOR function on the timestamp column and an interval");
+          }
+
+          String physicalCubeTableName = kuduTable.getName() + "-" + cubeName + "-" + interval + "-" + "Aggregation";
+
+          // return if the cube already exists
+          if (createMaterializedViewNode.ifNotExists && kuduClient.tableExists(physicalCubeTableName)) {
+            return;
           }
 
           List<ColumnSchema> cubeColumnSchemas = new ArrayList<>();
@@ -269,7 +343,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           }
           createCubeOptions.setExtraConfigs(kuduTable.getExtraConfig());
 
-          kuduClient.createTable(createMaterializedViewNode.cubeName.toString(), cubeSchema, createCubeOptions);
+          kuduClient.createTable(physicalCubeTableName, cubeSchema, createCubeOptions);
           kuduSchema.clearCachedTableMap();
         } catch (KuduException e) {
           throw new RuntimeException(e);
