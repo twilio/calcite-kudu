@@ -1,0 +1,21 @@
+type: maven
+name: calcite-kudu
+bump_version: true
+# because of the CI Pipeline, there is no reason to wait on snapshot build here
+auto_build: false
+
+build:
+  commands:
+  - JAVA_HOME=/usr/java/jdk-11 mvn -Pcoverage deploy
+  dependencies:
+    - apache-maven
+    - jdk-11-azul
+
+contents:
+  - ./bin/
+
+build_rpm: false
+build_docker_image: false
+pr_validation: true
+# Add coverage in Jenkins UI
+code_coverage: true

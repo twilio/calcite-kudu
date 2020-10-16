@@ -4,181 +4,238 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <artifactId>data-engine-service</artifactId>
-        <groupId>com.twilio.raas</groupId>
-        <version>3.15.82-SNAPSHOT</version>
+        <groupId>com.twilio</groupId>
+        <artifactId>twilio-parent-pom</artifactId>
+        <version>10.2.29</version>
     </parent>
 
-    <artifactId>data-engine-sql</artifactId>
-    <name>SQL parsing, optimization and execution</name>
+    <version>1.0.0-SNAPSHOT</version>
+    <groupId>com.twilio</groupId>
+    <artifactId>kudu-sql</artifactId>
+    <name>SQL parsing, optimization and execution for Apache Kudu</name>
+    <packaging>pom</packaging>
 
-    <dependencies>
-        <dependency>
-            <artifactId>data-engine-protocol</artifactId>
-            <groupId>com.twilio.raas</groupId>
-        </dependency>
+    <repositories>
+        <repository>
+            <id>twilio.nexus</id>
+            <url>https://nexus.corp.twilio.com/content/groups/public</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
-	    <dependency>
-            <artifactId>freemarker</artifactId>
-            <groupId>org.freemarker</groupId>
-        </dependency>
+    <modules>
+        <module>adapter</module>
+    </modules>
 
-        <dependency>
-            <groupId>org.apache.kudu</groupId>
-            <artifactId>kudu-client</artifactId>
-        </dependency>
+    <properties>
+        <calcite.version>1.25.0</calcite.version>
+        <kudu.version>1.12.0</kudu.version>
+        <guava.version>29.0-jre</guava.version>
+        <junit.version>4.13</junit.version>
+        <slf4j.version>1.7.21</slf4j.version>
+        <mockito.version>1.10.19</mockito.version>
+        <jackson.version>2.11.1</jackson.version>
+        <spotless.version>2.0.1</spotless.version>
+        <freemarker-version>2.3.29</freemarker-version>
+        <json-version>20200518</json-version>
 
-	<dependency>
-	    <groupId>org.apache.calcite</groupId>
-	    <artifactId>calcite-core</artifactId>
-	</dependency>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <java.version>11</java.version>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
 
-	<dependency>
-	    <groupId>io.dropwizard.metrics</groupId>
-	    <artifactId>metrics-core</artifactId>
-	</dependency>
+        <main.basedir>${maven.multiModuleProjectDirectory}</main.basedir>  
+	 
+    </properties>
 
-    <dependency>
-        <groupId>com.twilio.kudu</groupId>
-        <artifactId>dataset</artifactId>
-    </dependency>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.apache.kudu</groupId>
+                <artifactId>kudu-client</artifactId>
+                <version>${kudu.version}</version>
+            </dependency>
 
-        <!-- Testing dependencies -->
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <scope>test</scope>
-        </dependency>
+            <dependency>
+                <groupId>commons-codec</groupId>
+                <artifactId>commons-codec</artifactId>
+                <version>1.14</version>
+            </dependency>
 
-        <dependency>
-            <groupId>org.apache.kudu</groupId>
-            <artifactId>kudu-test-utils</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.kudu</groupId>
-            <artifactId>kudu-binary</artifactId>
-            <version>${kudu-binary-version}</version>
-            <classifier>${os.detected.classifier}</classifier>
-            <scope>test</scope>
-        </dependency>
+            <dependency>
+                <groupId>org.apache.calcite</groupId>
+                <artifactId>calcite-core</artifactId>
+                <version>${calcite.version}</version>
+            </dependency>
 
-       <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-api</artifactId>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.mockito</groupId>
-        <artifactId>mockito-all</artifactId>
-        <scope>test</scope>
-      </dependency>
-        <dependency>
-            <groupId>org.json</groupId>
-            <artifactId>json</artifactId>
-        </dependency>
-    </dependencies>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <!-- Testing dependencies -->
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <scope>test</scope>
+                <version>${junit.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.kudu</groupId>
+                <artifactId>kudu-test-utils</artifactId>
+                <version>${kudu.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.kudu</groupId>
+                <artifactId>kudu-binary</artifactId>
+                <classifier>${os.detected.classifier}</classifier>
+                <scope>test</scope>
+                <version>${kudu.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-log4j12</artifactId>
+                <scope>test</scope>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-all</artifactId>
+                <scope>test</scope>
+                <version>${mockito.version}</version>
+            </dependency>
+            <dependency>
+                <artifactId>freemarker</artifactId>
+                <groupId>org.freemarker</groupId>
+                <version>${freemarker-version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.json</groupId>
+                <artifactId>json</artifactId>
+                <version>${json-version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <build>
+        <extensions>
+            <!-- Used to find the right kudu-binary artifact with the Maven
+                 property ${os.detected.classifier} -->
+            <extension>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>1.6.2</version>
+            </extension>
+        </extensions>
+        <pluginManagement>
         <plugins>
             <plugin>
-                <artifactId>maven-resources-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>copy-fmpp-resources</id>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/codegen</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>src/main/codegen</directory>
-                                    <filtering>false</filtering>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                </executions>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <release>${java.version}</release>
+                    <source>${java.version}</source>
+                    <forceJavacCompilerUse>true</forceJavacCompilerUse>
+                </configuration>
             </plugin>
+
             <plugin>
-                <groupId>com.googlecode.fmpp-maven-plugin</groupId>
-                <artifactId>fmpp-maven-plugin</artifactId>
-                <version>1.0</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.freemarker</groupId>
-                        <artifactId>freemarker</artifactId>
-                        <version>${freemarker-version}</version>
-                    </dependency>
-                </dependencies>
-                <executions>
-                    <execution>
-                        <id>generate-fmpp-sources</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                        <configuration>
-                            <cfgFile>${project.build.directory}/codegen/config.fmpp</cfgFile>
-                            <outputDirectory>target/generated-sources</outputDirectory>
-                            <templateDirectory>${project.build.directory}/codegen/templates</templateDirectory>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>javacc-maven-plugin</artifactId>
-                <version>2.4</version>
-                <executions>
-                    <execution>
-                        <phase>generate-sources</phase>
-                        <id>javacc</id>
-                        <goals>
-                            <goal>javacc</goal>
-                        </goals>
-                        <configuration>
-                            <sourceDirectory>${project.build.directory}/generated-sources/</sourceDirectory>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <formats>
+                        <!-- you can define as many formats as you want, each is independent -->
+                        <format>
+                            <!-- define the files to apply to -->
                             <includes>
-                                <include>**/Parser.jj</include>
+                                <include>*.md</include>
+                                <include>.gitignore</include>
                             </includes>
-                            <lookAhead>2</lookAhead>
-                            <isStatic>false</isStatic>
-                            <outputDirectory>${project.build.directory}/generated-sources/</outputDirectory>
-                        </configuration>
+                            <!-- define the steps to apply to those files -->
+                            <trimTrailingWhitespace/>
+                            <endWithNewline/>
+                            <indent>
+                                <tabs>true</tabs>
+                                <spacesPerTab>4</spacesPerTab>
+                            </indent>
+                        </format>
+                    </formats>
+                    <!-- define a language-specific format -->
+                    <java>
+                        <!-- no need to specify files, inferred automatically, but you can if you want -->
+
+                        <!-- google formatter didn't work with the license header file *shrug* -->
+                        <eclipse>
+                            <file>${main.basedir}/eclipse-java-formatter.xml</file>
+                        </eclipse>
+
+                        <!-- make sure every file has the following copyright header.
+                             optionally, Spotless can set copyright years by digging
+                             through git history (see "license" section below) -->
+                        <licenseHeader>
+                            <file>${main.basedir}/license-header</file>
+                        </licenseHeader>
+                    </java>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-goals</artifactId>
+                <version>3.0.0-M3</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.0.0-M3</version>
+                <configuration>
+                    <skipTests>false</skipTests>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
+        </plugins>
+        </pluginManagement>
+        <plugins>
             <plugin>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <!-- Extract parser grammar template from optiq-core.jar and put
-                          it under ${project.build.directory} where all freemarker templates are. -->
-                        <id>unpack-parser-template</id>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>unpack</goal>
-                        </goals>
-                        <configuration>
-                            <artifactItems>
-                                <artifactItem>
-                                    <groupId>org.apache.calcite</groupId>
-                                    <artifactId>calcite-core</artifactId>
-                                    <type>jar</type>
-                                    <overWrite>true</overWrite>
-                                    <outputDirectory>${project.build.directory}/</outputDirectory>
-                                    <includes>**/Parser.jj</includes>
-                                </artifactItem>
-                            </artifactItems>
-                        </configuration>
-                    </execution>
-                </executions>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0-M5</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.0.0-M3</version>
+		<configuration>
+	          <skipTests>${skipTests}</skipTests>
+        	</configuration>
             </plugin>
         </plugins>
     </build>
