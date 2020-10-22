@@ -9,7 +9,7 @@
         <version>10.2.29</version>
     </parent>
 
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <groupId>com.twilio</groupId>
     <artifactId>kudu-sql</artifactId>
     <name>SQL parsing, optimization and execution for Apache Kudu</name>
