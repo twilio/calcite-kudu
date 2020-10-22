@@ -10,7 +10,7 @@
     <parent>
         <artifactId>kudu-sql</artifactId>
         <groupId>com.twilio</groupId>
-        <version>1.0.2</version>
+        <version>1.0.3-SNAPSHOT</version>
     </parent>
 
     <dependencies>
@@ -180,18 +180,6 @@
                                 </artifactItem>
                             </artifactItems>
                         </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-source-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
                     </execution>
                 </executions>
             </plugin>
