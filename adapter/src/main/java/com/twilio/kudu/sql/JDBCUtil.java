@@ -30,23 +30,20 @@ public class JDBCUtil {
   }
 
   // This enables INSERT support which automatically maintains cube tables when a
-  // fact table is
-  // written to. It should only be used for testing from a single process as we
-  // maintain state on
-  // the client to compute the aggregated rows, which is not correct if a table is
-  // being written
-  // to from multiple processes.
+  // fact table is written to. It should only be used for testing from a single
+  // process as we maintain state on the client to compute the aggregated rows,
+  // which is not correct if a table is being written to from multiple processes.
   // This also enables DDL support which allows used to create tables.
-  public static String CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED = "jdbc:kudu" + ":"
+  public static String CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED = "jdbc:kudu:"
       + CalciteConnectionProperty.SCHEMA_FACTORY.camelName() + "=%s" + ";schema.connect=%s" + ";"
       + CalciteConnectionProperty.SCHEMA.camelName() + "=kudu" + ";" + CalciteConnectionProperty.TIME_ZONE.camelName()
       + "=UTC" + ";" + CalciteConnectionProperty.CASE_SENSITIVE.camelName() + "=false" + ";schema.enableInserts=true"
       + ";" + CalciteConnectionProperty.PARSER_FACTORY.camelName() + "=" + KuduSqlParserImpl.class.getName()
       + "#FACTORY";
 
-  public static String CALCITE_MODEL_TEMPLATE = "jdbc:kudu" + ":" + CalciteConnectionProperty.SCHEMA_FACTORY.camelName()
-      + "=" + DefaultKuduSchemaFactory.class.getName() + ";schema.connect=%s" + ";"
-      + CalciteConnectionProperty.SCHEMA.camelName() + "=kudu" + ";" + CalciteConnectionProperty.TIME_ZONE.camelName()
-      + "=UTC" + ";" + CalciteConnectionProperty.CASE_SENSITIVE.camelName() + "=false";
+  public static String CALCITE_MODEL_TEMPLATE = "jdbc:kudu:" + CalciteConnectionProperty.SCHEMA_FACTORY.camelName()
+      + "=%s" + ";schema.connect=%s" + ";" + CalciteConnectionProperty.SCHEMA.camelName() + "=kudu" + ";"
+      + CalciteConnectionProperty.TIME_ZONE.camelName() + "=UTC" + ";"
+      + CalciteConnectionProperty.CASE_SENSITIVE.camelName() + "=false";
 
 }
