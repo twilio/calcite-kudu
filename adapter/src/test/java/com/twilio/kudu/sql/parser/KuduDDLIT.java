@@ -502,6 +502,69 @@ public class KuduDDLIT {
   }
 
   @Test
+  public void testCreateMaterializedViewDescTableCol() throws SQLException, KuduException {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+
+      String ddl = "CREATE TABLE \"my_schema.MY_TAB_8\" (" + "STRING_COL VARCHAR "
+              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+              + "UNIXTIME_MICROS_COL TIMESTAMP DESC DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+              + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
+              + "INT32_COL INTEGER not null DEFAULT -2147483648, " + "BINARY_COL VARBINARY DEFAULT x'AB',"
+              + "FLOAT_COL FLOAT DEFAULT 0.0123456789," + "\"double_col\" DOUBLE DEFAULT 0.0123456789,"
+              + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+              + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
+              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+
+      String ddl2 = "CREATE MATERIALIZED VIEW \"LinkName\" "
+              + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) " + "FROM \"my_schema.MY_TAB_8\" "
+              + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DaY)";
+      conn.createStatement().execute(ddl2);
+      // validate the table can be queried
+      ResultSet rs = conn.createStatement()
+              .executeQuery("SELECT * FROM \"my_schema.MY_TAB_8-LinkName-Day-Aggregation\"");
+      assertFalse(rs.next());
+    }
+
+    KuduClient client = testHarness.getClient();
+    KuduTable kuduTable = client.openTable("my_schema.MY_TAB_8-LinkName-Day-Aggregation");
+
+    // validate hash partitioning
+    List<PartitionSchema.HashBucketSchema> hashBucketSchemas = kuduTable.getPartitionSchema().getHashBucketSchemas();
+    assertEquals("Unexpected number of hash partitions", 1, hashBucketSchemas.size());
+    assertEquals("Unexpected number of hash buckets", 17, hashBucketSchemas.get(0).getNumBuckets());
+    assertEquals("Unexpected hash partition columns", Lists.newArrayList(0), hashBucketSchemas.get(0).getColumnIds());
+
+    // validate replicas
+    assertEquals("Unexpected number of replicas", 1, kuduTable.getNumReplicas());
+
+    // validate table options
+    Map<String, String> expectedConfig = ImmutableMap.<String, String>builder()
+            .put("kudu.table.history_max_age_sec", "7200").build();
+    assertEquals("Unexpected extra configs", expectedConfig, kuduTable.getExtraConfig());
+
+    // validate primary key
+    assertEquals(2, kuduTable.getSchema().getPrimaryKeyColumnCount());
+    List<ColumnSchema> columnSchemas = kuduTable.getSchema().getPrimaryKeyColumns();
+    ColumnSchema idColSchema = columnSchemas.get(0);
+    assertNotNull(idColSchema);
+    assertEquals("STRING_COL", idColSchema.getName());
+    assertEquals(ColumnSchema.Encoding.PREFIX_ENCODING, idColSchema.getEncoding());
+    assertEquals(ColumnSchema.CompressionAlgorithm.LZ4, idColSchema.getCompressionAlgorithm());
+    assertEquals(5000, idColSchema.getDesiredBlockSize());
+    ColumnSchema timestampCol = columnSchemas.get(1);
+    assertEquals("UNIXTIME_MICROS_COL", timestampCol.getName());
+
+    // validate column attributes
+    Schema schema = kuduTable.getSchema();
+    validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
+    validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
+    validateColumnSchema(schema, "SUM_INT32_COL", Type.INT32, false, null);
+  }
+
+  @Test
   public void testCreateMaterializedViewAgg() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
 
@@ -620,6 +683,10 @@ public class KuduDDLIT {
     assertEquals("Unexpected number of hash buckets", 17, hashBucketSchemas.get(0).getNumBuckets());
     assertEquals("Unexpected hash partition columns", Lists.newArrayList(0), hashBucketSchemas.get(0).getColumnIds());
 
+    //validate range partitioning
+    PartitionSchema.RangeSchema rangeSchema = kuduTable.getPartitionSchema().getRangeSchema();
+    assertEquals(rangeSchema.getColumnIds().size(),1);
+
     // validate replicas
     assertEquals("Unexpected number of replicas", 1, kuduTable.getNumReplicas());
 
@@ -643,6 +710,81 @@ public class KuduDDLIT {
     assertEquals("unixtime_micros_col", timestampCol.getName());
     validateComment(schema, "unixtime_micros_col",
         "{\"isTimeStampColumn\":true,\"isDescendingSortOrder\":false,\"comment\":\"'this column is the timestamp'\"}");
+    ColumnSchema int64Col = columnSchemas.get(2);
+    assertEquals("int64_col", int64Col.getName());
+    validateComment(schema, "INT8_COL", "");
+    validateComment(schema, "INT32_COL", "{\"comment\":\"'INT32 column'\"}");
+
+    // validate column attributes
+    validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
+    validateColumnSchema(schema, "unixtime_micros_col", Type.UNIXTIME_MICROS, false, 1234567890l);
+    validateColumnSchema(schema, "int64_col", Type.INT64, false, 1234567890l);
+    validateColumnSchema(schema, "INT8_COL", Type.INT8, false, (byte) -128);
+    validateColumnSchema(schema, "int16_col", Type.INT16, false, (short) -32768);
+    validateColumnSchema(schema, "INT32_COL", Type.INT32, false, -2147483648);
+    validateColumnSchema(schema, "BINARY_COL", Type.BINARY, true, new byte[] { -85 });
+    validateColumnSchema(schema, "FLOAT_COL", Type.FLOAT, true, 0.0123456789f);
+    validateColumnSchema(schema, "double_col", Type.DOUBLE, true, 0.0123456789d);
+    validateColumnSchema(schema, "DECIMAL_COL", Type.DECIMAL, true, new BigDecimal("1234567890.123456"));
+
+  }
+
+  @Test
+  public void testCreateTableDESC() throws SQLException, KuduException {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl = "CREATE TABLE \"my_schema.MY_TAB\" (" + "STRING_COL VARCHAR "
+              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+              + "\"unixtime_micros_col\" TIMESTAMP DESC DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+              + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
+              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+      // validate the table can be queried
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TAB\"");
+      assertFalse(rs.next());
+    }
+
+    KuduClient client = testHarness.getClient();
+    KuduTable kuduTable = client.openTable("my_schema.MY_TAB");
+
+    // validate hash partitioning
+    List<PartitionSchema.HashBucketSchema> hashBucketSchemas = kuduTable.getPartitionSchema().getHashBucketSchemas();
+    assertEquals("Unexpected number of hash partitions", 1, hashBucketSchemas.size());
+    assertEquals("Unexpected number of hash buckets", 17, hashBucketSchemas.get(0).getNumBuckets());
+    assertEquals("Unexpected hash partition columns", Lists.newArrayList(0), hashBucketSchemas.get(0).getColumnIds());
+
+    //validate range partitioning
+    PartitionSchema.RangeSchema rangeSchema = kuduTable.getPartitionSchema().getRangeSchema();
+    assertEquals(rangeSchema.getColumnIds().size(),1);
+
+    // validate replicas
+    assertEquals("Unexpected number of replicas", 1, kuduTable.getNumReplicas());
+
+    // validate table options
+    Map<String, String> expectedConfig = ImmutableMap.<String, String>builder()
+            .put("kudu.table.history_max_age_sec", "7200").build();
+    assertEquals("Unexpected extra configs", expectedConfig, kuduTable.getExtraConfig());
+
+    Schema schema = kuduTable.getSchema();
+
+    // validate primary key
+    assertEquals(3, kuduTable.getSchema().getPrimaryKeyColumnCount());
+    List<ColumnSchema> columnSchemas = kuduTable.getSchema().getPrimaryKeyColumns();
+    ColumnSchema idColSchema = columnSchemas.get(0);
+    assertNotNull(idColSchema);
+    assertEquals("STRING_COL", idColSchema.getName());
+    assertEquals(ColumnSchema.Encoding.PREFIX_ENCODING, idColSchema.getEncoding());
+    assertEquals(ColumnSchema.CompressionAlgorithm.LZ4, idColSchema.getCompressionAlgorithm());
+    assertEquals(5000, idColSchema.getDesiredBlockSize());
+    ColumnSchema timestampCol = columnSchemas.get(1);
+    assertEquals("unixtime_micros_col", timestampCol.getName());
+    validateComment(schema, "unixtime_micros_col",
+            "{\"isTimeStampColumn\":true,\"isDescendingSortOrder\":true,\"comment\":\"'this column is the timestamp'\"}");
     ColumnSchema int64Col = columnSchemas.get(2);
     assertEquals("int64_col", int64Col.getName());
     validateComment(schema, "INT8_COL", "");

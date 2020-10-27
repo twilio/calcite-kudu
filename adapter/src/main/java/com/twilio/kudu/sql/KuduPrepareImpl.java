@@ -42,10 +42,12 @@ import org.json.JSONObject;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -66,6 +68,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
   public void executeDdl(Context context, SqlNode node) {
     final KuduSchema kuduSchema = getKuduSchema(context.getRootSchema().plus());
     final KuduClient kuduClient = kuduSchema.getClient().syncClient();
+
     switch (node.getKind()) {
     case CREATE_TABLE:
       SqlCreateTable createTableNode = (SqlCreateTable) node;
@@ -84,6 +87,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           .map(columnDefNode -> ((SqlColumnDefInPkConstraintNode) columnDefNode).columnName.getSimple())
           .collect(Collectors.toList());
 
+      AtomicBoolean isRowTimeStampColDesc = new AtomicBoolean(false);
       // get the column schemas from the column definition nodes
       List<ColumnSchema> columnSchemas = StreamSupport.stream(createTableNode.columnDefs.spliterator(), false)
           .map(columnDefNode -> {
@@ -97,6 +101,12 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
             // json string in comment.
             boolean isDescendingSortOrder = ((SqlColumnDefNode) columnDefNode).sortOrder.equals(SortOrder.DESC);
             boolean isTimeStampColumn = ((SqlColumnDefNode) columnDefNode).isRowTimestamp;
+            
+            if(isDescendingSortOrder &&  isTimeStampColumn)
+            {
+              isRowTimeStampColDesc.set(true);
+            }
+            
             SqlNode commentNode = ((SqlColumnDefNode) columnDefNode).comment;
             if (isTimeStampColumn || isDescendingSortOrder || commentNode != null) {
               JSONObject jsonObject = new JSONObject();
@@ -147,10 +157,18 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
       if (!rowTimestampColumns.isEmpty()) {
         String rowTimestampColumn = rowTimestampColumns.get(0);
         PartialRow lowerBound = tableSchema.newPartialRow();
-        lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
         PartialRow upperBound = tableSchema.newPartialRow();
-        upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+
+        //Set range partition to EPOCH.MAX - minvalue for DESC case.
+        if(isRowTimeStampColDesc.get()) {
+          lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS-Long.MIN_VALUE));
+          upperBound.addTimestamp(rowTimestampColumn, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS-Long.MIN_VALUE + 1));
+        }else {
+          lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
+          upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+        }
         createTableOptions.addRangePartition(lowerBound, upperBound);
+        createTableOptions.setRangePartitionColumns(rowTimestampColumns);
       }
 
       if (createTableNode.numReplicas != -1) {
@@ -337,10 +355,19 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         // that column so that we can add new partitions later
         if (!rangePartitionCols.isEmpty()) {
           String rowTimestampColumn = rangePartitionCols.get(0);
+          CalciteKuduTable calciteTable = (CalciteKuduTable)kuduSchema.getTable(kuduTable.getName());
           PartialRow lowerBound = cubeSchema.newPartialRow();
-          lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
           PartialRow upperBound = cubeSchema.newPartialRow();
-          upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+
+          //Set range partition to EPOCH.MAX - minvalue for DESC case.
+          if(calciteTable.isColumnOrderedDesc(rowTimestampColumn)) {
+            lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS-Long.MIN_VALUE));
+            upperBound.addTimestamp(rowTimestampColumn, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS-Long.MIN_VALUE + 1));
+          }else
+          {
+            lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
+            upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+          }
           createCubeOptions.addRangePartition(lowerBound, upperBound);
           createCubeOptions.setRangePartitionColumns(rangePartitionCols);
         }

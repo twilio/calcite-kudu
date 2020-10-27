@@ -21,8 +21,10 @@ import com.twilio.kudu.sql.CalciteModifiableKuduTable;
 import com.twilio.kudu.sql.CalciteKuduTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
+import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.KuduTable;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,6 +70,63 @@ public final class KuduSchema extends AbstractSchema {
       tableNames = this.client.getTablesList().join().getTablesList();
     } catch (Exception threadInterrupted) {
       return Collections.emptyMap();
+    }
+
+    Map<String, List<CubeTableInfo>> factToCubeListMap = new HashMap<>();
+    //populate the cubetables which were created using DDL statements.
+    for(String tableName: tableNames) {
+      //cube table
+      String[] tableNameSplit = tableName.split("-");
+      if (tableNameSplit.length == 4 && tableName.endsWith("Aggregation")) {
+        //Cube table name is of the form TableName-CubeName-Interval-Aggregation
+        CubeTableInfo cubeTableInfo = new CubeTableInfo(tableName, CubeTableInfo.EventTimeAggregationType.valueOf(tableNameSplit[2].toLowerCase()));
+        String factTableName = tableNameSplit[0];
+        if (!factToCubeListMap.containsKey(factTableName)) {
+          factToCubeListMap.put(factTableName, new ArrayList<>());
+        }
+        factToCubeListMap.get(factTableName).add(cubeTableInfo);
+      }
+    }
+
+    //populate kudutableMetadatMap for fact tables that were created using DDL statements.
+    for(String tableName: tableNames) {
+      List<String> descendingOrderedColumns = new ArrayList<>();
+      String timeStampColumnName = "";
+      if (!tableName.endsWith("Aggregation")) {
+        try {
+          KuduTable kuduTable = this.client.openTable(tableName).join();
+          for (ColumnSchema columnSchema : kuduTable.getSchema().getColumns()) {
+            if (!columnSchema.getComment().isEmpty()) {
+              JSONObject obj = new JSONObject(columnSchema.getComment());
+              if (obj.has("isTimeStampColumn") && obj.getBoolean("isTimeStampColumn")) {
+                  timeStampColumnName = columnSchema.getName();
+              }
+
+              if (obj.has("isDescendingSortOrder") && obj.getBoolean("isDescendingSortOrder")) {
+                  descendingOrderedColumns.add(columnSchema.getName());
+              }
+            }
+          }
+        } catch (Exception e) {
+          logger.error("Unable to open table " + tableName, e);
+        }
+
+        if(!timeStampColumnName.isEmpty() && !this.kuduTableMetadataMap.containsKey(tableName))
+        {
+          if(factToCubeListMap.get(tableName) != null)
+          {
+            this.kuduTableMetadataMap.put(tableName, new KuduTableMetadata.KuduTableMetadataBuilder()
+                    .setTimestampColumnName(timeStampColumnName)
+                    .setCubeTableInfoList(factToCubeListMap.get(tableName))
+                    .setDescendingOrderedColumnNames(descendingOrderedColumns).build());
+          }else
+          {
+            this.kuduTableMetadataMap.put(tableName, new KuduTableMetadata.KuduTableMetadataBuilder()
+                    .setTimestampColumnName(timeStampColumnName)
+                    .setDescendingOrderedColumnNames(descendingOrderedColumns).build());
+          }
+        }
+      }
     }
 
     // create CalciteKuduTables
