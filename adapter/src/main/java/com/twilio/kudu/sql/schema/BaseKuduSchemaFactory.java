@@ -23,14 +23,14 @@ import org.apache.calcite.schema.SchemaPlus;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public abstract class BaseKuduSchemaFactory implements SchemaFactory {
   private final Map<String, KuduTableMetadata> kuduTableConfigMap;
 
-  protected Map<String, KuduSchema> schemaCache = new HashMap<>();
+  protected ConcurrentHashMap<String, KuduSchema> schemaCache = new ConcurrentHashMap<>();
 
   public BaseKuduSchemaFactory(final Map<String, KuduTableMetadata> kuduTableConfigMap) {
     this.kuduTableConfigMap = kuduTableConfigMap;
@@ -47,10 +47,8 @@ public abstract class BaseKuduSchemaFactory implements SchemaFactory {
 
   public List<CalciteKuduTable> getTables() {
     List<CalciteKuduTable> tableList = new ArrayList<>();
-    for (KuduSchema kuduSchema : schemaCache.values()) {
-      tableList.addAll(
-          kuduSchema.getTableMap().values().stream().map(CalciteKuduTable.class::cast).collect(Collectors.toList()));
-    }
+    schemaCache.forEachValue(Long.MAX_VALUE, kuduSchema ->
+    kuduSchema.getTableMap().values().stream().map(CalciteKuduTable.class::cast).collect(Collectors.toList()));
     return tableList;
   }
 
