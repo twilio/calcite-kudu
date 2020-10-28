@@ -24,6 +24,7 @@ import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.KuduTable;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,13 +97,14 @@ public final class KuduSchema extends AbstractSchema {
         try {
           KuduTable kuduTable = this.client.openTable(tableName).join();
           for (ColumnSchema columnSchema : kuduTable.getSchema().getColumns()) {
-            if (!columnSchema.getComment().isEmpty()) {
-              JSONObject obj = new JSONObject(columnSchema.getComment());
-              if (obj.has("isTimeStampColumn") && obj.getBoolean("isTimeStampColumn")) {
+            String comment = columnSchema.getComment();
+            JSONObject jsonObject = getJsonObject(comment);
+            if (!comment.isEmpty() && jsonObject!=null) {
+              if (jsonObject.has("isTimeStampColumn") && jsonObject.getBoolean("isTimeStampColumn")) {
                   timeStampColumnName = columnSchema.getName();
               }
 
-              if (obj.has("isDescendingSortOrder") && obj.getBoolean("isDescendingSortOrder")) {
+              if (jsonObject.has("isDescendingSortOrder") && jsonObject.getBoolean("isDescendingSortOrder")) {
                   descendingOrderedColumns.add(columnSchema.getName());
               }
             }
@@ -226,6 +228,14 @@ public final class KuduSchema extends AbstractSchema {
 
   public AsyncKuduClient getClient() {
     return client;
+  }
+
+  private JSONObject getJsonObject(String comment) {
+    try {
+      return new JSONObject(comment);
+    } catch (JSONException ex) {
+      return null;
+    }
   }
 
 }

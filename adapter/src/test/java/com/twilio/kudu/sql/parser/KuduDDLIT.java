@@ -28,7 +28,6 @@ import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.client.PartialRow;
 import org.apache.kudu.client.PartitionSchema;
 import org.apache.kudu.test.KuduTestHarness;
-import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -40,6 +39,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -727,6 +727,68 @@ public class KuduDDLIT {
     validateColumnSchema(schema, "double_col", Type.DOUBLE, true, 0.0123456789d);
     validateColumnSchema(schema, "DECIMAL_COL", Type.DECIMAL, true, new BigDecimal("1234567890.123456"));
 
+  }
+
+  @Test
+  public void TestExistingTableWithNonJsonComment
+          () throws Exception {
+    // create the table
+    final List<ColumnSchema> columns = Arrays.asList(
+            new ColumnSchema.ColumnSchemaBuilder("query_id", Type.STRING).key(true).comment("Query Id").build(),
+            new ColumnSchema.ColumnSchemaBuilder("date_created", Type.UNIXTIME_MICROS).key(true).build(),
+            new ColumnSchema.ColumnSchemaBuilder("host_sid", Type.STRING).build(),
+            new ColumnSchema.ColumnSchemaBuilder("request_id", Type.STRING).build(),
+            new ColumnSchema.ColumnSchemaBuilder("dataset", Type.STRING).build(),
+            new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).build(),
+            new ColumnSchema.ColumnSchemaBuilder("is_error", Type.BOOL).build(),
+            new ColumnSchema.ColumnSchemaBuilder("user_error", Type.BOOL).build(),
+            new ColumnSchema.ColumnSchemaBuilder("http_code", Type.INT32).build(),
+            new ColumnSchema.ColumnSchemaBuilder("code", Type.INT32).build(),
+            new ColumnSchema.ColumnSchemaBuilder("error_message", Type.STRING).build(),
+            new ColumnSchema.ColumnSchemaBuilder("query_duration", Type.INT64).build(),
+            new ColumnSchema.ColumnSchemaBuilder("index_name", Type.STRING).build(),
+            new ColumnSchema.ColumnSchemaBuilder("sql", Type.STRING).build(),
+            new ColumnSchema.ColumnSchemaBuilder("index_planning_duration", Type.INT64).build(),
+            new ColumnSchema.ColumnSchemaBuilder("queue_wait_duration", Type.INT64).build(),
+            new ColumnSchema.ColumnSchemaBuilder("rows_returned_count", Type.INT64).build(),
+            new ColumnSchema.ColumnSchemaBuilder("total_rows_scanned_count", Type.INT64).build(),
+            new ColumnSchema.ColumnSchemaBuilder("total_scanner_count", Type.INT64).build(),
+            new ColumnSchema.ColumnSchemaBuilder("total_scanner_rpc_count", Type.INT64).build(),
+            new ColumnSchema.ColumnSchemaBuilder("total_scan_time", Type.INT64).build(),
+            new ColumnSchema.ColumnSchemaBuilder("scan_metrics_json", Type.STRING).build(),
+            new ColumnSchema.ColumnSchemaBuilder("execute_query_request_json", Type.STRING).build()
+    );
+
+    Schema schema = new Schema(columns);
+
+    final org.apache.kudu.client.CreateTableOptions tableOptions = new org.apache.kudu.client.CreateTableOptions()
+            .addHashPartitions(Arrays.asList("query_id"), 5)
+            .setNumReplicas(1);
+
+    KuduClient kuduClient = testHarness.getClient();
+    kuduClient.createTable("System.QueryLog", schema, tableOptions);
+
+    KuduTable kuduTable = kuduClient.openTable("System.QueryLog");
+    schema = kuduTable.getSchema();
+    validateComment(schema, "query_id", "Query Id");
+
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl = "CREATE TABLE \"my_schema.MY_TABLE_EXIST\" (" + "STRING_COL VARCHAR "
+              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+              + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
+              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+      // validate the table can be queried
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_EXIST\"");
+      assertFalse(rs.next());
+    }
   }
 
   @Test
