@@ -16,6 +16,7 @@ package com.twilio.kudu.sql;
 
 import com.google.common.collect.ImmutableMap;
 import com.twilio.kudu.sql.parser.SortOrder;
+import com.twilio.kudu.sql.parser.SqlAlterTable;
 import com.twilio.kudu.sql.parser.SqlCreateMaterializedView;
 import com.twilio.kudu.sql.parser.SqlCreateTable;
 import com.twilio.kudu.sql.schema.KuduSchema;
@@ -379,7 +380,63 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         throw new RuntimeException(e);
       }
       break;
+      case ALTER_TABLE:
+        try {
+        SqlAlterTable alterTableNode = (SqlAlterTable) node;
+        final org.apache.kudu.client.AlterTableOptions alterTableOptions = new org.apache.kudu.client.AlterTableOptions();
+        KuduTable kuduTable = kuduClient.openTable(alterTableNode.tableName.toString());
 
+        Set<String> currentColumns = new HashSet<>();
+        for(ColumnSchema cs: kuduTable.getSchema().getColumns()) {
+          currentColumns.add(cs.getName());
+        }
+
+        if(alterTableNode.isAdd) {
+          // get the column schemas from the column definition nodes
+          List<ColumnSchema> alterTableColumnSchemas = StreamSupport.stream(alterTableNode.columnDefs.spliterator(), false)
+                  .map(columnDefNode -> {
+                    SqlColumnDefNode colDefNode = ((SqlColumnDefNode) columnDefNode);
+                    ColumnSchema.ColumnSchemaBuilder builder = colDefNode.columnSchemaBuilder;
+                    if(!colDefNode.isNullable) {
+                      if(colDefNode.defaultValueExp == null) {
+                        throw new IllegalArgumentException("Default value must be specified for a non-null column : " + columnDefNode.toString());
+                      }
+                    }
+                    return builder.build();
+                  }).collect(Collectors.toList());
+
+          for (ColumnSchema columnSchema : alterTableColumnSchemas) {
+            //if ifNotExists is true and column exists , then continue;
+            if(alterTableNode.ifNotExists && currentColumns.contains(columnSchema.getName())) {
+              continue;
+            }
+            alterTableOptions.addColumn(columnSchema);
+          }
+        }
+        else {
+          Set<String> pkColumnNames = new HashSet<>();
+          for(ColumnSchema cs: kuduTable.getSchema().getPrimaryKeyColumns()) {
+            pkColumnNames.add(cs.getName());
+          }
+          for(SqlNode sqlNode: alterTableNode.columnNames.getList()) {
+            String colName = sqlNode.toString();
+            if(alterTableNode.ifExists && !currentColumns.contains(colName)) {
+              continue;
+            }
+            if(pkColumnNames.contains(colName)) {
+              throw new IllegalArgumentException("Cannot drop primary key column : " + colName);
+            }
+            alterTableOptions.dropColumn(colName);
+          }
+        }
+
+        // alter the table
+          kuduClient.alterTable(alterTableNode.tableName.toString(), alterTableOptions);
+          kuduSchema.clearCachedTableMap();
+        } catch (KuduException e) {
+          throw new RuntimeException(e);
+        }
+        break;
     default:
       throw new UnsupportedOperationException("Unsupported DDL operation " + node.getKind() + " " + node.getClass());
     }

@@ -37,6 +37,7 @@ data: {
 
     # List of keywords.
     keywords: [
+        "COLUMNS"
         "MATERIALIZED"
         "BLOCK_SIZE"
         "COLUMN_ENCODING"
@@ -382,7 +383,8 @@ data: {
     # List of methods for parsing custom SQL statements.
     statementParserMethods: [
       "SqlCreateTable()",
-      "SqlCreateMaterializedView()"
+      "SqlCreateMaterializedView()",
+      "SqlAlterTable()"
     ]
 
     # List of methods for parsing custom literals.

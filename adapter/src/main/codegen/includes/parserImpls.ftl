@@ -14,6 +14,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 -->
+
+/**
+ * Parses statement
+ *   ALTER TABLE
+ */
+SqlNode SqlAlterTable() :
+{
+    SqlParserPos pos;
+    SqlIdentifier tableName;
+    SqlNodeList columnDefs = SqlNodeList.EMPTY;
+    boolean isAdd;
+    SqlNodeList columnNames = SqlNodeList.EMPTY;
+    boolean ifNotExists = false;
+    boolean ifExists = false;
+}
+{
+    <ALTER> { pos = getPos(); }
+    <TABLE>
+    tableName = DualIdentifier()
+    (
+    <ADD> <COLUMNS> {isAdd = true;}
+    [
+             <IF> <NOT> <EXISTS> { ifNotExists = true; }
+    ]
+    <LPAREN>
+    columnDefs = ColumnDefList()
+    <RPAREN>
+    {
+        return new SqlAlterTable(pos.plus(getPos()), tableName, columnDefs, isAdd, null, ifNotExists, false);
+    }
+    |
+    <DROP> <COLUMNS> {isAdd = false;}
+    [
+             <IF> <EXISTS> { ifExists = true; }
+    ]
+    <LPAREN>
+    columnNames = ColumnNameList()
+    <RPAREN>
+    {
+        return new SqlAlterTable(pos.plus(getPos()), tableName, null, isAdd, columnNames, false, ifExists);
+    }
+    )
+}
+
 SqlNode SqlCreateMaterializedView() :
 {
      SqlParserPos pos;

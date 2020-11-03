@@ -48,6 +48,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 public class KuduDDLIT {
@@ -562,6 +563,257 @@ public class KuduDDLIT {
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
     validateColumnSchema(schema, "SUM_INT32_COL", Type.INT32, false, null);
+  }
+
+  @Test
+  public void testAlterTableIfNotExist() throws SQLException, KuduException {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" (" + "STRING_COL VARCHAR "
+              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+      // validate the table can be queried
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\"");
+      assertFalse(rs.next());
+
+      try {
+        String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" ADD COLUMNS IF NOT EXISTS (" +
+                "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
+                "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column')";
+        conn.createStatement().execute(alterDdl);
+      } catch(Exception e){
+        fail("Should not have thrown any exception");
+      }
+
+      String alterDdlAdd = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" ADD COLUMNS (" +
+              "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
+              "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column')";
+      java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
+        conn.createStatement().execute(alterDdlAdd);
+      });
+
+      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" " +
+              "ADD COLUMNS (NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT " +
+              "'abc' BLOCK_SIZE 5000 COMMENT 'this column',INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT " +
+              "'INT32 column')\": org.apache.kudu.client.NonRecoverableException: The column already exists: NEW_STRING_COL",
+              ex.getMessage());
+
+      // validate the table can be queried
+      rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\"");
+      assertFalse(rs.next());
+    }
+
+    KuduClient client = testHarness.getClient();
+    KuduTable kuduTable = client.openTable("my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS");
+
+    Schema schema = kuduTable.getSchema();
+    validateColumnSchema(schema, "NEW_STRING_COL", Type.STRING, true, "abc");
+    validateColumnSchema(schema, "INT32_COL", Type.INT32, false, -2147483648);
+  }
+
+  @Test
+  public void testAlterTableIfExist() throws SQLException, KuduException {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" (" + "STRING_COL VARCHAR "
+              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+      // validate the table can be queried
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_EXISTS\"");
+      assertFalse(rs.next());
+
+      String alterDdlDrop = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" DROP COLUMNS (" +
+              "BINARY_COL, XYZ)";
+      java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
+        conn.createStatement().execute(alterDdlDrop);
+      });
+
+      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" " +
+              "DROP COLUMNS (BINARY_COL, XYZ)\": org.apache.kudu.client.NonRecoverableException: The specified " +
+              "column does not exist: XYZ", ex.getMessage());
+
+      // validate the table can be queried
+      rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_EXISTS\"");
+      assertFalse(rs.next());
+
+     try {
+       String alterDdlDropWithExist = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" DROP COLUMNS IF EXISTS (" +
+               "BINARY_COL, XYZ)";
+       conn.createStatement().execute(alterDdlDropWithExist);
+     }catch(Exception e) {
+       fail("Should not throw an exception");
+     }
+    }
+  }
+
+  @Test
+  public void testAlterTable() throws SQLException, KuduException {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER\" (" + "STRING_COL VARCHAR "
+              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+      // validate the table can be queried
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER\"");
+      assertFalse(rs.next());
+
+      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER\" ADD COLUMNS (" +
+              "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
+              "INT8_COL TINYINT not null DEFAULT -128)";
+      conn.createStatement().execute(alterDdl);
+
+      String alterDdlDrop = "ALTER TABLE \"my_schema.MY_TABLE_ALTER\" DROP COLUMNS (" +
+              "BINARY_COL, INT32_COL)";
+      conn.createStatement().execute(alterDdlDrop);
+
+      // validate the table can be queried
+      rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER\"");
+      assertFalse(rs.next());
+    }
+
+    KuduClient client = testHarness.getClient();
+    KuduTable kuduTable = client.openTable("my_schema.MY_TABLE_ALTER");
+
+    Schema schema = kuduTable.getSchema();
+    validateColumnSchema(schema, "NEW_STRING_COL", Type.STRING, true, "abc");
+    validateColumnSchema(schema, "INT8_COL", Type.INT8, false, (byte)-128);
+
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
+      schema.getColumn("BINARY_COL");
+    });
+    assertEquals( "Unknown column: BINARY_COL", ex.getMessage());
+
+    ex = assertThrows(IllegalArgumentException.class, () -> {
+      schema.getColumn("INT32_COL");
+    });
+    assertEquals( "Unknown column: INT32_COL", ex.getMessage());
+  }
+
+  @Test
+  public void testAlterTablePK() throws SQLException, KuduException {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_PK\" (" + "STRING_COL VARCHAR "
+              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+      // validate the table can be queried
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_PK\"");
+      assertFalse(rs.next());
+
+      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_PK\" ADD COLUMNS (" +
+              "NEW_STRING_COL VARCHAR PRIMARY KEY COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
+              "INT8_COL TINYINT not null DEFAULT -128)";
+
+
+      java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
+        conn.createStatement().execute(alterDdl);
+      });
+
+      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_PK\" " +
+              "ADD COLUMNS (NEW_STRING_COL VARCHAR PRIMARY KEY COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION " +
+              "'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column',INT8_COL TINYINT not null DEFAULT -128)\": " +
+              "Key columns cannot be added", ex.getMessage());
+
+      // validate the table can be queried
+      rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_PK\"");
+      assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testAlterTableDropPKColumn() throws SQLException, KuduException {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_DROP_PK\" (" + "STRING_COL VARCHAR "
+              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+      // validate the table can be queried
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_DROP_PK\"");
+      assertFalse(rs.next());
+
+      String alterDdlDrop = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_DROP_PK\" DROP COLUMNS (" +
+              "STRING_COL)";
+
+      java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
+        conn.createStatement().execute(alterDdlDrop);
+      });
+      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_DROP_PK\" DROP COLUMNS (STRING_COL)\": Cannot drop primary key column : STRING_COL", ex.getMessage());
+
+      // validate the table can be queried
+      rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_DROP_PK\"");
+      assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testAlterTableNonNullColumn() throws SQLException, KuduException {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\" (" + "STRING_COL VARCHAR "
+              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+      conn.createStatement().execute(ddl);
+      // validate the table can be queried
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\"");
+      assertFalse(rs.next());
+
+      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\" ADD COLUMNS (" +
+              "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000," +
+              "INT8_COL TINYINT not null)";
+
+      java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
+        conn.createStatement().execute(alterDdl);
+      });
+      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\" " +
+              "ADD COLUMNS (NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' " +
+              "BLOCK_SIZE 5000,INT8_COL TINYINT not null)\": Default value must be specified for a non-null column : " +
+              "`INT8_COL`  TINYINT  NOT NULL", ex.getMessage());
+
+      // validate the table can be queried
+      rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\"");
+      assertFalse(rs.next());
+    }
   }
 
   @Test
