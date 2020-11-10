@@ -583,14 +583,10 @@ public class KuduDDLIT {
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\"");
       assertFalse(rs.next());
 
-      try {
         String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" ADD COLUMNS IF NOT EXISTS (" +
                 "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
-                "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column')";
+                "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', NEW_BOOLEAN_COL BOOLEAN NOT NULL DEFAULT FALSE)";
         conn.createStatement().execute(alterDdl);
-      } catch(Exception e){
-        fail("Should not have thrown any exception");
-      }
 
       String alterDdlAdd = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" ADD COLUMNS (" +
               "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
@@ -616,6 +612,7 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "NEW_STRING_COL", Type.STRING, true, "abc");
     validateColumnSchema(schema, "INT32_COL", Type.INT32, false, -2147483648);
+    validateColumnSchema(schema, "NEW_BOOLEAN_COL", Type.BOOL, false, Boolean.FALSE);
   }
 
   @Test

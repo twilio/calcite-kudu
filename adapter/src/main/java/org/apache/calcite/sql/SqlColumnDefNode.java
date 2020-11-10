@@ -77,7 +77,7 @@ public class SqlColumnDefNode extends AbstractSqlNode {
       if (!(encoding instanceof SqlLiteral)) {
         throw new IllegalArgumentException("Encoding should be a literal constant");
       }
-      String encodingString = ((SqlLiteral) encoding).getStringValue();
+      String encodingString = ((SqlLiteral) encoding).getValueAs(String.class);
       columnSchemaBuilder.encoding(ColumnSchema.Encoding.valueOf(encodingString));
     }
     // set the compression
@@ -85,7 +85,7 @@ public class SqlColumnDefNode extends AbstractSqlNode {
       if (!(compression instanceof SqlLiteral)) {
         throw new IllegalArgumentException("Encoding should be a literal constant");
       }
-      String compressionString = ((SqlLiteral) compression).getStringValue();
+      String compressionString = ((SqlLiteral) compression).getValueAs(String.class);
       columnSchemaBuilder.compressionAlgorithm(ColumnSchema.CompressionAlgorithm.valueOf(compressionString));
     }
     if (blockSize != -1) {
