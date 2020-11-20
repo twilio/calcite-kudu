@@ -99,7 +99,17 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
     // null
     // in constructor check it here, .get() can be costly as it is atomic.
         (cancelFlag == null || !cancelFlag.get())) {
-      scanner.nextRows().addCallbackDeferring(this);
+      final Deferred<RowResultIterator> nextRowsRpc = scanner.nextRows();
+      nextRowsRpc
+        .addCallbackDeferring(this)
+        .addErrback(new Callback<Void, Exception>() {
+            @Override
+            public Void call(Exception failure) {
+              logger.error("Closing scanner with failure and setting earlyExit", failure);
+              exitScansWithFailure(failure);
+              return null;
+            }
+          });
     } else {
       // Else -> scanner has completed, notify the consumer of rowResults
       try {
@@ -112,6 +122,16 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
         Thread.currentThread().interrupt();
       }
       scanner.close();
+    }
+  }
+
+  private void exitScansWithFailure(final Exception failure) {
+    earlyExit.set(true);
+    try {
+      rowResults.put(new CalciteScannerMessage<CalciteRow>(failure));
+    } catch (InterruptedException ignored) {
+      logger.error("Interrupted during put, moving to close scanner");
+      Thread.currentThread().interrupt();
     }
   }
 
@@ -144,26 +164,18 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
           rowResults.put(wrappedRow);
         }
       }
-    } catch (Exception | Error failure) {
+    } catch (Exception failure) {
       // Something failed, like row.getDecimal() or something of that nature.
       // this means we have to abort this scan.
       logger.error("Failed to parse out row. Setting early exit", failure);
-      earlyExit.set(true);
-      try {
-        rowResults
-            .put(new CalciteScannerMessage<CalciteRow>(new RuntimeException("Failed to parse results.", failure)));
-      } catch (InterruptedException ignored) {
-        logger.error("Interrupted during put, moving to close scanner");
-        Thread.currentThread().interrupt();
-      }
+      exitScansWithFailure(failure);
     }
 
     try {
       rowResults.put(new CalciteScannerMessage<CalciteRow>(this));
     } catch (InterruptedException ignored) {
       // Set the early exit to protect ourselves and close the scanner.
-      earlyExit.set(true);
-      scanner.close();
+      exitScansWithFailure(ignored);
       Thread.currentThread().interrupt();
     }
     return null;
