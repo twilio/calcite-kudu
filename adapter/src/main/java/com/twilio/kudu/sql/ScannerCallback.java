@@ -15,6 +15,7 @@
 package com.twilio.kudu.sql;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.concurrent.BlockingQueue;
 import com.stumbleupon.async.Callback;
 import org.apache.kudu.client.RowResultIterator;
@@ -57,12 +58,13 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
   final KuduScanStats scanStats;
   final Function1<Object, Object> projectionMapper;
   final Predicate1<Object> filterFunction;
+  final boolean isSingleObject;
 
   public ScannerCallback(final CalciteKuduTable calciteKuduTable, final AsyncKuduScanner scanner,
       final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults, final AtomicBoolean scansShouldStop,
       final AtomicBoolean cancelFlag, final Schema projectedSchema, final KuduScanStats scanStats,
       final boolean isScannerSorted, final Function1<Object, Object> projectionMapper,
-      final Predicate1<Object> filterFunction) {
+      final Predicate1<Object> filterFunction, final boolean isSingleObject) {
 
     this.scanner = scanner;
     this.rowResults = rowResults;
@@ -72,7 +74,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
     // scanners (by picking the smallest row order by primary key key columns)
     this.primaryKeyColumnsInProjection = isScannerSorted
         ? calciteKuduTable.getPrimaryKeyColumnsInProjection(projectedSchema)
-        : new ArrayList<>();
+        : Collections.emptyList();
     this.descendingSortedFieldIndices = calciteKuduTable.getDescendingColumnsIndicesInProjection(projectedSchema);
     this.scanStats = scanStats;
     // @NOTE: this can be NULL. Need to check it.
@@ -82,6 +84,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
 
     this.projectionMapper = projectionMapper;
     this.filterFunction = filterFunction;
+    this.isSingleObject = isSingleObject;
 
     logger.debug("ScannerCallback created for scanner" + scanner);
   }
@@ -149,7 +152,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
             continue;
           }
           final CalciteScannerMessage<CalciteRow> wrappedRow;
-          if (row.getSchema().getColumnCount() > 1) {
+          if (!isSingleObject) {
             wrappedRow = new CalciteScannerMessage<>(new CalciteRow(row.getSchema(),
                 ((Object[]) projectionMapper.apply(row)), primaryKeyColumnsInProjection, descendingSortedFieldIndices));
           } else {

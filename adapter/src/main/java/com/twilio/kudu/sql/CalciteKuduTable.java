@@ -232,6 +232,11 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    * @param sorted         whether to return rows in sorted order
    * @param groupByLimited indicates if the groupBy method should be counting
    *                       unique keys
+   * @param scanStats      scan stats collector
+   * @param cancelFlag     flag to indicate the query has been canceled
+   * @param projection     function to map the {@link RowResult} to calcite object
+   * @param filterFunction predicate to apply to {@link RowResult} for in memory filter
+   * @param isSingleObject boolean indicating if the projection returns Object[] or Object
    *
    * @return Enumeration on the objects, Fields conform to
    *         {@link CalciteKuduTable#getRowType}.
@@ -239,9 +244,10 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
   public KuduEnumerable executeQuery(final List<List<CalciteKuduPredicate>> predicates,
       final List<Integer> columnIndices, final long limit, final long offset, final boolean sorted,
       final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
-      final Function1<Object, Object> projection, final Predicate1<Object> filterFunction) {
+      final Function1<Object, Object> projection, final Predicate1<Object> filterFunction,
+      final boolean isSingleObject) {
     return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset, sorted, groupByLimited,
-        scanStats, cancelFlag, projection, filterFunction);
+                              scanStats, cancelFlag, projection, filterFunction, isSingleObject);
   }
 
   @Override
@@ -280,8 +286,10 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
 
     public Enumerator<T> enumerator() {
       // noinspection unchecked
-      final Enumerable<T> enumerable = (Enumerable<T>) getTable().executeQuery(Collections.emptyList(),
-          Collections.emptyList(), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false), null, null);
+      final Enumerable<T> enumerable = (Enumerable<T>) getTable().executeQuery(
+        Collections.emptyList(),
+        Collections.emptyList(), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false),
+        null, null, false);
       return enumerable.enumerator();
     }
 
@@ -301,6 +309,14 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
       return query(predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats, cancelFlag, null, null);
     }
 
+    public Enumerable<Object> query(final List<List<CalciteKuduPredicate>> predicates,
+        final List<Integer> fieldsIndices, final long limit, final long offset, final boolean sorted,
+        final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
+        final Function1<Object, Object> projection, final Predicate1<Object> filterFunction) {
+      return query(predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats, cancelFlag, projection,
+                   filterFunction, false);
+    }
+
     /**
      * This is the method that is called by Code generation to run the query. Code
      * generation happens in {@link KuduToEnumerableConverter}
@@ -308,9 +324,11 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
     public Enumerable<Object> query(final List<List<CalciteKuduPredicate>> predicates,
         final List<Integer> fieldsIndices, final long limit, final long offset, final boolean sorted,
         final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
-        final Function1<Object, Object> projection, final Predicate1<Object> filterFunction) {
-      return getTable().executeQuery(predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats,
-          cancelFlag, projection, filterFunction);
+        final Function1<Object, Object> projection, final Predicate1<Object> filterFunction,
+        final boolean isSingleObject) {
+      return getTable().executeQuery(
+        predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats,
+        cancelFlag, projection, filterFunction, isSingleObject);
     }
 
     public Enumerable<Object> mutateTuples(final List<Integer> columnIndexes, final List<List<RexLiteral>> tuples) {

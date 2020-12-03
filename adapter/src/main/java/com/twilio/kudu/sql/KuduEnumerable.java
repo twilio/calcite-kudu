@@ -88,6 +88,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
   private final CalciteKuduTable calciteKuduTable;
 
   private final Function1<Object, Object> projection;
+  private final boolean isSingleObject;
   private final Predicate1<Object> filterFunction;
 
   /**
@@ -115,7 +116,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
   public KuduEnumerable(final List<List<CalciteKuduPredicate>> predicates, final List<Integer> columnIndices,
       final AsyncKuduClient client, final CalciteKuduTable calciteKuduTable, final long limit, final long offset,
       final boolean sort, final boolean groupBySorted, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
-      final Function1<Object, Object> projection, final Predicate1<Object> filterFunction) {
+      final Function1<Object, Object> projection, final Predicate1<Object> filterFunction,
+      final boolean isSingleObject) {
     this.scansShouldStop = new AtomicBoolean(false);
     this.cancelFlag = cancelFlag;
     this.limit = limit;
@@ -136,6 +138,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     this.client = client;
     this.calciteKuduTable = calciteKuduTable;
     this.filterFunction = filterFunction;
+    this.isSingleObject = isSingleObject;
   }
 
   @VisibleForTesting
@@ -372,7 +375,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
       final List<ScannerCallback> callbacks = scanners.stream().map(scanner -> {
         final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>();
         return new ScannerCallback(calciteKuduTable, scanner, rowResults, scansShouldStop, cancelFlag, projectedSchema,
-            scanStats, true, projection, filterFunction);
+                                   scanStats, true, projection, filterFunction, isSingleObject);
       }).collect(Collectors.toList());
       callbacks.stream().forEach(callback -> callback.nextBatch());
 
@@ -383,7 +386,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages = new LinkedBlockingQueue<>();
     scanners.stream().map(scanner -> {
       return new ScannerCallback(calciteKuduTable, scanner, messages, scansShouldStop, cancelFlag, projectedSchema,
-          scanStats, false, projection, filterFunction);
+                                 scanStats, false, projection, filterFunction, isSingleObject);
     }).forEach(callback -> callback.nextBatch());
 
     return unsortedEnumerator(scanners, messages);
@@ -527,7 +530,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     final List<List<CalciteKuduPredicate>> merged = KuduPredicatePushDownVisitor.mergePredicateLists(SqlKind.AND,
         this.predicates, conjunctions);
     return new KuduEnumerable(merged, columnIndices, client, calciteKuduTable, limit, offset, sort, groupBySorted,
-        scanStats, cancelFlag, projection, filterFunction);
+                              scanStats, cancelFlag, projection, filterFunction, isSingleObject);
   }
 
   /**

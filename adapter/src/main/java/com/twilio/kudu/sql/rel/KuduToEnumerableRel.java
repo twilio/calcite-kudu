@@ -213,10 +213,14 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
 
     final Expression fields = list.append("kuduFields", implementor.stash(kuduColumnIndices, List.class));
 
-    Expression enumerable = list.append("enumerable",
+    // If the output type has a Single column, inform the ScannerCallback.
+    final Expression isSingleObject = Expressions.constant(
+        physType.getRowType().getFieldCount() == 1);
+
+    final Expression enumerable = list.append("enumerable",
         Expressions.call(table, KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit, offset, sorted,
             Expressions.constant(kuduImplementor.groupByLimited), scanStats, cancelBoolean, mapFunction,
-            filterFunction));
+            filterFunction, isSingleObject));
 
     Hook.QUERY_PLAN.run(predicates);
     list.add(Expressions.return_(null, enumerable));

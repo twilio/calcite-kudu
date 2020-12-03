@@ -22,7 +22,6 @@ import org.apache.kudu.client.PartialRow;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.test.KuduTestHarness;
-import org.slf4j.Logger;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -34,7 +33,6 @@ import org.apache.kudu.Type;
 import org.apache.kudu.client.AsyncKuduSession;
 
 import java.util.List;
-import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -53,8 +51,6 @@ import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
 public final class JDBCQueryIT {
-  private static final Logger logger = LoggerFactory.getLogger(JDBCQueryIT.class);
-
   public static String FIRST_SID = "SM1";
   public static String SECOND_SID = "SM2";
   public static String THIRD_SID = "SM3";
