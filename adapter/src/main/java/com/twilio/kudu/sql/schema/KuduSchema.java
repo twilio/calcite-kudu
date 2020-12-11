@@ -74,13 +74,14 @@ public final class KuduSchema extends AbstractSchema {
     }
 
     Map<String, List<CubeTableInfo>> factToCubeListMap = new HashMap<>();
-    //populate the cubetables which were created using DDL statements.
-    for(String tableName: tableNames) {
-      //cube table
+    // populate the cubetables which were created using DDL statements.
+    for (String tableName : tableNames) {
+      // cube table
       String[] tableNameSplit = tableName.split("-");
       if (tableNameSplit.length == 4 && tableName.endsWith("Aggregation")) {
-        //Cube table name is of the form TableName-CubeName-Interval-Aggregation
-        CubeTableInfo cubeTableInfo = new CubeTableInfo(tableName, CubeTableInfo.EventTimeAggregationType.valueOf(tableNameSplit[2].toLowerCase()));
+        // Cube table name is of the form TableName-CubeName-Interval-Aggregation
+        CubeTableInfo cubeTableInfo = new CubeTableInfo(tableName,
+            CubeTableInfo.EventTimeAggregationType.valueOf(tableNameSplit[2].toLowerCase()));
         String factTableName = tableNameSplit[0];
         if (!factToCubeListMap.containsKey(factTableName)) {
           factToCubeListMap.put(factTableName, new ArrayList<>());
@@ -89,8 +90,9 @@ public final class KuduSchema extends AbstractSchema {
       }
     }
 
-    //populate kudutableMetadatMap for fact tables that were created using DDL statements.
-    for(String tableName: tableNames) {
+    // populate kudutableMetadatMap for fact tables that were created using DDL
+    // statements.
+    for (String tableName : tableNames) {
       List<String> descendingOrderedColumns = new ArrayList<>();
       String timeStampColumnName = "";
       if (!tableName.endsWith("Aggregation")) {
@@ -99,13 +101,13 @@ public final class KuduSchema extends AbstractSchema {
           for (ColumnSchema columnSchema : kuduTable.getSchema().getColumns()) {
             String comment = columnSchema.getComment();
             JSONObject jsonObject = getJsonObject(comment);
-            if (!comment.isEmpty() && jsonObject!=null) {
+            if (!comment.isEmpty() && jsonObject != null) {
               if (jsonObject.has("isTimeStampColumn") && jsonObject.getBoolean("isTimeStampColumn")) {
-                  timeStampColumnName = columnSchema.getName();
+                timeStampColumnName = columnSchema.getName();
               }
 
               if (jsonObject.has("isDescendingSortOrder") && jsonObject.getBoolean("isDescendingSortOrder")) {
-                  descendingOrderedColumns.add(columnSchema.getName());
+                descendingOrderedColumns.add(columnSchema.getName());
               }
             }
           }
@@ -113,18 +115,15 @@ public final class KuduSchema extends AbstractSchema {
           logger.error("Unable to open table " + tableName, e);
         }
 
-        if(!timeStampColumnName.isEmpty() && !this.kuduTableMetadataMap.containsKey(tableName))
-        {
-          if(factToCubeListMap.get(tableName) != null)
-          {
-            this.kuduTableMetadataMap.put(tableName, new KuduTableMetadata.KuduTableMetadataBuilder()
-                    .setTimestampColumnName(timeStampColumnName)
+        if (!timeStampColumnName.isEmpty() && !this.kuduTableMetadataMap.containsKey(tableName)) {
+          if (factToCubeListMap.get(tableName) != null) {
+            this.kuduTableMetadataMap.put(tableName,
+                new KuduTableMetadata.KuduTableMetadataBuilder().setTimestampColumnName(timeStampColumnName)
                     .setCubeTableInfoList(factToCubeListMap.get(tableName))
                     .setDescendingOrderedColumnNames(descendingOrderedColumns).build());
-          }else
-          {
-            this.kuduTableMetadataMap.put(tableName, new KuduTableMetadata.KuduTableMetadataBuilder()
-                    .setTimestampColumnName(timeStampColumnName)
+          } else {
+            this.kuduTableMetadataMap.put(tableName,
+                new KuduTableMetadata.KuduTableMetadataBuilder().setTimestampColumnName(timeStampColumnName)
                     .setDescendingOrderedColumnNames(descendingOrderedColumns).build());
           }
         }

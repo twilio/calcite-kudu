@@ -102,12 +102,11 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
             // json string in comment.
             boolean isDescendingSortOrder = ((SqlColumnDefNode) columnDefNode).sortOrder.equals(SortOrder.DESC);
             boolean isTimeStampColumn = ((SqlColumnDefNode) columnDefNode).isRowTimestamp;
-            
-            if(isDescendingSortOrder &&  isTimeStampColumn)
-            {
+
+            if (isDescendingSortOrder && isTimeStampColumn) {
               isRowTimeStampColDesc.set(true);
             }
-            
+
             SqlNode commentNode = ((SqlColumnDefNode) columnDefNode).comment;
             if (isTimeStampColumn || isDescendingSortOrder || commentNode != null) {
               JSONObject jsonObject = new JSONObject();
@@ -160,11 +159,13 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         PartialRow lowerBound = tableSchema.newPartialRow();
         PartialRow upperBound = tableSchema.newPartialRow();
 
-        //Set range partition to EPOCH.MAX - minvalue for DESC case.
-        if(isRowTimeStampColDesc.get()) {
-          lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS-Long.MIN_VALUE));
-          upperBound.addTimestamp(rowTimestampColumn, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS-Long.MIN_VALUE + 1));
-        }else {
+        // Set range partition to EPOCH.MAX - minvalue for DESC case.
+        if (isRowTimeStampColDesc.get()) {
+          lowerBound.addTimestamp(rowTimestampColumn,
+              new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
+          upperBound.addTimestamp(rowTimestampColumn,
+              new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
+        } else {
           lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
           upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
         }
@@ -356,16 +357,17 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         // that column so that we can add new partitions later
         if (!rangePartitionCols.isEmpty()) {
           String rowTimestampColumn = rangePartitionCols.get(0);
-          CalciteKuduTable calciteTable = (CalciteKuduTable)kuduSchema.getTable(kuduTable.getName());
+          CalciteKuduTable calciteTable = (CalciteKuduTable) kuduSchema.getTable(kuduTable.getName());
           PartialRow lowerBound = cubeSchema.newPartialRow();
           PartialRow upperBound = cubeSchema.newPartialRow();
 
-          //Set range partition to EPOCH.MAX - minvalue for DESC case.
-          if(calciteTable.isColumnOrderedDesc(rowTimestampColumn)) {
-            lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS-Long.MIN_VALUE));
-            upperBound.addTimestamp(rowTimestampColumn, new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS-Long.MIN_VALUE + 1));
-          }else
-          {
+          // Set range partition to EPOCH.MAX - minvalue for DESC case.
+          if (calciteTable.isColumnOrderedDesc(rowTimestampColumn)) {
+            lowerBound.addTimestamp(rowTimestampColumn,
+                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
+            upperBound.addTimestamp(rowTimestampColumn,
+                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
+          } else {
             lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
             upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
           }
@@ -380,50 +382,50 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         throw new RuntimeException(e);
       }
       break;
-      case ALTER_TABLE:
-        try {
+    case ALTER_TABLE:
+      try {
         SqlAlterTable alterTableNode = (SqlAlterTable) node;
         final org.apache.kudu.client.AlterTableOptions alterTableOptions = new org.apache.kudu.client.AlterTableOptions();
         KuduTable kuduTable = kuduClient.openTable(alterTableNode.tableName.toString());
 
         Set<String> currentColumns = new HashSet<>();
-        for(ColumnSchema cs: kuduTable.getSchema().getColumns()) {
+        for (ColumnSchema cs : kuduTable.getSchema().getColumns()) {
           currentColumns.add(cs.getName());
         }
 
-        if(alterTableNode.isAdd) {
+        if (alterTableNode.isAdd) {
           // get the column schemas from the column definition nodes
-          List<ColumnSchema> alterTableColumnSchemas = StreamSupport.stream(alterTableNode.columnDefs.spliterator(), false)
-                  .map(columnDefNode -> {
-                    SqlColumnDefNode colDefNode = ((SqlColumnDefNode) columnDefNode);
-                    ColumnSchema.ColumnSchemaBuilder builder = colDefNode.columnSchemaBuilder;
-                    if(!colDefNode.isNullable) {
-                      if(colDefNode.defaultValueExp == null) {
-                        throw new IllegalArgumentException("Default value must be specified for a non-null column : " + columnDefNode.toString());
-                      }
-                    }
-                    return builder.build();
-                  }).collect(Collectors.toList());
+          List<ColumnSchema> alterTableColumnSchemas = StreamSupport
+              .stream(alterTableNode.columnDefs.spliterator(), false).map(columnDefNode -> {
+                SqlColumnDefNode colDefNode = ((SqlColumnDefNode) columnDefNode);
+                ColumnSchema.ColumnSchemaBuilder builder = colDefNode.columnSchemaBuilder;
+                if (!colDefNode.isNullable) {
+                  if (colDefNode.defaultValueExp == null) {
+                    throw new IllegalArgumentException(
+                        "Default value must be specified for a non-null column : " + columnDefNode.toString());
+                  }
+                }
+                return builder.build();
+              }).collect(Collectors.toList());
 
           for (ColumnSchema columnSchema : alterTableColumnSchemas) {
-            //if ifNotExists is true and column exists , then continue;
-            if(alterTableNode.ifNotExists && currentColumns.contains(columnSchema.getName())) {
+            // if ifNotExists is true and column exists , then continue;
+            if (alterTableNode.ifNotExists && currentColumns.contains(columnSchema.getName())) {
               continue;
             }
             alterTableOptions.addColumn(columnSchema);
           }
-        }
-        else {
+        } else {
           Set<String> pkColumnNames = new HashSet<>();
-          for(ColumnSchema cs: kuduTable.getSchema().getPrimaryKeyColumns()) {
+          for (ColumnSchema cs : kuduTable.getSchema().getPrimaryKeyColumns()) {
             pkColumnNames.add(cs.getName());
           }
-          for(SqlNode sqlNode: alterTableNode.columnNames.getList()) {
+          for (SqlNode sqlNode : alterTableNode.columnNames.getList()) {
             String colName = sqlNode.toString();
-            if(alterTableNode.ifExists && !currentColumns.contains(colName)) {
+            if (alterTableNode.ifExists && !currentColumns.contains(colName)) {
               continue;
             }
-            if(pkColumnNames.contains(colName)) {
+            if (pkColumnNames.contains(colName)) {
               throw new IllegalArgumentException("Cannot drop primary key column : " + colName);
             }
             alterTableOptions.dropColumn(colName);
@@ -431,12 +433,12 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         }
 
         // alter the table
-          kuduClient.alterTable(alterTableNode.tableName.toString(), alterTableOptions);
-          kuduSchema.clearCachedTableMap();
-        } catch (KuduException e) {
-          throw new RuntimeException(e);
-        }
-        break;
+        kuduClient.alterTable(alterTableNode.tableName.toString(), alterTableOptions);
+        kuduSchema.clearCachedTableMap();
+      } catch (KuduException e) {
+        throw new RuntimeException(e);
+      }
+      break;
     default:
       throw new UnsupportedOperationException("Unsupported DDL operation " + node.getKind() + " " + node.getClass());
     }

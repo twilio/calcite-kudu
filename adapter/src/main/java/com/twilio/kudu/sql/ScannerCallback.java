@@ -103,16 +103,14 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
     // in constructor check it here, .get() can be costly as it is atomic.
         (cancelFlag == null || !cancelFlag.get())) {
       final Deferred<RowResultIterator> nextRowsRpc = scanner.nextRows();
-      nextRowsRpc
-        .addCallbackDeferring(this)
-        .addErrback(new Callback<Void, Exception>() {
-            @Override
-            public Void call(Exception failure) {
-              logger.error("Closing scanner with failure and setting earlyExit", failure);
-              exitScansWithFailure(failure);
-              return null;
-            }
-          });
+      nextRowsRpc.addCallbackDeferring(this).addErrback(new Callback<Void, Exception>() {
+        @Override
+        public Void call(Exception failure) {
+          logger.error("Closing scanner with failure and setting earlyExit", failure);
+          exitScansWithFailure(failure);
+          return null;
+        }
+      });
     } else {
       // Else -> scanner has completed, notify the consumer of rowResults
       try {

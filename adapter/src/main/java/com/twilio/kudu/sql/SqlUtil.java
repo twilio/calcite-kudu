@@ -138,16 +138,16 @@ public class SqlUtil {
       }
       break;
     case BOOL:
-        if (defaultValue instanceof Boolean) {
-            return (Boolean) defaultValue;
-        }
+      if (defaultValue instanceof Boolean) {
+        return (Boolean) defaultValue;
+      }
     case DATE:
-        // @TODO: parse the string using a date formatter and return:
-        // 32-bit days since the Unix epoch
-        break;
+      // @TODO: parse the string using a date formatter and return:
+      // 32-bit days since the Unix epoch
+      break;
     }
     throw new UnsupportedOperationException("Type " + defaultValue.getClass() + " of " + "value " + defaultValue
-                                            + " is not a valid default value for kudu type " + kuduType);
+        + " is not a valid default value for kudu type " + kuduType);
 
   }
 }
