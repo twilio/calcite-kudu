@@ -43,7 +43,8 @@ public class SqlAlterTable extends SqlCall {
   public final boolean ifExists;
 
   /** Creates a ALTER TABLE. */
-  public SqlAlterTable(SqlParserPos pos, SqlIdentifier tableName, SqlNodeList columnDefs, boolean isAdd, SqlNodeList columnNames, boolean ifNotExists, boolean ifExists) {
+  public SqlAlterTable(SqlParserPos pos, SqlIdentifier tableName, SqlNodeList columnDefs, boolean isAdd,
+      SqlNodeList columnNames, boolean ifNotExists, boolean ifExists) {
     super(pos);
     this.operator = new SqlDdlOperator("ALTER TABLE", SqlKind.ALTER_TABLE);
     this.tableName = tableName;
@@ -66,7 +67,7 @@ public class SqlAlterTable extends SqlCall {
   public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
     writer.keyword(operator.getName());
     tableName.unparse(writer, 0, 0);
-    if(isAdd) {
+    if (isAdd) {
       writer.keyword("ADD COLUMNS");
       if (ifNotExists) {
         writer.keyword("IF NOT EXISTS");
@@ -74,8 +75,7 @@ public class SqlAlterTable extends SqlCall {
       writer.print("(");
       ((SqlDdlOperator) getOperator()).unparseListClause(writer, columnDefs);
       writer.print(")");
-    }
-    else {
+    } else {
       writer.keyword("DROP COLUMNS");
       if (ifExists) {
         writer.keyword("IF EXISTS");

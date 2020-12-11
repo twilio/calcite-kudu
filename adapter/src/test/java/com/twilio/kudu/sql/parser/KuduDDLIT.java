@@ -507,25 +507,25 @@ public class KuduDDLIT {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
 
       String ddl = "CREATE TABLE \"my_schema.MY_TAB_8\" (" + "STRING_COL VARCHAR "
-              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
-              + "UNIXTIME_MICROS_COL TIMESTAMP DESC DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
-              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
-              + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
-              + "INT32_COL INTEGER not null DEFAULT -2147483648, " + "BINARY_COL VARBINARY DEFAULT x'AB',"
-              + "FLOAT_COL FLOAT DEFAULT 0.0123456789," + "\"double_col\" DOUBLE DEFAULT 0.0123456789,"
-              + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
-              + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
-              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "UNIXTIME_MICROS_COL TIMESTAMP DESC DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+          + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+          + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
+          + "INT32_COL INTEGER not null DEFAULT -2147483648, " + "BINARY_COL VARBINARY DEFAULT x'AB',"
+          + "FLOAT_COL FLOAT DEFAULT 0.0123456789," + "\"double_col\" DOUBLE DEFAULT 0.0123456789,"
+          + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+          + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"LinkName\" "
-              + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) " + "FROM \"my_schema.MY_TAB_8\" "
-              + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DaY)";
+          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) " + "FROM \"my_schema.MY_TAB_8\" "
+          + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DaY)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
       ResultSet rs = conn.createStatement()
-              .executeQuery("SELECT * FROM \"my_schema.MY_TAB_8-LinkName-Day-Aggregation\"");
+          .executeQuery("SELECT * FROM \"my_schema.MY_TAB_8-LinkName-Day-Aggregation\"");
       assertFalse(rs.next());
     }
 
@@ -543,7 +543,7 @@ public class KuduDDLIT {
 
     // validate table options
     Map<String, String> expectedConfig = ImmutableMap.<String, String>builder()
-            .put("kudu.table.history_max_age_sec", "7200").build();
+        .put("kudu.table.history_max_age_sec", "7200").build();
     assertEquals("Unexpected extra configs", expectedConfig, kuduTable.getExtraConfig());
 
     // validate primary key
@@ -569,37 +569,37 @@ public class KuduDDLIT {
   public void testAlterTableIfNotExist() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" (" + "STRING_COL VARCHAR "
-              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
-              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
-              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
-              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
-              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
-              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
-              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
-              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+          + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+          + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+          + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+          + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\"");
       assertFalse(rs.next());
 
-        String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" ADD COLUMNS IF NOT EXISTS (" +
-                "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
-                "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', NEW_BOOLEAN_COL BOOLEAN NOT NULL DEFAULT FALSE)";
-        conn.createStatement().execute(alterDdl);
+      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" ADD COLUMNS IF NOT EXISTS ("
+          + "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column',"
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', NEW_BOOLEAN_COL BOOLEAN NOT NULL DEFAULT FALSE)";
+      conn.createStatement().execute(alterDdl);
 
-      String alterDdlAdd = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" ADD COLUMNS (" +
-              "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
-              "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column')";
+      String alterDdlAdd = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" ADD COLUMNS ("
+          + "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column',"
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column')";
       java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
         conn.createStatement().execute(alterDdlAdd);
       });
 
-      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" " +
-              "ADD COLUMNS (NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT " +
-              "'abc' BLOCK_SIZE 5000 COMMENT 'this column',INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT " +
-              "'INT32 column')\": org.apache.kudu.client.NonRecoverableException: The column already exists: NEW_STRING_COL",
-              ex.getMessage());
+      assertEquals("Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\" "
+          + "ADD COLUMNS (NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT "
+          + "'abc' BLOCK_SIZE 5000 COMMENT 'this column',INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT "
+          + "'INT32 column')\": org.apache.kudu.client.NonRecoverableException: The column already exists: NEW_STRING_COL",
+          ex.getMessage());
 
       // validate the table can be queried
       rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\"");
@@ -619,41 +619,40 @@ public class KuduDDLIT {
   public void testAlterTableIfExist() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" (" + "STRING_COL VARCHAR "
-              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
-              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
-              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
-              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
-              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
-              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
-              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
-              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+          + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+          + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+          + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+          + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_EXISTS\"");
       assertFalse(rs.next());
 
-      String alterDdlDrop = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" DROP COLUMNS (" +
-              "BINARY_COL, XYZ)";
+      String alterDdlDrop = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" DROP COLUMNS (" + "BINARY_COL, XYZ)";
       java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
         conn.createStatement().execute(alterDdlDrop);
       });
 
-      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" " +
-              "DROP COLUMNS (BINARY_COL, XYZ)\": org.apache.kudu.client.NonRecoverableException: The specified " +
-              "column does not exist: XYZ", ex.getMessage());
+      assertEquals("Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" "
+          + "DROP COLUMNS (BINARY_COL, XYZ)\": org.apache.kudu.client.NonRecoverableException: The specified "
+          + "column does not exist: XYZ", ex.getMessage());
 
       // validate the table can be queried
       rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_EXISTS\"");
       assertFalse(rs.next());
 
-     try {
-       String alterDdlDropWithExist = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" DROP COLUMNS IF EXISTS (" +
-               "BINARY_COL, XYZ)";
-       conn.createStatement().execute(alterDdlDropWithExist);
-     }catch(Exception e) {
-       fail("Should not throw an exception");
-     }
+      try {
+        String alterDdlDropWithExist = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_IF_EXISTS\" DROP COLUMNS IF EXISTS ("
+            + "BINARY_COL, XYZ)";
+        conn.createStatement().execute(alterDdlDropWithExist);
+      } catch (Exception e) {
+        fail("Should not throw an exception");
+      }
     }
   }
 
@@ -661,27 +660,26 @@ public class KuduDDLIT {
   public void testAlterTable() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER\" (" + "STRING_COL VARCHAR "
-              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
-              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
-              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
-              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
-              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
-              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
-              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
-              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+          + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+          + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+          + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+          + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER\"");
       assertFalse(rs.next());
 
-      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER\" ADD COLUMNS (" +
-              "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
-              "INT8_COL TINYINT not null DEFAULT -128)";
+      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER\" ADD COLUMNS ("
+          + "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column',"
+          + "INT8_COL TINYINT not null DEFAULT -128)";
       conn.createStatement().execute(alterDdl);
 
-      String alterDdlDrop = "ALTER TABLE \"my_schema.MY_TABLE_ALTER\" DROP COLUMNS (" +
-              "BINARY_COL, INT32_COL)";
+      String alterDdlDrop = "ALTER TABLE \"my_schema.MY_TABLE_ALTER\" DROP COLUMNS (" + "BINARY_COL, INT32_COL)";
       conn.createStatement().execute(alterDdlDrop);
 
       // validate the table can be queried
@@ -694,50 +692,49 @@ public class KuduDDLIT {
 
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "NEW_STRING_COL", Type.STRING, true, "abc");
-    validateColumnSchema(schema, "INT8_COL", Type.INT8, false, (byte)-128);
+    validateColumnSchema(schema, "INT8_COL", Type.INT8, false, (byte) -128);
 
     IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
       schema.getColumn("BINARY_COL");
     });
-    assertEquals( "Unknown column: BINARY_COL", ex.getMessage());
+    assertEquals("Unknown column: BINARY_COL", ex.getMessage());
 
     ex = assertThrows(IllegalArgumentException.class, () -> {
       schema.getColumn("INT32_COL");
     });
-    assertEquals( "Unknown column: INT32_COL", ex.getMessage());
+    assertEquals("Unknown column: INT32_COL", ex.getMessage());
   }
 
   @Test
   public void testAlterTablePK() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_PK\" (" + "STRING_COL VARCHAR "
-              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
-              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
-              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
-              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
-              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
-              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
-              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
-              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+          + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+          + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+          + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+          + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_PK\"");
       assertFalse(rs.next());
 
-      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_PK\" ADD COLUMNS (" +
-              "NEW_STRING_COL VARCHAR PRIMARY KEY COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column'," +
-              "INT8_COL TINYINT not null DEFAULT -128)";
-
+      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_PK\" ADD COLUMNS ("
+          + "NEW_STRING_COL VARCHAR PRIMARY KEY COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column',"
+          + "INT8_COL TINYINT not null DEFAULT -128)";
 
       java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
         conn.createStatement().execute(alterDdl);
       });
 
-      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_PK\" " +
-              "ADD COLUMNS (NEW_STRING_COL VARCHAR PRIMARY KEY COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION " +
-              "'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column',INT8_COL TINYINT not null DEFAULT -128)\": " +
-              "Key columns cannot be added", ex.getMessage());
+      assertEquals("Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_PK\" "
+          + "ADD COLUMNS (NEW_STRING_COL VARCHAR PRIMARY KEY COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION "
+          + "'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000 COMMENT 'this column',INT8_COL TINYINT not null DEFAULT -128)\": "
+          + "Key columns cannot be added", ex.getMessage());
 
       // validate the table can be queried
       rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_PK\"");
@@ -749,27 +746,28 @@ public class KuduDDLIT {
   public void testAlterTableDropPKColumn() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_DROP_PK\" (" + "STRING_COL VARCHAR "
-              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
-              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
-              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
-              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
-              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
-              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
-              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
-              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+          + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+          + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+          + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+          + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_DROP_PK\"");
       assertFalse(rs.next());
 
-      String alterDdlDrop = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_DROP_PK\" DROP COLUMNS (" +
-              "STRING_COL)";
+      String alterDdlDrop = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_DROP_PK\" DROP COLUMNS (" + "STRING_COL)";
 
       java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
         conn.createStatement().execute(alterDdlDrop);
       });
-      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_DROP_PK\" DROP COLUMNS (STRING_COL)\": Cannot drop primary key column : STRING_COL", ex.getMessage());
+      assertEquals(
+          "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_DROP_PK\" DROP COLUMNS (STRING_COL)\": Cannot drop primary key column : STRING_COL",
+          ex.getMessage());
 
       // validate the table can be queried
       rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_DROP_PK\"");
@@ -781,31 +779,31 @@ public class KuduDDLIT {
   public void testAlterTableNonNullColumn() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\" (" + "STRING_COL VARCHAR "
-              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
-              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
-              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
-              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
-              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
-              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
-              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
-              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+          + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+          + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+          + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+          + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\"");
       assertFalse(rs.next());
 
-      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\" ADD COLUMNS (" +
-              "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000," +
-              "INT8_COL TINYINT not null)";
+      String alterDdl = "ALTER TABLE \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\" ADD COLUMNS ("
+          + "NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000,"
+          + "INT8_COL TINYINT not null)";
 
       java.sql.SQLException ex = assertThrows(java.sql.SQLException.class, () -> {
         conn.createStatement().execute(alterDdl);
       });
-      assertEquals( "Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\" " +
-              "ADD COLUMNS (NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' " +
-              "BLOCK_SIZE 5000,INT8_COL TINYINT not null)\": Default value must be specified for a non-null column : " +
-              "`INT8_COL`  TINYINT  NOT NULL", ex.getMessage());
+      assertEquals("Error while executing SQL \"ALTER TABLE \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\" "
+          + "ADD COLUMNS (NEW_STRING_COL VARCHAR COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' "
+          + "BLOCK_SIZE 5000,INT8_COL TINYINT not null)\": Default value must be specified for a non-null column : "
+          + "`INT8_COL`  TINYINT  NOT NULL", ex.getMessage());
 
       // validate the table can be queried
       rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\"");
@@ -932,9 +930,9 @@ public class KuduDDLIT {
     assertEquals("Unexpected number of hash buckets", 17, hashBucketSchemas.get(0).getNumBuckets());
     assertEquals("Unexpected hash partition columns", Lists.newArrayList(0), hashBucketSchemas.get(0).getColumnIds());
 
-    //validate range partitioning
+    // validate range partitioning
     PartitionSchema.RangeSchema rangeSchema = kuduTable.getPartitionSchema().getRangeSchema();
-    assertEquals(rangeSchema.getColumnIds().size(),1);
+    assertEquals(rangeSchema.getColumnIds().size(), 1);
 
     // validate replicas
     assertEquals("Unexpected number of replicas", 1, kuduTable.getNumReplicas());
@@ -979,40 +977,37 @@ public class KuduDDLIT {
   }
 
   @Test
-  public void TestExistingTableWithNonJsonComment
-          () throws Exception {
+  public void TestExistingTableWithNonJsonComment() throws Exception {
     // create the table
     final List<ColumnSchema> columns = Arrays.asList(
-            new ColumnSchema.ColumnSchemaBuilder("query_id", Type.STRING).key(true).comment("Query Id").build(),
-            new ColumnSchema.ColumnSchemaBuilder("date_created", Type.UNIXTIME_MICROS).key(true).build(),
-            new ColumnSchema.ColumnSchemaBuilder("host_sid", Type.STRING).build(),
-            new ColumnSchema.ColumnSchemaBuilder("request_id", Type.STRING).build(),
-            new ColumnSchema.ColumnSchemaBuilder("dataset", Type.STRING).build(),
-            new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).build(),
-            new ColumnSchema.ColumnSchemaBuilder("is_error", Type.BOOL).build(),
-            new ColumnSchema.ColumnSchemaBuilder("user_error", Type.BOOL).build(),
-            new ColumnSchema.ColumnSchemaBuilder("http_code", Type.INT32).build(),
-            new ColumnSchema.ColumnSchemaBuilder("code", Type.INT32).build(),
-            new ColumnSchema.ColumnSchemaBuilder("error_message", Type.STRING).build(),
-            new ColumnSchema.ColumnSchemaBuilder("query_duration", Type.INT64).build(),
-            new ColumnSchema.ColumnSchemaBuilder("index_name", Type.STRING).build(),
-            new ColumnSchema.ColumnSchemaBuilder("sql", Type.STRING).build(),
-            new ColumnSchema.ColumnSchemaBuilder("index_planning_duration", Type.INT64).build(),
-            new ColumnSchema.ColumnSchemaBuilder("queue_wait_duration", Type.INT64).build(),
-            new ColumnSchema.ColumnSchemaBuilder("rows_returned_count", Type.INT64).build(),
-            new ColumnSchema.ColumnSchemaBuilder("total_rows_scanned_count", Type.INT64).build(),
-            new ColumnSchema.ColumnSchemaBuilder("total_scanner_count", Type.INT64).build(),
-            new ColumnSchema.ColumnSchemaBuilder("total_scanner_rpc_count", Type.INT64).build(),
-            new ColumnSchema.ColumnSchemaBuilder("total_scan_time", Type.INT64).build(),
-            new ColumnSchema.ColumnSchemaBuilder("scan_metrics_json", Type.STRING).build(),
-            new ColumnSchema.ColumnSchemaBuilder("execute_query_request_json", Type.STRING).build()
-    );
+        new ColumnSchema.ColumnSchemaBuilder("query_id", Type.STRING).key(true).comment("Query Id").build(),
+        new ColumnSchema.ColumnSchemaBuilder("date_created", Type.UNIXTIME_MICROS).key(true).build(),
+        new ColumnSchema.ColumnSchemaBuilder("host_sid", Type.STRING).build(),
+        new ColumnSchema.ColumnSchemaBuilder("request_id", Type.STRING).build(),
+        new ColumnSchema.ColumnSchemaBuilder("dataset", Type.STRING).build(),
+        new ColumnSchema.ColumnSchemaBuilder("account_sid", Type.STRING).build(),
+        new ColumnSchema.ColumnSchemaBuilder("is_error", Type.BOOL).build(),
+        new ColumnSchema.ColumnSchemaBuilder("user_error", Type.BOOL).build(),
+        new ColumnSchema.ColumnSchemaBuilder("http_code", Type.INT32).build(),
+        new ColumnSchema.ColumnSchemaBuilder("code", Type.INT32).build(),
+        new ColumnSchema.ColumnSchemaBuilder("error_message", Type.STRING).build(),
+        new ColumnSchema.ColumnSchemaBuilder("query_duration", Type.INT64).build(),
+        new ColumnSchema.ColumnSchemaBuilder("index_name", Type.STRING).build(),
+        new ColumnSchema.ColumnSchemaBuilder("sql", Type.STRING).build(),
+        new ColumnSchema.ColumnSchemaBuilder("index_planning_duration", Type.INT64).build(),
+        new ColumnSchema.ColumnSchemaBuilder("queue_wait_duration", Type.INT64).build(),
+        new ColumnSchema.ColumnSchemaBuilder("rows_returned_count", Type.INT64).build(),
+        new ColumnSchema.ColumnSchemaBuilder("total_rows_scanned_count", Type.INT64).build(),
+        new ColumnSchema.ColumnSchemaBuilder("total_scanner_count", Type.INT64).build(),
+        new ColumnSchema.ColumnSchemaBuilder("total_scanner_rpc_count", Type.INT64).build(),
+        new ColumnSchema.ColumnSchemaBuilder("total_scan_time", Type.INT64).build(),
+        new ColumnSchema.ColumnSchemaBuilder("scan_metrics_json", Type.STRING).build(),
+        new ColumnSchema.ColumnSchemaBuilder("execute_query_request_json", Type.STRING).build());
 
     Schema schema = new Schema(columns);
 
     final org.apache.kudu.client.CreateTableOptions tableOptions = new org.apache.kudu.client.CreateTableOptions()
-            .addHashPartitions(Arrays.asList("query_id"), 5)
-            .setNumReplicas(1);
+        .addHashPartitions(Arrays.asList("query_id"), 5).setNumReplicas(1);
 
     KuduClient kuduClient = testHarness.getClient();
     kuduClient.createTable("System.QueryLog", schema, tableOptions);
@@ -1023,16 +1018,16 @@ public class KuduDDLIT {
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"my_schema.MY_TABLE_EXIST\" (" + "STRING_COL VARCHAR "
-              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
-              + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
-              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
-              + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
-              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
-              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
-              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
-              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
-              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "\"unixtime_micros_col\" TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+          + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+          + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+          + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+          + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+          + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_EXIST\"");
@@ -1044,16 +1039,16 @@ public class KuduDDLIT {
   public void testCreateTableDESC() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"my_schema.MY_TAB\" (" + "STRING_COL VARCHAR "
-              + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
-              + "\"unixtime_micros_col\" TIMESTAMP DESC DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
-              + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
-              + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
-              + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
-              + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
-              + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
-              + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
-              + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-              + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "\"unixtime_micros_col\" TIMESTAMP DESC DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
+          + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
+          + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
+          + "INT32_COL INTEGER not null DEFAULT -2147483648 COMMENT 'INT32 column', "
+          + "BINARY_COL VARBINARY DEFAULT x'AB'," + "FLOAT_COL FLOAT DEFAULT 0.0123456789,"
+          + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
+          + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TAB\"");
@@ -1069,16 +1064,16 @@ public class KuduDDLIT {
     assertEquals("Unexpected number of hash buckets", 17, hashBucketSchemas.get(0).getNumBuckets());
     assertEquals("Unexpected hash partition columns", Lists.newArrayList(0), hashBucketSchemas.get(0).getColumnIds());
 
-    //validate range partitioning
+    // validate range partitioning
     PartitionSchema.RangeSchema rangeSchema = kuduTable.getPartitionSchema().getRangeSchema();
-    assertEquals(rangeSchema.getColumnIds().size(),1);
+    assertEquals(rangeSchema.getColumnIds().size(), 1);
 
     // validate replicas
     assertEquals("Unexpected number of replicas", 1, kuduTable.getNumReplicas());
 
     // validate table options
     Map<String, String> expectedConfig = ImmutableMap.<String, String>builder()
-            .put("kudu.table.history_max_age_sec", "7200").build();
+        .put("kudu.table.history_max_age_sec", "7200").build();
     assertEquals("Unexpected extra configs", expectedConfig, kuduTable.getExtraConfig());
 
     Schema schema = kuduTable.getSchema();
@@ -1095,7 +1090,7 @@ public class KuduDDLIT {
     ColumnSchema timestampCol = columnSchemas.get(1);
     assertEquals("unixtime_micros_col", timestampCol.getName());
     validateComment(schema, "unixtime_micros_col",
-            "{\"isTimeStampColumn\":true,\"isDescendingSortOrder\":true,\"comment\":\"'this column is the timestamp'\"}");
+        "{\"isTimeStampColumn\":true,\"isDescendingSortOrder\":true,\"comment\":\"'this column is the timestamp'\"}");
     ColumnSchema int64Col = columnSchemas.get(2);
     assertEquals("int64_col", int64Col.getName());
     validateComment(schema, "INT8_COL", "");

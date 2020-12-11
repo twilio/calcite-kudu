@@ -178,10 +178,8 @@ public class KuduQueryIT {
     predicateQuery.add(Arrays.asList(firstSid));
     predicateQuery.add(Arrays.asList(secondSid));
 
-    final Enumerable<Object> results = relTable.executeQuery(
-        predicateQuery, Collections.singletonList(2), -1, -1,
-        false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_ONE_STRING,
-        ALWAYS_TRUE, true);
+    final Enumerable<Object> results = relTable.executeQuery(predicateQuery, Collections.singletonList(2), -1, -1,
+        false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_ONE_STRING, ALWAYS_TRUE, true);
     Enumerator<Object> resultIter = results.enumerator();
 
     Assert.assertTrue("Should have something to iterate over", resultIter.moveNext());
@@ -260,19 +258,18 @@ public class KuduQueryIT {
     predicateQuery.add(Arrays.asList(firstSid));
     predicateQuery.add(Arrays.asList(secondSid));
 
-    final Enumerable<Object> results = relTable.executeQuery(
-        predicateQuery, Collections.singletonList(2), -1, -1, false, false, new KuduScanStats(),
-        new AtomicBoolean(true), MAP_RESPONSE_TWO_STRINGS, ALWAYS_TRUE, false);
+    final Enumerable<Object> results = relTable.executeQuery(predicateQuery, Collections.singletonList(2), -1, -1,
+        false, false, new KuduScanStats(), new AtomicBoolean(true), MAP_RESPONSE_TWO_STRINGS, ALWAYS_TRUE, false);
     Enumerator<Object> resultIter = results.enumerator();
 
     Assert.assertFalse("Query was canceled, it should not have anything to move over", resultIter.moveNext());
   }
 
   /**
-   * When the SQL query projects only a single column *but* the Kudu Projection includes two columns.
-   * This would happen for a query shaped SELECT COUNT(id) FROM "X" WHERE category != 'awesome'
-   * because Kudu needs the category column to apply the filter and it gets discarded by the
-   * projection function.
+   * When the SQL query projects only a single column *but* the Kudu Projection
+   * includes two columns. This would happen for a query shaped SELECT COUNT(id)
+   * FROM "X" WHERE category != 'awesome' because Kudu needs the category column
+   * to apply the filter and it gets discarded by the projection function.
    */
   @Test
   public void kuduProjectTwoColumnsMapToSingleColumn() throws Exception {
