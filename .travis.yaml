@@ -1,5 +1,23 @@
+language: java
+jdk:
+  - openjdk11
+
+script:
+- mvn verify
+
+# Cache configs taken from https://www.scala-sbt.org/1.0/docs/Travis-CI-with-sbt.html
+cache:
+  directories:
+    - $HOME/.m2/repository/
+
+# Releasing configs taken from https://github.com/scalacenter/sbt-release-early/wiki/How-to-release-in-Travis-(CI)
 before_install:
-- if [ $TRAVIS_PULL_REQUEST = 'false' ]; then
+- if [ $TRAVIS_PULL_REQUEST = 'false' ] && [[ "$TRAVIS_TAG" = v* ]]; then
     openssl aes-256-cbc -K $encrypted_352da9e6f448_key -iv $encrypted_352da9e6f448_iv -in travis/secrets.tar.enc -out travis/local.secrets.tar -d
-    tar xv -C travis -f travis/secrets.tar;
+    tar xv -C travis -f travis/local.secrets.tar;
+    gpg --fast-import travis/local.secring.asc;
+  fi
+after_success:
+- if [ $TRAVIS_PULL_REQUEST = 'false' ] && [[ "$TRAVIS_TAG" = v* ]]; then
+    echo "mvn deploy it !"
   fi
