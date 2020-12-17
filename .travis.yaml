@@ -1,0 +1,5 @@
+before_install:
+- if [ $TRAVIS_PULL_REQUEST = 'false' ]; then
+    openssl aes-256-cbc -K $encrypted_352da9e6f448_key -iv $encrypted_352da9e6f448_iv -in travis/secrets.tar.enc -out travis/local.secrets.tar -d
+    tar xv -C travis -f travis/secrets.tar;
+  fi
