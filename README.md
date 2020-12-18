@@ -7,9 +7,9 @@ Add the dependency to your project:
 
 ``` xml
 <dependency>
-  <groupId>com.twilio</groupId>
-  <artifactId>kudu-sql-adapter</artifactId>
-  <version>1.0.13</version>
+	<groupId>com.twilio</groupId>
+	<artifactId>kudu-sql-adapter</artifactId>
+	<version>1.0.13</version>
 </dependency>
 ```
 
@@ -21,8 +21,8 @@ import com.twilio.kudu.sql.JDBCUtil;
 import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
 // Use JDBCUtil#CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED for INSERT and DDL support
 final String jdbcURL = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE,
-    DefaultKuduSchemaFactory.class.getName(),
-    kuduConnectionString);
+	DefaultKuduSchemaFactory.class.getName(),
+	kuduConnectionString);
 ```
 
 This JDBC url can be handed off to any of the database pooling libraries like
@@ -36,11 +36,11 @@ to execute queries.
 Apache Kudu **doesn't** support `DESCENDING` sort keys. To provide this functionally, we decided to write the data in a particular way:
 
 ``` java
-      public static final Instant EPOCH_DAY_FOR_REVERSE_SORT = Instant.parse("9999-12-31T00:00:00.000000Z");
-      public static final Long EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS = EPOCH_DAY_FOR_REVERSE_SORT.toEpochMilli();
-    // EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - ACTUAL-DATE-OF-EVENT = DATE-TO-STORE
-      public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = TimestampUtil
-          .timestampToMicros(new Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
+	public static final Instant EPOCH_DAY_FOR_REVERSE_SORT = Instant.parse("9999-12-31T00:00:00.000000Z");
+	public static final Long EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS = EPOCH_DAY_FOR_REVERSE_SORT.toEpochMilli();
+	// EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - ACTUAL-DATE-OF-EVENT = DATE-TO-STORE
+	public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = TimestampUtil
+		.timestampToMicros(new Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
 ```
 
 
