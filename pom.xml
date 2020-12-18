@@ -9,6 +9,40 @@
     <name>SQL parsing, optimization and execution for Apache Kudu</name>
     <packaging>pom</packaging>
 
+    <url>https://github.com/twilio/calcite-kudu</url>
+
+  <licenses>
+      <license>
+        <name>Apache License, Version 2.0</name>
+        <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        <distribution>repo</distribution>
+        <comments>A business-friendly OSS license</comments>
+      </license>
+  </licenses>
+
+  <organization>
+    <name>com.twilio</name>
+    <url>https://github.com/twilio/calcite-kudu</url>
+  </organization>
+
+  <scm>
+    <url>https://github.com/twilio/calcite-kudu</url>
+    <connection>scm:git@github.com:twilio/calcite-kudu.git</connection>
+  </scm>
+
+  <developers>
+      <developer>
+          <id>sdreynolds</id>
+          <name>Scott Reynolds</name>
+          <email>sdrreynolds@gmail.com</email>
+      </developer>
+      <developer>
+          <id>twdsilva</id>
+          <name>Thomas D'Silva</name>
+          <email>tdsilva@apache.org</email>
+      </developer>
+  </developers>
+
     <modules>
         <module>adapter</module>
     </modules>
@@ -52,10 +86,6 @@
             </distributionManagement>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-gpg-plugin</artifactId>
-                    </plugin>
                     <plugin>
                         <groupId>org.sonatype.plugins</groupId>
                         <artifactId>nexus-staging-maven-plugin</artifactId>
@@ -190,6 +220,33 @@
                         <phase>deploy</phase>
                         <goals>
                             <goal>sign</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                        <execution>
+                            <id>attach-javadocs</id>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                        </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar-no-fork</goal>
                         </goals>
                     </execution>
                 </executions>
