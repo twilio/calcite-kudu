@@ -1,6 +1,6 @@
 # calcite-kudu
 
-An Adapter for [Apache Calcite](https://calcite.apache.org/) that allows a Java service to query [Apache Kudu](https://kudu.apache.org/). Apache Calcite is a SQL library used in several large products within Apache Foundation to parse, optimize and execute queries and Kudu is a fast analytics database.
+An Adapter for [Apache Calcite](https://calcite.apache.org/) that allows a Java service to query [Apache Kudu](https://kudu.apache.org/). Apache Calcite is a SQL library used in several large products within Apache Foundation to parse, optimize and Calcite-Kudu leverages it to execute queries against Kudu -- a fast analytics database.
 
 ## Usage
 Add the dependency to your project:
