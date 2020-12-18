@@ -14,8 +14,8 @@ before_install:
       tar xv -C travis -f travis/local.secrets.tar;
     fi"
 after_success:
+  # Tests are run as part of the script.
   - "if [ $TRAVIS_PULL_REQUEST = 'false' ] && [[ \"$TRAVIS_TAG\" = v* ]]; then
-      # Tests are run as part of the script.
       mvn -q -Prelease gpg-maven-plugin:sign deploy -DskipTests --settings settings.xml
     fi"
 env:
