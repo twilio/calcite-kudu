@@ -1,11 +1,8 @@
 language: java
-install: false
 dist: xenial
 os: linux
 jdk:
   - openjdk11
-script:
-  - mvn spotless:check verify
 cache:
   directories:
   - "$HOME/.m2/repository/"
@@ -13,6 +10,11 @@ cache:
 before_install:
   - openssl aes-256-cbc -K $encrypted_352da9e6f448_key -iv $encrypted_352da9e6f448_iv -in travis/secrets.tar.enc -out travis/local.secrets.tar -d
   - tar xv -C travis -f travis/local.secrets.tar
+
+# Default install setup
+#install: mvn install -DskipTests=true -Dmaven.javadoc.skip=true -B -V
+
+script: mvn spotless:check verify
 
 after_success:
 - if [ $TRAVIS_PULL_REQUEST = 'false' ]; then
