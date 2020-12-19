@@ -10,10 +10,11 @@ before_install:
 - openssl aes-256-cbc -K $encrypted_352da9e6f448_key -iv $encrypted_352da9e6f448_iv
   -in travis/secrets.tar.enc -out travis/local.secrets.tar -d
 - tar xv -C travis -f travis/local.secrets.tar
-script: mvn spotless:check verify
-after_success:
-- if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then mvn -q -Prelease deploy -DskipTests
-  --settings settings.xml; fi
+# modeled off of https://docs.travis-ci.com/user/pull-requests/
+script:
+  - 'if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then mvn -Prelease deploy --settings settings.xml; fi'
+  - 'if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then mvn -Prelease verify; fi'
+
 env:
   global:
   - secure: mMsRGGivOOeA8iTT1l7MJcx6U/kSnYkZGsFVid0pdMweskrxXbcgiClzPp29LiiOWi5X+zoAYVAFYKxU+Gb3BewQ57hFanjOS97oizqe6oLjuC5qJwlZ/9AXNb+9eaQiXN2AAWecHCO8UhLhNrEPlvfhX7wp5CuyavdmC5J76yTPvghtU3npJMOMCTfCaoMknZJ+tUPzKRPlunwVS2mIo2o8fn8rcMh3hQwrZRdu3lFyHMuuGnMdJ4MtSikjvYsYl0AtYpnlbuV3BIh4ugKlhkMl/fa3y8RS+OuBm8uitCkS1I58fNH3AjXGVHMsD/7YNvGzAHApdp426Ugzl7oZdwn/vnPm+kItMufnsSgK4l6768ab+xjuT01lfdAgqCmLuV9/IHtpUIxiZMkhJ2/3ug1JHuPziKWld4tp1gsWo2/Mc/i8x4SWfagUsDCCmcpiRLw4fOFPU3BRwb2nXsmwkRQxdiJwYso3xPL1q0rorv772XYkCAqwQI7tfNPTQ4pnpgZmaXxgWdiGFSnjfbw+rmURdGZ58Z9a7YEXCPpaVTT4Y/z2jF+12+v7YL1W4XV+5/3fCR2YYegjgyX1vZE0JP5gPIr7dLtDwD/Z64Vshg14VfJYecAlaTLx0peClf8u0M/CWqunv/xbApdEWCCP8TIdyvnVcOdpHC1TqjNkMKU=
