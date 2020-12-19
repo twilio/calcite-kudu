@@ -95,23 +95,28 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
    * A KuduEnumerable is an {@link Enumerable} for Kudu that can be configured to
    * be sorted.
    *
-   * @param limit                        the number of rows this should return. -1
-   *                                     indicates no limit
-   * @param offset                       the number of rows from kudu to skip
-   *                                     prior to returning rows
-   * @param sort                         whether or not have Kudu RPCs come back
-   *                                     in sorted by primary key
-   * @param descendingSortedFieldIndices is a list of column indices that are
-   *                                     sorted in reverse
-   * @param groupBySorted                when sorted, and
-   *                                     {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)
-   * @param scanStats                    a container of scan stats that should be
-   *                                     updated as the scan executes.
-   * @param cancelFlag                   boolean indicating the end process has
-   *                                     asked the query to finish.
-   *
-   * @throws IllegalArgumentException when groupByLimited is true but sorted is
-   *                                  false
+   * @param predicates       list of the filters for each disjoint Kudu Scan
+   * @param columnIndices    the column indexes to fetch from the table
+   * @param client           Kudu client that will execute the scans
+   * @param calciteKuduTable table metadata for the scan
+   * @param limit            the number of rows this should return. -1 indicates
+   *                         no limit
+   * @param offset           the number of rows from kudu to skip prior to
+   *                         returning rows
+   * @param sort             whether or not have Kudu RPCs come back in sorted by
+   *                         primary key
+   * @param groupBySorted    when sorted, and
+   *                         {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)}
+   * @param scanStats        a container of scan stats that should be updated as
+   *                         the scan executes.
+   * @param cancelFlag       boolean indicating the end process has asked the
+   *                         query to finish.
+   * @param projection       function to translate
+   *                         {@link org.apache.kudu.client.RowResult} into Calcite
+   * @param filterFunction   filter applied to every
+   *                         {@link org.apache.kudu.client.RowResult}
+   * @param isSingleObject   whether or not Calcite object is an Object or an
+   *                         Object[]
    */
   public KuduEnumerable(final List<List<CalciteKuduPredicate>> predicates, final List<Integer> columnIndices,
       final AsyncKuduClient client, final CalciteKuduTable calciteKuduTable, final long limit, final long offset,

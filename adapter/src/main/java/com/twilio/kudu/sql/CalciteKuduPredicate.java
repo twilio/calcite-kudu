@@ -38,16 +38,28 @@ public abstract class CalciteKuduPredicate {
 
   /**
    * returns the column index for this predicate
+   *
+   * @return integer of the column in Kudu
    */
   public abstract int getColumnIdx();
 
   /**
    * Constructs a string used when generating the explain plan
+   *
+   * @param columnSchema Schema of the column from Kudu
+   *
+   * @return Formatted string from {@link org.apache.calcite.rel.RelWriter} to use
    */
   public abstract String explainPredicate(final ColumnSchema columnSchema);
 
   /**
    * Returns true or false if this can be considered for in list optimization.
+   *
+   * @param columnIdx the column index in the
+   *                  {@link org.apache.kudu.client.KuduTable}
+   *
+   * @return true if this column and predicate can be optimized into an
+   *         {@link InListPredicate}
    */
   public boolean inListOptimizationAllowed(final int columnIdx) {
     return false;

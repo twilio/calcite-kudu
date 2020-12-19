@@ -123,7 +123,7 @@ public abstract class KuduSortRule extends RelOptRule {
   /**
    * Rule to match a Sort above {@link KuduQuery}. Applies only if sort matches
    * primary key order. Can match descending sorted tables as well.
-   * {@see KuduQuery#descendingSortedFieldIndices}
+   * {@link com.twilio.kudu.sql.CalciteKuduTable#getDescendingOrderedColumnIndexes()}
    */
   public static class KuduSortWithoutFilter extends KuduSortRule {
 
@@ -145,7 +145,7 @@ public abstract class KuduSortRule extends RelOptRule {
    * Rule to match a Sort above {@link Filter} and it is above {@link KuduQuery}.
    * Applies if sort matches primary key or if the primary key is required in the
    * filter. Can match descending sorted tables as well
-   * {@see KuduQuery#descendingSortedFieldIndices}
+   * {@link com.twilio.kudu.sql.CalciteKuduTable#getDescendingOrderedColumnIndexes()}
    */
   public static class KuduSortWithFilter extends KuduSortRule {
     public KuduSortWithFilter(final RelBuilderFactory factory) {

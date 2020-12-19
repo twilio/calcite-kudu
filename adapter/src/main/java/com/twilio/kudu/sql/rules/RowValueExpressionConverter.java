@@ -33,13 +33,15 @@ import java.util.List;
  * Used to paginate through rows in the order of the primary key columns by
  * comparing row expressions with a greater than operator
  *
- * If the the PK of the table is (A asc, B asc, C asc) (A, B, C) > ('a1', 'b1',
- * 'c1') is transformed to (A > 'a1') OR ((A = 'a1') AND (B > 'b1')) OR ((A =
- * 'a1') AND (B = 'b1') AND (C > 'c1'))
+ * If the the PK of the table is
+ * {@code (A asc, B asc, C asc) (A, B, C) > ('a1', 'b1', * 'c1')} is transformed
+ * to
+ * {@code (A > 'a1') OR ((A = 'a1') AND (B > 'b1')) OR ((A = 'a1') AND (B = 'b1') AND (C > 'c1'))}
  *
- * If the the PK of the table is (A asc, B desc, C asc) (A, B, C) > ('a1', 'b1',
- * 'c1') is transformed to (A > 'a1') OR ((A = 'a1') AND (B < 'b1')) OR ((A =
- * 'a1') AND (B = 'b1') AND (C > 'c1'))
+ * If the the PK of the table is
+ * {@code (A asc, B desc, C asc) (A, B, C) > ('a1', 'b1', 'c1')} is transformed
+ * to
+ * {@code (A > 'a1') OR ((A = 'a1') AND (B < 'b1')) OR ((A = 'a1') AND (B = 'b1') AND (C > 'c1'))}
  *
  * This implementation is different from the SQL-92 standard see
  * https://stackoverflow.com/questions/32981903/sql-syntax-term-for-where-col1-col2-val1-val2/32982077#32982077

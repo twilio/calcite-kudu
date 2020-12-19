@@ -21,8 +21,8 @@ import org.apache.kudu.client.KuduPredicate;
  * An implementation of {@link CalciteKuduPredicate} that pushes down both NOT
  * NULL and IS NULL to Kudu.
  *
- * @see {@link KuduPredicate#newIsNullPredicate(ColumnSchema)}
- * @see {@link KuduPredicate#newIsNotNullPredicate(ColumnSchema)}
+ * {@link KuduPredicate#newIsNullPredicate(ColumnSchema)}
+ * {@link KuduPredicate#newIsNotNullPredicate(ColumnSchema)}
  */
 public final class NullPredicate extends CalciteKuduPredicate {
   public final int columnIdx;

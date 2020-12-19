@@ -83,6 +83,14 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
+                <configuration>
+                    <!-- the generated source for com.twilio.kudu.sql.parser.ParseException
+                         generates unparse-able documentation -->
+                    <excludePackageNames>com.twilio.kudu.sql.parser</excludePackageNames>
+
+                    <!-- whats the point of generating javadoc if not everything is documented properly -->
+                    <failOnWarnings>true</failOnWarnings>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -93,6 +101,7 @@
                 <artifactId>spotless-maven-plugin</artifactId>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
                 <executions>
                     <execution>

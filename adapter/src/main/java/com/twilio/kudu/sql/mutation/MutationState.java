@@ -140,7 +140,12 @@ public class MutationState {
   }
 
   /**
-   * Called while using a regular Statement
+   * Mutate Kudu table using {@link RexLiteral}. Called while using a regular
+   * Statement
+   *
+   * @param columnIndexes the kudu indexes to mutate
+   * @param tuples        a collection of rows to insert
+   * @return number of rows inserted
    */
   public int mutateTuples(final List<Integer> columnIndexes, final List<List<RexLiteral>> tuples) {
     for (List<RexLiteral> tuple : tuples) {
@@ -157,7 +162,11 @@ public class MutationState {
   }
 
   /**
-   * Called while using a PreparedStatement
+   * Mutate Kudu table using {@link Object}.
+   *
+   * @param columnIndexes the kudu indexes to mutate
+   * @param values        a collection of rows to insert
+   * @return number of rows inserted
    */
   public int mutateRow(final List<Integer> columnIndexes, final List<Object> values) {
     Map<Integer, Object> colIndexToValueMap = new HashMap<>();
@@ -171,7 +180,10 @@ public class MutationState {
 
   /**
    * Creates a mutation for the row being inserted and adds it to the kudu
-   * session. Also calls updateMutationState() for all cube tables (if any exist).
+   * session. Also calls {@code updateMutationState()} for all cube tables (if any
+   * exist).
+   *
+   * @param colIndexToValueMap Kudu index to new value mapping
    */
   protected void updateMutationState(Map<Integer, Object> colIndexToValueMap) {
     final Insert insert = kuduTable.newInsert();

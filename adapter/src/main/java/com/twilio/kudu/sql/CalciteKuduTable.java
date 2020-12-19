@@ -101,17 +101,21 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    * Create the {@code CalciteKuduTable} for a physical scan over the
    * provided{@link KuduTable}. {@code KuduTable} must exist and be opened.
    *
-   * Use {@link com.twilio.kudu.sql.CalciteKuduTableBuilder to build a table
+   * Use {@link com.twilio.kudu.sql.CalciteKuduTableBuilder} to build a table
    * instead of this constructor
    *
    * @param kuduTable                    the opened kudu table
    * @param client                       kudu client that is used to write
    *                                     mutations
    * @param descendingOrderColumnIndexes indexes of columns that are stored in
-   *                                     descending ordere
+   *                                     descending order
+   * @param timestampColumnIndex         column index that represents the single
+   *                                     timestamp
    * @param cubeTables                   the list of cube tables (if this is a
    *                                     fact table)
    * @param tableType                    type of this table
+   * @param eventTimeAggregationType     How the table is aggregated across time
+   *                                     ranges
    */
   public CalciteKuduTable(final KuduTable kuduTable, final AsyncKuduClient client,
       final List<Integer> descendingOrderColumnIndexes, final int timestampColumnIndex,
@@ -220,23 +224,25 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
 
   /**
    * Run the query against the kudu table {@link kuduTable}. {@link KuduPredicate}
-   * are the filters to apply to the query, {@link columnIndices} are the columns
-   * to return in the response and finally {@link limit} is used to limit the
+   * are the filters to apply to the query, {@code columnIndices} are the columns
+   * to return in the response and finally {@code limit} is used to limit the
    * results that come back.
    *
    * @param predicates     each member in the first list represents a single scan.
    * @param columnIndices  the fields ordinals to select out of Kudu
    * @param limit          process the results until limit is reached. If less
-   *                       then 0, no limit is enforced
+   *                       then 0, no limit
    * @param offset         skip offset number of rows before returning results
    * @param sorted         whether to return rows in sorted order
    * @param groupByLimited indicates if the groupBy method should be counting
    *                       unique keys
    * @param scanStats      scan stats collector
    * @param cancelFlag     flag to indicate the query has been canceled
-   * @param projection     function to map the {@link RowResult} to calcite object
-   * @param filterFunction predicate to apply to {@link RowResult} for in memory
-   *                       filter
+   * @param projection     function to map the
+   *                       {@link org.apache.kudu.client.RowResult} to calcite
+   *                       object
+   * @param filterFunction predicate to apply to
+   *                       {@link org.apache.kudu.client.RowResult}
    * @param isSingleObject boolean indicating if the projection returns Object[]
    *                       or Object
    *
@@ -321,6 +327,24 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
     /**
      * This is the method that is called by Code generation to run the query. Code
      * generation happens in {@link KuduToEnumerableConverter}
+     *
+     * @param predicates     filters for each of the independent scans
+     * @param fieldsIndices  the column indexes to fetch from the table
+     * @param limit          maximum number of rows to fetch from the table
+     * @param offset         the number of rows to skip from the table
+     * @param sorted         whether the query needs to be sorted by key
+     * @param groupByLimited whether the query contains a sorted aggregation
+     * @param scanStats      stat collector for the query
+     * @param cancelFlag     atomic boolean that is true when the query should be
+     *                       canceled
+     * @param projection     function to turn
+     *                       {@link org.apache.kudu.client.RowResult} into Calcite
+     *                       type
+     * @param filterFunction filter applied to all
+     *                       {@link org.apache.kudu.client.RowResult}
+     * @param isSingleObject indicates whether Calcite type is Object or Object[]
+     *
+     * @return Enumerable for the query
      */
     public Enumerable<Object> query(final List<List<CalciteKuduPredicate>> predicates,
         final List<Integer> fieldsIndices, final long limit, final long offset, final boolean sorted,
@@ -331,12 +355,30 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
           cancelFlag, projection, filterFunction, isSingleObject);
     }
 
+    /**
+     * Applies a mutation to the table using {@link RexLiteral}s.
+     *
+     * @param columnIndexes ordered list of column indexes that are changing /
+     *                      inserting
+     * @param tuples        input from the user for the changes.
+     *
+     * @return an {@code Enumerable} that applies the mutation
+     */
     public Enumerable<Object> mutateTuples(final List<Integer> columnIndexes, final List<List<RexLiteral>> tuples) {
       CalciteModifiableKuduTable table = getModifiableTable();
       KuduMetaImpl kuduMetaImpl = ((KuduCalciteConnectionImpl) queryProvider).getMeta();
       return Linq4j.singletonEnumerable(kuduMetaImpl.getMutationState(table).mutateTuples(columnIndexes, tuples));
     }
 
+    /**
+     * Applies a mutation to the table using plain Objects
+     *
+     * @param columnIndexes ordered list of column indexes that are changing /
+     *                      inserting
+     * @param values        input from the user for the changes.
+     *
+     * @return an {@code Enumerable} that applies the mutation
+     */
     public Enumerable<Object> mutateRow(final List<Integer> columnIndexes, final List<Object> values) {
       CalciteModifiableKuduTable table = getModifiableTable();
       KuduMetaImpl kuduMetaImpl = ((KuduCalciteConnectionImpl) queryProvider).getMeta();
@@ -357,6 +399,11 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    * <p>
    * The returned index list is used by the sorted {@link KuduEnumerable} to merge
    * the results from multiple scanners.
+   *
+   * @param projectedSchema the Kudu Schema used in RPC requests
+   *
+   * @return List of column indexes that part of the primary key in the Kudu
+   *         Sorted order
    */
   public List<Integer> getPrimaryKeyColumnsInProjection(final Schema projectedSchema) {
     return getPrimaryKeyColumnsInProjection(kuduTable.getSchema(), projectedSchema);
@@ -403,6 +450,11 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
   /**
    * Return the integer indices of the descending sorted columns in the row
    * projection.
+   *
+   * @param projectedSchema the Kudu Schema used in RPC requests
+   *
+   * @return Column indexes in the RPC that are in descending order
+   *
    */
   public List<Integer> getDescendingColumnsIndicesInProjection(final Schema projectedSchema) {
     final List<Integer> columnsInProjection = new ArrayList<>();

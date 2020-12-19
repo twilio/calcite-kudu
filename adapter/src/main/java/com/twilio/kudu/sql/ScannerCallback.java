@@ -14,7 +14,6 @@
  */
 package com.twilio.kudu.sql;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.concurrent.BlockingQueue;
 import com.stumbleupon.async.Callback;
@@ -37,10 +36,10 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Scanner Callback that produces {@link CalciteScannerMessage} into a
- * {@link Queue}. This will contain rows from Kudu in Scanner order which is
- * different from sorted order. To get sorted order out of this {@link Callback}
- * it needs to be used on a {@link AsyncKuduScanner} over exactly one
- * {@link Partition}
+ * {@link BlockingQueue}. This will contain rows from Kudu in Scanner order
+ * which is different from sorted order. To get sorted order out of this
+ * {@link Callback} it needs to be used on a {@link AsyncKuduScanner} over
+ * exactly one {@link Partition}
  */
 final public class ScannerCallback implements Callback<Deferred<Void>, RowResultIterator> {
 

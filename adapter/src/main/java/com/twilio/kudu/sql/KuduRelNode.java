@@ -48,6 +48,9 @@ public interface KuduRelNode extends RelNode {
    * and manipulate it. The {@code Implementor} will then be used by the
    * {@link KuduToEnumerableConverter} to create a {@link Blocks} that will be
    * used to generate Byte code for the actual query.
+   *
+   * @param implementor mutable implementator to store information on for the Kudu
+   *                    RPCs
    */
   void implement(Implementor implementor);
 

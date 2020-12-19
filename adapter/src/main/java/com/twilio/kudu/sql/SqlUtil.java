@@ -40,6 +40,9 @@ public class SqlUtil {
 
   /**
    * Translates JDBC sql types to Kudu data types
+   *
+   * @param dataType the datatype from Calcite
+   * @return Kudu type that represents this Calcite type
    */
   public static Type getKuduDataType(SqlDataTypeNode dataType) {
     Type kuduType = null;
@@ -87,6 +90,10 @@ public class SqlUtil {
   /**
    * Translates the default object value type to the data type that is expected by
    * Kudu
+   *
+   * @param kuduType     Kudu type in the table
+   * @param defaultValue default value taken from {@link org.apache.kudu.Schema}
+   * @return Translated defaultValue into java type Calcite expects
    */
   public static Object translateDefaultValue(Type kuduType, Object defaultValue) {
     switch (kuduType) {

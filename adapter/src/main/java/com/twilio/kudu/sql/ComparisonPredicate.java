@@ -25,7 +25,7 @@ import org.apache.kudu.client.KuduPredicate;
  * An implementation of {@link CalciteKuduPredicate} that creates comparison
  * {@link KuduPredicate}
  *
- * @see {@link KuduPredicate#newComparisonPredicate(ColumnSchema, org.apache.kudu.client.KuduPredicate.ComparisonOp, Object)}
+ * {@link KuduPredicate#newComparisonPredicate(ColumnSchema, org.apache.kudu.client.KuduPredicate.ComparisonOp, Object)}
  */
 public final class ComparisonPredicate extends CalciteKuduPredicate {
   public final KuduPredicate.ComparisonOp operation;

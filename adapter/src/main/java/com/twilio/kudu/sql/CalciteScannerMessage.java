@@ -31,6 +31,9 @@ import java.util.Objects;
  * {@link ScannerCallback} and {@link CalciteKuduEnumerable}. A Queue with
  * heterogeneous messages is the only solution we were able to make work. Using
  * a queue and another synchronization object did not work.
+ *
+ * @param <T> The Calcite type. For multicolumn rows it is an Object[] for
+ *            single it is Object
  */
 public final class CalciteScannerMessage<T> {
   public enum MessageType {
@@ -47,7 +50,6 @@ public final class CalciteScannerMessage<T> {
    * consumed the consumer is _expected_ to throw the exception.
    *
    * @param failure the exception this message represents
-   * @throws {@link NullPointerException} when failure is null
    */
   public CalciteScannerMessage(Exception failure) {
     Objects.requireNonNull(failure);
@@ -61,7 +63,6 @@ public final class CalciteScannerMessage<T> {
    * Constructs a Scanner Message that contains a row. Row must by nonNull
    *
    * @param row the T that should be consumed.
-   * @throws {@link NullPointerException} when row is null
    */
   public CalciteScannerMessage(T row) {
     Objects.requireNonNull(row);
@@ -75,7 +76,6 @@ public final class CalciteScannerMessage<T> {
    * Constructs a Batch Completed Scanner Message.
    *
    * @param callback the {@link ScannerCallback} that completed it's batch
-   * @throws {@link NullPointerException} when scanner is null
    */
   public CalciteScannerMessage(final ScannerCallback callback) {
     this.type = MessageType.BATCH_COMPLETED;
@@ -85,9 +85,14 @@ public final class CalciteScannerMessage<T> {
   }
 
   /**
-   * Construct a {@link MessageType.CLOSE} message to represent closing of the
+   * Construct a {@link MessageType#CLOSE} message to represent closing of the
    * scanner. The consumer is excepted to keep track of closed scanners and should
-   * not expect more {@link MessageType.ROW} from the scanner.
+   * not expect more {@link MessageType#ROW} from the scanner.
+   *
+   * @param <T> The Calcite type. For multicolumn rows it is an Object[] for
+   *            single it is Object
+   *
+   * @return simple {@link MessageType#CLOSE} message.
    */
   public static <T> CalciteScannerMessage<T> createEndMessage() {
     return new CalciteScannerMessage<T>(MessageType.CLOSE);

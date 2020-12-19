@@ -26,7 +26,7 @@ import org.apache.kudu.client.KuduPredicate;
  * An implementation of {@link CalciteKuduPredicate} that creates an IN LIST
  * predicate to {@link KuduEnumerable}
  *
- * @see {@link KuduPredicate#newInListPredicate(ColumnSchema, List)}
+ * {@link KuduPredicate#newInListPredicate(ColumnSchema, List)}
  */
 public final class InListPredicate extends CalciteKuduPredicate {
   public final int columnIdx;
