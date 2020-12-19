@@ -17,9 +17,7 @@ before_install:
 script: mvn spotless:check verify
 
 after_success:
-- if [ $TRAVIS_PULL_REQUEST = 'false' ]; then
-    mvn -q -Prelease deploy -DskipTests --settings settings.xml
-  fi
+  - 'if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then mvn -q -Prelease deploy -DskipTests --settings settings.xml; fi'
 
 env:
   global:
