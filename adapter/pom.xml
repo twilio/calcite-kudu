@@ -93,6 +93,10 @@
                 </configuration>
             </plugin>
             <plugin>
+                <groupId>org.kohsuke</groupId>
+                <artifactId>pgp-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
             </plugin>

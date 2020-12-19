@@ -9,39 +9,44 @@
     <name>SQL parsing, optimization and execution for Apache Kudu</name>
     <packaging>pom</packaging>
 
+    <description>
+        Provides an Apache Calcite Adapter for Apache Kudu enabling services to query Apache Kudu
+        with SQL.
+    </description>
+
     <url>https://github.com/twilio/calcite-kudu</url>
 
-  <licenses>
-      <license>
-        <name>Apache License, Version 2.0</name>
-        <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
-        <distribution>repo</distribution>
-        <comments>A business-friendly OSS license</comments>
-      </license>
-  </licenses>
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+            <comments>A business-friendly OSS license</comments>
+        </license>
+    </licenses>
 
-  <organization>
-    <name>com.twilio</name>
-    <url>https://github.com/twilio/calcite-kudu</url>
-  </organization>
+    <organization>
+        <name>com.twilio</name>
+        <url>https://github.com/twilio/calcite-kudu</url>
+    </organization>
 
-  <scm>
-    <url>https://github.com/twilio/calcite-kudu</url>
-    <connection>scm:git@github.com:twilio/calcite-kudu.git</connection>
-  </scm>
+    <scm>
+        <url>https://github.com/twilio/calcite-kudu</url>
+        <connection>scm:git@github.com:twilio/calcite-kudu.git</connection>
+    </scm>
 
-  <developers>
-      <developer>
-          <id>sdreynolds</id>
-          <name>Scott Reynolds</name>
-          <email>sdrreynolds@gmail.com</email>
-      </developer>
-      <developer>
-          <id>twdsilva</id>
-          <name>Thomas D'Silva</name>
-          <email>tdsilva@apache.org</email>
-      </developer>
-  </developers>
+    <developers>
+        <developer>
+            <id>sdreynolds</id>
+            <name>Scott Reynolds</name>
+            <email>sdrreynolds@gmail.com</email>
+        </developer>
+        <developer>
+            <id>twdsilva</id>
+            <name>Thomas D'Silva</name>
+            <email>tdsilva@apache.org</email>
+        </developer>
+    </developers>
 
     <modules>
         <module>adapter</module>
@@ -221,8 +226,6 @@
                 </configuration>
                 <executions>
                     <execution>
-                        <id>sign-artifacts</id>
-                        <phase>deploy</phase>
                         <goals>
                             <goal>sign</goal>
                         </goals>
@@ -249,7 +252,8 @@
                 <executions>
                     <execution>
                         <id>attach-sources</id>
-                        <phase>verify</phase>
+                        <!-- use package instead of verify to get pgp to sign it -->
+                        <phase>package</phase>
                         <goals>
                             <goal>jar-no-fork</goal>
                         </goals>
@@ -333,6 +337,10 @@
 		<configuration>
 	          <skipTests>${skipTests}</skipTests>
         	</configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.kohsuke</groupId>
+                <artifactId>pgp-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>
