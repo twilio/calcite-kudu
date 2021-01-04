@@ -1,0 +1,38 @@
+name: Publish to Maven Central
+on: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup JDK 11
+        uses: actions/setup-java@v1
+        with:
+          java-version: 11
+
+      - name: Update to release version
+        run: mvn build-helper:parse-version versions:set -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.incrementalVersion} -DgenerateBackupPoms=false
+
+      - name: Decrypt Tar Ball
+        env:
+          - TARBALL_PASSWORD: ${{ secrets.TARBALL_PASSWORD }}
+        run: gpg --output travis/local.secrets.tar --decrypt --batch --yes --decrypt --passphrase=$TARBALL_PASSWORD travis/actions-secrets.tar.gpg
+
+      - name: Deploy to Maven Central
+        run: mvn -Prelease deploy --settings settings.xml
+        env:
+          - SONATYPE_USER: ${{ secrets.SONATYPE_USER }}
+          - SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          - PGP_PASS: ${{ secrets.PGP_PASS }}
+
+      - name: Update to snapshot version
+        run: mvn build-helper:parse-version versions:set -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.nextIncrementalVersion} -DgenerateBackupPoms=false
+
+      - name: Commit Pom Changes After Release
+        uses: EndBug/add-and-commit@v6
+        with:
+          add: '*.xml'
