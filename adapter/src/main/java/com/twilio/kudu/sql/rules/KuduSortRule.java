@@ -38,6 +38,7 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexLocalRef;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexTableInputRef;
 import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.kudu.client.KuduTable;
@@ -96,14 +97,14 @@ public class KuduSortRule extends RelOptRule {
           }
         }
         final KuduFilterVisitor visitor = new KuduFilterVisitor(pkColumnIndex);
-        final boolean primaryKeyIncluded = predicates.pulledUpPredicates.stream().filter(rexNode -> {
+        final boolean primaryKeyIncluded = predicates.pulledUpPredicates.stream().anyMatch(rexNode -> {
           final Boolean matched = rexNode.accept(visitor);
           return matched != null && matched;
-        }).allMatch(Strong::isStrong);
-        if (primaryKeyIncluded) {
-          pkColumnIndex++;
-        } else {
+        });
+        if (!primaryKeyIncluded) {
           return false;
+        } else {
+          pkColumnIndex++;
         }
       }
       pkColumnIndex++;
@@ -155,18 +156,32 @@ public class KuduSortRule extends RelOptRule {
       this.mustHave = mustHave;
     }
 
+    @Override
     public Boolean visitInputRef(final RexInputRef inputRef) {
       return inputRef.getIndex() == this.mustHave;
     }
 
+    /**
+     * This type of {@link RexNode} is returned by
+     * {@link RelMetadataQuery#getAllPredicates(RelNode)} and it contains
+     * information on the table as well. Treat it the same as an {@link RexInputRef}
+     */
+    @Override
+    public Boolean visitTableInputRef(RexTableInputRef tableRef) {
+      return visitInputRef(tableRef);
+    }
+
+    @Override
     public Boolean visitLocalRef(final RexLocalRef localRef) {
       return Boolean.FALSE;
     }
 
+    @Override
     public Boolean visitLiteral(final RexLiteral literal) {
       return Boolean.FALSE;
     }
 
+    @Override
     public Boolean visitCall(final RexCall call) {
       switch (call.getOperator().getKind()) {
       case EQUALS:
