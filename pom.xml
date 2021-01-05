@@ -50,6 +50,7 @@
 
     <modules>
         <module>adapter</module>
+        <module>cli</module>
     </modules>
 
     <properties>
@@ -112,6 +113,13 @@
     </profiles>
     <dependencyManagement>
         <dependencies>
+
+            <dependency>
+                <artifactId>kudu-sql-adapter</artifactId>
+                <groupId>com.twilio</groupId>
+                <version>${project.version}</version>
+            </dependency>
+
             <dependency>
                 <groupId>org.apache.kudu</groupId>
                 <artifactId>kudu-client</artifactId>
