@@ -85,35 +85,59 @@ public class KuduSortRule extends RelOptRule {
               && sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING)) {
         return false;
       }
-      if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount()) {
-        return false;
-      }
 
-      // Iterate through all the primary key columns below this one and assert that
-      // all of them have
-      // strict filter on them. If one of them does don not apply the rule by
-      // returning FALSE
-      while (sortField.getFieldIndex() > pkColumnIndex) {
+      // If the sorted field isn't in the primary keys the rule can still be applied
+      // if and only if the sorted field is strictly filtered so there is only one
+      // value.
+      if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount()) {
+        // This is duplicated code but duplicated on purpose. Calculating predicates is
+        // expensive and should be done once and only if required.
         if (predicates == null) {
           predicates = mq.getAllPredicates(original);
           if (predicates == null) {
             return false;
           }
         }
-        final KuduFilterVisitor visitor = new KuduFilterVisitor(pkColumnIndex);
-        final boolean primaryKeyIncluded = predicates.pulledUpPredicates.stream().anyMatch(rexNode -> {
-          final Boolean matched = rexNode.accept(visitor);
-          return matched != null && matched;
-        });
-        if (!primaryKeyIncluded) {
+
+        final Boolean nonPkIsFiltered = isColumnStrictlyFiltered(predicates, mq, original, sortField.getFieldIndex());
+        if (!nonPkIsFiltered) {
           return false;
-        } else {
-          pkColumnIndex++;
+        }
+      } else {
+        // Iterate through all the primary key columns below this one and assert that
+        // all of them have
+        // strict filter on them. If one of them does don not apply the rule by
+        // returning FALSE
+        while (sortField.getFieldIndex() > pkColumnIndex) {
+          // This is duplicated code but duplicated on purpose. Calculating predicates is
+          // expensive
+          // and should be done once and only if required.
+          if (predicates == null) {
+            predicates = mq.getAllPredicates(original);
+            if (predicates == null) {
+              return false;
+            }
+          }
+          final boolean primaryKeyIncluded = isColumnStrictlyFiltered(predicates, mq, original, pkColumnIndex);
+          if (!primaryKeyIncluded) {
+            return false;
+          } else {
+            pkColumnIndex++;
+          }
         }
       }
       pkColumnIndex++;
     }
     return true;
+  }
+
+  private boolean isColumnStrictlyFiltered(final RelOptPredicateList predicates, final RelMetadataQuery mq,
+      final RelNode original, final int column) {
+    final KuduFilterVisitor visitor = new KuduFilterVisitor(column);
+    return predicates.pulledUpPredicates.stream().anyMatch(rexNode -> {
+      final Boolean matched = rexNode.accept(visitor);
+      return matched != null && matched;
+    });
   }
 
   /**

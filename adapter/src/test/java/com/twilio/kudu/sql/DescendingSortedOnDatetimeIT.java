@@ -440,4 +440,26 @@ public final class DescendingSortedOnDatetimeIT {
       rs = conn.createStatement().executeQuery(firstBatchSql);
     }
   }
+
+  @Test
+  public void testSortByNonPKWithFilter() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      // Sorting by a non-primary key field BUT that field has a direct filter on it.
+      String firstBatchSqlFormat = "SELECT * FROM kudu.\"Test.Events\" "
+          + "WHERE account_sid = '%s' and resource_type = 'message-body' and event_date <= TIMESTAMP'2019-01-02 00:00:00' "
+          + "ORDER BY resource_type asc, event_date desc ";
+      String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+
+      // verify plan
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      String expectedPlanFormat = "KuduToEnumerableRel\n"
+          + "  KuduSortRel(sort0=[$3], sort1=[$1], dir0=[ASC], dir1=[DESC], groupBySorted=[false])\n"
+          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, resource_type EQUAL message-body, event_date LESS_EQUAL 1546387200000000])\n"
+          + "      KuduQuery(table=[[kudu, Test.Events]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(firstBatchSql);
+    }
+  }
 }
