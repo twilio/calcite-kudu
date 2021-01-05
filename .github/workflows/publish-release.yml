@@ -32,9 +32,13 @@ jobs:
           PGP_PASS: ${{ secrets.PGP_PASS }}
 
       - name: Update to snapshot version
-        run: mvn build-helper:parse-version versions:set -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.nextIncrementalVersion} -DgenerateBackupPoms=false
+        run: mvn build-helper:parse-version versions:set -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.nextIncrementalVersion}-SNAPSHOT -DgenerateBackupPoms=false
 
       - name: Commit Pom Changes After Release
         uses: EndBug/add-and-commit@v6
+        # this action tries to commit to
+        #  Error: error: pathspec '.0.14' did not match any file(s) known to git
+        # I think by setting the branch it will work
+        branch: main
         with:
-          add: '*.xml'
+          add: '*pom.xml'
