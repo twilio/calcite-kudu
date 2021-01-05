@@ -19,15 +19,15 @@ jobs:
 
       - name: Decrypt Tar Ball
         env:
-          - TARBALL_PASSWORD: ${{ secrets.TARBALL_PASSWORD }}
+          TARBALL_PASSWORD: ${{ secrets.TARBALL_PASSWORD }}
         run: gpg --output travis/local.secrets.tar --decrypt --batch --yes --decrypt --passphrase=$TARBALL_PASSWORD travis/actions-secrets.tar.gpg
 
       - name: Deploy to Maven Central
         run: mvn -Prelease deploy --settings settings.xml
         env:
-          - SONATYPE_USER: ${{ secrets.SONATYPE_USER }}
-          - SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
-          - PGP_PASS: ${{ secrets.PGP_PASS }}
+          SONATYPE_USER: ${{ secrets.SONATYPE_USER }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          PGP_PASS: ${{ secrets.PGP_PASS }}
 
       - name: Update to snapshot version
         run: mvn build-helper:parse-version versions:set -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.nextIncrementalVersion} -DgenerateBackupPoms=false
