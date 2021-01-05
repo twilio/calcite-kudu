@@ -102,6 +102,10 @@
                             <autoReleaseAfterClose>true</autoReleaseAfterClose>
                         </configuration>
                     </plugin>
+                    <plugin>
+                        <groupId>org.kohsuke</groupId>
+                        <artifactId>pgp-maven-plugin</artifactId>
+                    </plugin>
                 </plugins>
             </build>
         </profile>
@@ -337,10 +341,6 @@
 		<configuration>
 	          <skipTests>${skipTests}</skipTests>
         	</configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.kohsuke</groupId>
-                <artifactId>pgp-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

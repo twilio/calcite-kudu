@@ -32,8 +32,6 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -52,7 +50,6 @@ import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
 public final class DescendingSortedOnDatetimeIT {
-  private static final Logger logger = LoggerFactory.getLogger(JDBCQueryIT.class);
 
   private static String FIRST_SID = "SM1234857";
   private static String SECOND_SID = "SM123485789";
@@ -261,7 +258,7 @@ public final class DescendingSortedOnDatetimeIT {
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
           + "      KuduQuery(table=[[kudu, Test.Events]])\n";
       String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
-      assertEquals("Unexpected plan ", expectedPlan, plan);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
       rs = conn.createStatement().executeQuery(firstBatchSql);
 
       assertTrue(rs.next());
@@ -394,6 +391,75 @@ public final class DescendingSortedOnDatetimeIT {
       validateRow(rs, 1546390800000L, DescendingSortedOnDatetimeIT.FIRST_SID);
       assertTrue(rs.next());
       validateRow(rs, 1546304400000L, DescendingSortedOnDatetimeIT.THIRD_SID);
+    }
+  }
+
+  @Test
+  public void testSortOnSid() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      // Because the first two columns of the primary key are filtered to exact values
+      // this should
+      // pass.
+      String firstBatchSqlFormat = "SELECT * FROM kudu.\"Test.Events\" "
+          + "WHERE account_sid = '%s' and event_date = TIMESTAMP'2019-01-01 00:00:00' " + "ORDER BY sid asc";
+
+      String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+
+      // verify plan
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      String expectedPlanFormat = "KuduToEnumerableRel\n"
+          + "  KuduSortRel(sort0=[$2], dir0=[ASC], groupBySorted=[false])\n"
+          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, event_date EQUAL 1546300800000000])\n"
+          + "      KuduQuery(table=[[kudu, Test.Events]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(firstBatchSql);
+    }
+  }
+
+  @Test
+  public void testSortOnSidWithDateRange() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      // Because the event_date doesn't have an exact filter, we should not apply kudu
+      // sort
+      // This test demostrates the need for the while loop in the Sort Rule.
+      String firstBatchSqlFormat = "SELECT * FROM kudu.\"Test.Events\" "
+          + "WHERE account_sid = '%s' and event_date <= TIMESTAMP'2019-01-01 00:00:00' " + "ORDER BY sid asc";
+
+      String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+
+      // verify plan
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      String expectedPlanFormat = "EnumerableSort(sort0=[$2], dir0=[ASC])\n" + "  KuduToEnumerableRel\n"
+          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, event_date LESS_EQUAL 1546300800000000])\n"
+          + "      KuduQuery(table=[[kudu, Test.Events]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(firstBatchSql);
+    }
+  }
+
+  @Test
+  public void testSortByNonPKWithFilter() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      // Sorting by a non-primary key field BUT that field has a direct filter on it.
+      String firstBatchSqlFormat = "SELECT * FROM kudu.\"Test.Events\" "
+          + "WHERE account_sid = '%s' and resource_type = 'message-body' and event_date <= TIMESTAMP'2019-01-02 00:00:00' "
+          + "ORDER BY resource_type asc, event_date desc ";
+      String firstBatchSql = String.format(firstBatchSqlFormat, ACCOUNT_SID);
+
+      // verify plan
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      String expectedPlanFormat = "KuduToEnumerableRel\n"
+          + "  KuduSortRel(sort0=[$3], sort1=[$1], dir0=[ASC], dir1=[DESC], groupBySorted=[false])\n"
+          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, resource_type EQUAL message-body, event_date LESS_EQUAL 1546387200000000])\n"
+          + "      KuduQuery(table=[[kudu, Test.Events]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(firstBatchSql);
     }
   }
 }
