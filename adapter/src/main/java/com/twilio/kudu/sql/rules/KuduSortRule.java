@@ -99,7 +99,7 @@ public class KuduSortRule extends RelOptRule {
           }
         }
 
-        final Boolean nonPkIsFiltered = isColumnStrictlyFiltered(predicates, mq, original, sortField.getFieldIndex());
+        final Boolean nonPkIsFiltered = isColumnStrictlyFiltered(predicates, sortField.getFieldIndex());
         if (!nonPkIsFiltered) {
           return false;
         }
@@ -118,7 +118,7 @@ public class KuduSortRule extends RelOptRule {
               return false;
             }
           }
-          final boolean primaryKeyIncluded = isColumnStrictlyFiltered(predicates, mq, original, pkColumnIndex);
+          final boolean primaryKeyIncluded = isColumnStrictlyFiltered(predicates, pkColumnIndex);
           if (!primaryKeyIncluded) {
             return false;
           } else {
@@ -131,8 +131,7 @@ public class KuduSortRule extends RelOptRule {
     return true;
   }
 
-  private boolean isColumnStrictlyFiltered(final RelOptPredicateList predicates, final RelMetadataQuery mq,
-      final RelNode original, final int column) {
+  private boolean isColumnStrictlyFiltered(final RelOptPredicateList predicates, final int column) {
     final KuduFilterVisitor visitor = new KuduFilterVisitor(column);
     return predicates.pulledUpPredicates.stream().anyMatch(rexNode -> {
       final Boolean matched = rexNode.accept(visitor);
