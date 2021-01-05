@@ -88,8 +88,12 @@ public class KuduSortRule extends RelOptRule {
       if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount()) {
         return false;
       }
-      if (sortField.getFieldIndex() != pkColumnIndex) {
 
+      // Iterate through all the primary key columns below this one and assert that
+      // all of them have
+      // strict filter on them. If one of them does don not apply the rule by
+      // returning FALSE
+      while (sortField.getFieldIndex() > pkColumnIndex) {
         if (predicates == null) {
           predicates = mq.getAllPredicates(original);
           if (predicates == null) {
