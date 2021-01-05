@@ -20,7 +20,7 @@ jobs:
       - name: Decrypt Tar Ball
         env:
           TARBALL_PASSWORD: ${{ secrets.TARBALL_PASSWORD }}
-        run: gpg --output travis/local.secrets.tar --batch --yes --passphrase=$TARBALL_PASSWORD --decrypt travis/actions-secrets.tar.gpg
+        run: ./.github/scripts/decrypt_secret.sh
 
       - name: Deploy to Maven Central
         run: mvn -Prelease deploy --settings settings.xml
