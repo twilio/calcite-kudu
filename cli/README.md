@@ -9,7 +9,7 @@ cd ../
 mvn package -pl cli -am -DskipTests
 
 # From within *this directory*. It will use the docker-compose.yml file in this directory
-# and the Dockerfile in this directoyr
+# and the Dockerfile in this directory
 docker-compose -f cli/docker-compose.yml up --build -d
 ```
 This will setup the Kudu daemons and a container connected to the network. This last container can be used to access a sql shell by running the following command
