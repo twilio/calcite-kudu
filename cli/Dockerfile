@@ -12,25 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-# This workflow will build a Java project with Maven
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
-
-name: Run code formatter on PRs
-on:
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  build:
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up JDK 11
-      uses: actions/setup-java@v1
-      with:
-        java-version: 11
-    - name: Verify Code Format
-      run: mvn spotless:check
+FROM alpine:3.12
+WORKDIR /app
+COPY target/kudu-client.jar /app
+RUN apk add --no-cache openjdk11
+ENTRYPOINT tail -f /dev/null
