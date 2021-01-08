@@ -230,8 +230,8 @@ public final class JDBCQueryIT {
           + "WHERE account_sid = '%s' ORDER BY account_sid, date_created, sid";
       String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
       String expectedPlan = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$1], sort1=[$2], sort2=[$0], dir0=[ASC], dir1=[ASC], dir2=[ASC], groupBySorted=[false])\n"
-          + "    KuduProjectRel(SID=[$2], ACCOUNT_SID=[$0], DATE_CREATED=[$1])\n"
+          + "  KuduProjectRel(SID=[$2], ACCOUNT_SID=[$0], DATE_CREATED=[$1])\n"
+          + "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[ASC], dir2=[ASC], groupBySorted=[false])\n"
           + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
           + "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);

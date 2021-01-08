@@ -14,31 +14,28 @@
  */
 package com.twilio.kudu.sql.rules;
 
+import java.util.Optional;
+
 import com.twilio.kudu.sql.KuduQuery;
 import com.twilio.kudu.sql.KuduRelNode;
 import com.twilio.kudu.sql.rel.KuduSortRel;
-
-import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptRuleOperand;
 import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.plan.Strong;
-import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelVisitor;
+import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.core.Sort;
-import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexLocalRef;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.rex.RexTableInputRef;
 import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.kudu.client.KuduTable;
@@ -46,29 +43,30 @@ import org.apache.kudu.client.KuduTable;
 /**
  * Two Sort Rules that look to push the Sort into the Kudu RPC.
  */
-public class KuduSortRule extends RelOptRule {
+public abstract class KuduSortRule extends RelOptRule {
 
-  public static final RelOptRule INSTANCE = new KuduSortRule(operand(Sort.class, any()), RelFactories.LOGICAL_BUILDER,
-      "KuduSortRule");
+  private static final RelOptRuleOperand SIMPLE_OPERAND = operand(KuduQuery.class, none());
+
+  private static final RelOptRuleOperand FILTER_OPERAND = operand(Filter.class, some(operand(KuduQuery.class, none())));
+
+  public static final RelOptRule SIMPLE_SORT_RULE = new KuduSortWithoutFilter(RelFactories.LOGICAL_BUILDER);
+  public static final RelOptRule FILTER_SORT_RULE = new KuduSortWithFilter(RelFactories.LOGICAL_BUILDER);
 
   public KuduSortRule(RelOptRuleOperand operand, RelBuilderFactory factory, String description) {
     super(operand, factory, description);
   }
 
-  protected boolean canApply(final Sort original) {
-    final FindKuduQuery finder = new FindKuduQuery();
-    original.childrenAccept(finder);
-    final KuduQuery query = finder.foundQuery;
-    if (query == null || finder.tooManyChoices) {
-      return false;
-    }
-    final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
-    final RelCollation collation = original.getCollation();
-
-    final RelMetadataQuery mq = query.getCluster().getMetadataQuery();
-    RelOptPredicateList predicates = null;
+  public boolean canApply(final RelTraitSet sortTraits, final KuduQuery query, final KuduTable openedTable,
+      final Optional<Filter> filter) {
+    // If there is no sort -- i.e. there is only a limit
+    // don't pay the cost of returning rows in sorted order.
+    final RelCollation collation = sortTraits.getTrait(RelCollationTraitDef.INSTANCE);
 
     if (collation.getFieldCollations().isEmpty()) {
+      return false;
+    }
+
+    if (sortTraits.contains(KuduRelNode.CONVENTION)) {
       return false;
     }
 
@@ -85,45 +83,23 @@ public class KuduSortRule extends RelOptRule {
               && sortField.direction != RelFieldCollation.Direction.STRICTLY_ASCENDING)) {
         return false;
       }
-
-      // If the sorted field isn't in the primary keys the rule can still be applied
-      // if and only if the sorted field is strictly filtered so there is only one
-      // value.
-      if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount()) {
-        // This is duplicated code but duplicated on purpose. Calculating predicates is
-        // expensive and should be done once and only if required.
-        if (predicates == null) {
-          predicates = mq.getAllPredicates(original);
-          if (predicates == null) {
-            return false;
-          }
-        }
-
-        final Boolean nonPkIsFiltered = isColumnStrictlyFiltered(predicates, sortField.getFieldIndex());
-        if (!nonPkIsFiltered) {
-          return false;
-        }
-      } else {
-        // Iterate through all the primary key columns below this one and assert that
-        // all of them have
-        // strict filter on them. If one of them does don not apply the rule by
-        // returning FALSE
-        while (sortField.getFieldIndex() > pkColumnIndex) {
-          // This is duplicated code but duplicated on purpose. Calculating predicates is
-          // expensive
-          // and should be done once and only if required.
-          if (predicates == null) {
-            predicates = mq.getAllPredicates(original);
-            if (predicates == null) {
+      // the sort columns must be a prefix of the primary key columns
+      if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount()
+          || sortField.getFieldIndex() != pkColumnIndex) {
+        // This field is not in the primary key columns. If there is a condition lets
+        // see if it is there
+        if (filter.isPresent()) {
+          final RexNode originalCondition = filter.get().getCondition();
+          while (pkColumnIndex < sortField.getFieldIndex()) {
+            final KuduFilterVisitor visitor = new KuduFilterVisitor(pkColumnIndex);
+            final Boolean foundFieldInCondition = originalCondition.accept(visitor);
+            if (foundFieldInCondition.equals(Boolean.FALSE)) {
               return false;
             }
-          }
-          final boolean primaryKeyIncluded = isColumnStrictlyFiltered(predicates, pkColumnIndex);
-          if (!primaryKeyIncluded) {
-            return false;
-          } else {
             pkColumnIndex++;
           }
+        } else {
+          return false;
         }
       }
       pkColumnIndex++;
@@ -131,42 +107,59 @@ public class KuduSortRule extends RelOptRule {
     return true;
   }
 
-  private boolean isColumnStrictlyFiltered(final RelOptPredicateList predicates, final int column) {
-    final KuduFilterVisitor visitor = new KuduFilterVisitor(column);
-    return predicates.pulledUpPredicates.stream().anyMatch(rexNode -> {
-      final Boolean matched = rexNode.accept(visitor);
-      return matched != null && matched;
-    });
+  public void perform(final RelOptRuleCall call, final Sort originalSort, final KuduQuery query,
+      final KuduTable openedTable, final Optional<Filter> filter) {
+    if (canApply(originalSort.getTraitSet(), query, openedTable, filter)) {
+      final RelNode input = originalSort.getInput();
+      final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRelNode.CONVENTION)
+          .replace(originalSort.getCollation());
+      final RelNode newNode = new KuduSortRel(input.getCluster(), traitSet,
+          convert(input, traitSet.replace(RelCollations.EMPTY)), originalSort.getCollation(), originalSort.offset,
+          originalSort.fetch);
+      call.transformTo(newNode);
+    }
   }
 
   /**
-   * Visits the entire RelNode tree to find the {@link KuduQuery}
+   * Rule to match a Sort above {@link KuduQuery}. Applies only if sort matches
+   * primary key order. Can match descending sorted tables as well.
+   * {@link com.twilio.kudu.sql.CalciteKuduTable#getDescendingOrderedColumnIndexes()}
    */
-  static class FindKuduQuery extends RelVisitor {
-    KuduQuery foundQuery = null;
-    boolean tooManyChoices = false;
+  public static class KuduSortWithoutFilter extends KuduSortRule {
+
+    public KuduSortWithoutFilter(final RelBuilderFactory factory) {
+      super(operand(Sort.class, SIMPLE_OPERAND), factory, "KuduSort: Simple");
+    }
 
     @Override
-    public void visit(RelNode rel, int ordinal, RelNode parent) {
-      if (rel instanceof KuduQuery) {
-        if (foundQuery == null) {
-          this.foundQuery = (KuduQuery) rel;
-        } else {
-          // Parsed a JOIN with multiple KuduQueries. Await for the join to be pushed into
-          // the Join
-          tooManyChoices = true;
-        }
+    public void onMatch(final RelOptRuleCall call) {
+      final KuduQuery query = (KuduQuery) call.getRelList().get(1);
+      final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
+      final Sort originalSort = (Sort) call.getRelList().get(0);
 
-      } else if (rel instanceof RelSubset) {
-        final RelSubset node = (RelSubset) rel;
-        if (node.getBest() != null) {
-          visit(node.getBest(), ordinal, parent);
-        } else if (node.getOriginal() != null) {
-          visit(node.getOriginal(), ordinal, parent);
-        }
-      } else {
-        super.visit(rel, ordinal, parent);
-      }
+      perform(call, originalSort, query, openedTable, Optional.<Filter>empty());
+    }
+  }
+
+  /**
+   * Rule to match a Sort above {@link Filter} and it is above {@link KuduQuery}.
+   * Applies if sort matches primary key or if the primary key is required in the
+   * filter. Can match descending sorted tables as well
+   * {@link com.twilio.kudu.sql.CalciteKuduTable#getDescendingOrderedColumnIndexes()}
+   */
+  public static class KuduSortWithFilter extends KuduSortRule {
+    public KuduSortWithFilter(final RelBuilderFactory factory) {
+      super(operand(Sort.class, FILTER_OPERAND), factory, "KuduSort: Filters");
+    }
+
+    @Override
+    public void onMatch(final RelOptRuleCall call) {
+      final KuduQuery query = (KuduQuery) call.getRelList().get(2);
+      final Filter filter = (Filter) call.getRelList().get(1);
+      final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
+      final Sort originalSort = (Sort) call.getRelList().get(0);
+
+      perform(call, originalSort, query, openedTable, Optional.of(filter));
     }
   }
 
@@ -183,32 +176,18 @@ public class KuduSortRule extends RelOptRule {
       this.mustHave = mustHave;
     }
 
-    @Override
     public Boolean visitInputRef(final RexInputRef inputRef) {
       return inputRef.getIndex() == this.mustHave;
     }
 
-    /**
-     * This type of {@link RexNode} is returned by
-     * {@link RelMetadataQuery#getAllPredicates(RelNode)} and it contains
-     * information on the table as well. Treat it the same as an {@link RexInputRef}
-     */
-    @Override
-    public Boolean visitTableInputRef(RexTableInputRef tableRef) {
-      return visitInputRef(tableRef);
-    }
-
-    @Override
     public Boolean visitLocalRef(final RexLocalRef localRef) {
       return Boolean.FALSE;
     }
 
-    @Override
     public Boolean visitLiteral(final RexLiteral literal) {
       return Boolean.FALSE;
     }
 
-    @Override
     public Boolean visitCall(final RexCall call) {
       switch (call.getOperator().getKind()) {
       case EQUALS:
@@ -227,21 +206,5 @@ public class KuduSortRule extends RelOptRule {
       }
       return Boolean.FALSE;
     }
-  }
-
-  @Override
-  public void onMatch(RelOptRuleCall call) {
-    final Sort original = (Sort) call.getRelList().get(0);
-
-    if (original.getConvention() != KuduRelNode.CONVENTION && !canApply(original)) {
-      return;
-    }
-    final RelNode input = original.getInput();
-    final RelTraitSet traitSet = original.getTraitSet().replace(KuduRelNode.CONVENTION)
-        .replace(original.getCollation());
-    final RelNode newNode = new KuduSortRel(input.getCluster(), traitSet,
-        convert(input, traitSet.replace(RelCollations.EMPTY).replace(KuduRelNode.CONVENTION)), original.getCollation(),
-        original.offset, original.fetch);
-    call.transformTo(newNode);
   }
 }

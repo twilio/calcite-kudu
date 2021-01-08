@@ -117,14 +117,15 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
         .canonize(RelCollations.permute(originalSort.getCollation(), remappingOrdinals));
     final RelTraitSet traitSet = originalSort.getTraitSet().plus(newCollation).plus(Convention.NONE);
 
+    // Check the new trait set to see if we can apply the sort against this.
+    if (!canApply(traitSet, query, query.calciteKuduTable.getKuduTable(), Optional.of(filter))) {
+      return;
+    }
+
     final KuduSortRel newSort = new KuduSortRel(project.getCluster(), traitSet.replace(KuduRelNode.CONVENTION),
         convert(project, project.getTraitSet().replace(RelCollations.EMPTY)), newCollation,
         originalLimit.isPresent() ? originalLimit.get().offset : originalSort.offset,
         originalLimit.isPresent() ? originalLimit.get().fetch : originalSort.fetch, true);
-    // Check the new trait set to see if we can apply the sort against this.
-    if (!canApply(newSort)) {
-      return;
-    }
 
     // Copy in the new collation because! this new rel is now coming out Sorted.
     final RelNode newkuduToEnumerableRel = kuduToEnumerableRel
