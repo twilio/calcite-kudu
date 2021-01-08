@@ -51,9 +51,9 @@ jobs:
 
       - name: Commit Pom Changes After Release
         uses: EndBug/add-and-commit@v6
-        # this action tries to commit to
-        #  Error: error: pathspec '.0.14' did not match any file(s) known to git
-        # I think by setting the branch it will work
-        branch: main
         with:
           add: '*pom.xml'
+          # this action tries to commit to
+          #  Error: error: pathspec '.0.14' did not match any file(s) known to git
+          # I think by setting the branch it will work
+          branch: main
