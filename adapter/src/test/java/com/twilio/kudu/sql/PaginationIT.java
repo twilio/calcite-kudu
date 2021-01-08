@@ -306,12 +306,12 @@ public class PaginationIT {
       // verify plan
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
       String plan = SqlUtil.getExplainPlan(rs);
-      String expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], "
-          + "dir2=[ASC], offset=[7], fetch=[6], groupBySorted=[false])\n"
-          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
+      String expectedPlanFormat = "KuduToEnumerableRel\n" + "  KuduLimitRel(offset=[7], limit=[6])\n"
+          + "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], "
+          + "dir2=[ASC], groupBySorted=[false])\n" + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL %s])\n"
+          + "        KuduQuery(table=[[kudu, %s]])\n";
       String expectedPlan = String.format(expectedPlanFormat, descending ? "DESC" : "ASC", ACCOUNT1, tableName);
-      assertEquals("Unexpected plan ", expectedPlan, plan);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
       rs = conn.createStatement().executeQuery(firstBatchSql);
 
       if (descending) {
@@ -360,13 +360,13 @@ public class PaginationIT {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
       String plan = SqlUtil.getExplainPlan(rs);
 
-      String expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], " + "fetch=[4], groupBySorted=[false])\n"
-          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, "
-          + "date_initiated GREATER_EQUAL %d, date_initiated LESS %d])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
+      String expectedPlanFormat = "KuduToEnumerableRel\n" + "  KuduLimitRel(limit=[4])\n"
+          + "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], groupBySorted=[false])\n"
+          + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, date_initiated LESS %d])\n"
+          + "        KuduQuery(table=[[kudu, %s]])\n";
       String expectedPlan = String.format(expectedPlanFormat, dateInitiatedOrder, ACCOUNT1, T1 * 1000, T4 * 1000,
           tableName);
-      assertEquals("Unexpected plan ", expectedPlan, plan);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
 
       // since there are 30 rows in total we will read 7 batches of four rows,
       // the last batch will have two rows
@@ -390,12 +390,13 @@ public class PaginationIT {
           + "WHERE account_sid = '%s' AND date_initiated >= TIMESTAMP'%s' AND " + "date_initiated < TIMESTAMP'%s' "
           + "AND (date_initiated, transaction_id) > (TIMESTAMP'%s', '%s') "
           + "ORDER BY date_initiated %s, transaction_id " + "LIMIT 4";
-      expectedPlanFormat = "KuduToEnumerableRel\n" + "  KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], "
-          + "fetch=[4], groupBySorted=[false])\n" + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, "
+      expectedPlanFormat = "KuduToEnumerableRel\n" + "  KuduLimitRel(limit=[4])\n"
+          + "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], " + "groupBySorted=[false])\n"
+          + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, "
           + "date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000, "
           + "date_initiated %s %d], ScanToken 2=[account_sid EQUAL %s, "
           + "date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000, "
-          + "date_initiated EQUAL %d, transaction_id GREATER %s])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
+          + "date_initiated EQUAL %d, transaction_id GREATER %s])\n" + "        KuduQuery(table=[[kudu, %s]])\n";
 
       // keep reading batches of rows until we have processes rows for all the
       // partitions
@@ -410,7 +411,7 @@ public class PaginationIT {
         plan = SqlUtil.getExplainPlan(rs);
         expectedPlan = String.format(expectedPlanFormat, dateInitiatedOrder, ACCOUNT1, descending ? "LESS" : "GREATER",
             prevRowDateInitiatedNanos, ACCOUNT1, prevRowDateInitiatedNanos, prevRowTransactionId, tableName);
-        assertEquals("Unexpected plan ", expectedPlan, plan);
+        assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
 
         rs = conn.createStatement().executeQuery(nextBatchSql);
         // the last batch has only two rows

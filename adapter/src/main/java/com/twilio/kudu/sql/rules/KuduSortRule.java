@@ -19,6 +19,8 @@ import java.util.Optional;
 import com.twilio.kudu.sql.KuduQuery;
 import com.twilio.kudu.sql.KuduRelNode;
 import com.twilio.kudu.sql.rel.KuduSortRel;
+import com.twilio.kudu.sql.rel.KuduToEnumerableRel;
+
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptRuleOperand;
@@ -45,9 +47,11 @@ import org.apache.kudu.client.KuduTable;
  */
 public abstract class KuduSortRule extends RelOptRule {
 
-  private static final RelOptRuleOperand SIMPLE_OPERAND = operand(KuduQuery.class, none());
+  private static final RelOptRuleOperand SIMPLE_OPERAND = operand(KuduToEnumerableRel.class,
+      some(operand(KuduQuery.class, none())));
 
-  private static final RelOptRuleOperand FILTER_OPERAND = operand(Filter.class, some(operand(KuduQuery.class, none())));
+  private static final RelOptRuleOperand FILTER_OPERAND = operand(KuduToEnumerableRel.class,
+      some(operand(Filter.class, some(operand(KuduQuery.class, none())))));
 
   public static final RelOptRule SIMPLE_SORT_RULE = new KuduSortWithoutFilter(RelFactories.LOGICAL_BUILDER);
   public static final RelOptRule FILTER_SORT_RULE = new KuduSortWithFilter(RelFactories.LOGICAL_BUILDER);
@@ -133,7 +137,7 @@ public abstract class KuduSortRule extends RelOptRule {
 
     @Override
     public void onMatch(final RelOptRuleCall call) {
-      final KuduQuery query = (KuduQuery) call.getRelList().get(1);
+      final KuduQuery query = (KuduQuery) call.getRelList().get(2);
       final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
       final Sort originalSort = (Sort) call.getRelList().get(0);
 
@@ -154,8 +158,8 @@ public abstract class KuduSortRule extends RelOptRule {
 
     @Override
     public void onMatch(final RelOptRuleCall call) {
-      final KuduQuery query = (KuduQuery) call.getRelList().get(2);
-      final Filter filter = (Filter) call.getRelList().get(1);
+      final KuduQuery query = (KuduQuery) call.getRelList().get(3);
+      final Filter filter = (Filter) call.getRelList().get(2);
       final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
       final Sort originalSort = (Sort) call.getRelList().get(0);
 
