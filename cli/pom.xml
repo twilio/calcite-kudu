@@ -8,7 +8,7 @@
         <version>1.0.17-SNAPSHOT</version>
     </parent>
 
-    <artifactId>cli</artifactId>
+    <artifactId>kudu-sql-cli</artifactId>
     <name>SQL Command Line Client</name>
 
     <dependencies>
