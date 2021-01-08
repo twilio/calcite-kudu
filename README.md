@@ -9,7 +9,7 @@ Add the dependency to your project:
 <dependency>
 	<groupId>com.twilio</groupId>
 	<artifactId>kudu-sql-adapter</artifactId>
-	<version>1.0.13</version>
+	<version>1.0.15</version>
 </dependency>
 ```
 
