@@ -50,7 +50,6 @@
                                     </excludes>
                                 </filter>
                             </filters>
-                            <finalName>kudu-client</finalName>
                             <transformers>
                                 <transformer implementation='org.apache.maven.plugins.shade.resource.ManifestResourceTransformer'>
                                     <mainClass>com.twilio.kudu.cli.KuduClient</mainClass>

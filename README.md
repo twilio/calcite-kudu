@@ -3,17 +3,31 @@
 An Adapter for [Apache Calcite](https://calcite.apache.org/) that allows a Java service to query [Apache Kudu](https://kudu.apache.org/). Apache Calcite is a SQL library used in several large products within Apache Foundation to parse, optimize and Calcite-Kudu leverages it to execute queries against Kudu -- a fast analytics database.
 
 ## Usage
+
+### As a Command Line Client
+Calcite Kudu ships a Shaded Jar file that can be used as a SQL Client into an existing Kudu Cluster. Maven can be used to download the jar and then executed through Java Virtual Machine
+
+``` bash
+$ mvn org.apache.maven.plugins:maven-dependency-plugin:get \
+    -Dartifact=com.twilio:kudu-sql-cli:1.0.17
+$ java -jar ~/.m2/repository/com/twilio/kudu-sql-cli/1.0.17/kudu-sql-cli-1.0.17.jar -c kudu-leader1,kudu-leader2,kudu-leader3
+```
+
+This will work from a machine able to communicate with both Kudu Leaders and Kudu TServers. To test this out locally follow the [README](./cli/README.md) in the cli directory.
+
+
+### As a Library
 Add the dependency to your project:
 
 ``` xml
 <dependency>
 	<groupId>com.twilio</groupId>
 	<artifactId>kudu-sql-adapter</artifactId>
-	<version>1.0.15</version>
+	<version>1.0.17</version>
 </dependency>
 ```
 
-### JDBC Support
+#### JDBC Support
 The library provides a JDBC connection template that can be used with any JDBC library. To create the JDBC connection string:
 
 ``` java
