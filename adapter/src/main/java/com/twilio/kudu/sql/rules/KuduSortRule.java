@@ -33,11 +33,13 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.core.Sort;
+import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexLocalRef;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.kudu.client.KuduTable;
@@ -93,7 +95,8 @@ public abstract class KuduSortRule extends RelOptRule {
         // This field is not in the primary key columns. If there is a condition lets
         // see if it is there
         if (filter.isPresent()) {
-          final RexNode originalCondition = filter.get().getCondition();
+          final RexBuilder rexBuilder = filter.get().getCluster().getRexBuilder();
+          final RexNode originalCondition = RexUtil.expandSearch(rexBuilder, null, filter.get().getCondition());
           while (pkColumnIndex < sortField.getFieldIndex()) {
             final KuduFilterVisitor visitor = new KuduFilterVisitor(pkColumnIndex);
             final Boolean foundFieldInCondition = originalCondition.accept(visitor);

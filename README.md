@@ -9,7 +9,7 @@ Calcite Kudu ships a Shaded Jar file that can be used as a SQL Client into an ex
 
 ``` bash
 $ mvn org.apache.maven.plugins:maven-dependency-plugin:get \
-    -Dartifact=com.twilio:kudu-sql-cli:1.0.17
+	-Dartifact=com.twilio:kudu-sql-cli:1.0.17
 $ java -jar ~/.m2/repository/com/twilio/kudu-sql-cli/1.0.17/kudu-sql-cli-1.0.17.jar -c kudu-leader1,kudu-leader2,kudu-leader3
 ```
 
