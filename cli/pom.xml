@@ -5,7 +5,7 @@
     <parent>
         <artifactId>kudu-sql</artifactId>
         <groupId>com.twilio</groupId>
-        <version>1.0.18-SNAPSHOT</version>
+        <version>1.0.19-SNAPSHOT</version>
     </parent>
 
     <artifactId>kudu-sql-cli</artifactId>
