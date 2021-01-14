@@ -140,7 +140,8 @@ public class KuduNestedJoin extends Join implements EnumerableRel {
     builder.append(Expressions.call(BuiltInMethod.CORRELATE_BATCH_JOIN.method,
         Expressions.constant(toLinq4jJoinType(joinType)), leftExpression,
         Expressions.call(Expressions.convert_(rightExpression, KuduEnumerable.class),
-            KuduMethod.NESTED_JOIN_PREDICATES.method, implementor.stash(this, Join.class)),
+            KuduMethod.NESTED_JOIN_PREDICATES.method, implementor.stash(this, Join.class),
+            rightResult.physType.comparer(), predicate),
         selector, predicate, Expressions.constant(batchSize)));
     return implementor.result(physType, builder.toBlock());
   }

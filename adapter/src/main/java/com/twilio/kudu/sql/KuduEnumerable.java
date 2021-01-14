@@ -19,6 +19,7 @@ import com.twilio.kudu.sql.rules.KuduPredicatePushDownVisitor;
 
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.EnumerableDefaults;
+import org.apache.calcite.linq4j.function.EqualityComparer;
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,7 @@ import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Function2;
 import org.apache.calcite.linq4j.function.Predicate1;
+import org.apache.calcite.linq4j.function.Predicate2;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.sql.SqlKind;
@@ -542,12 +544,17 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
    * Return a function that accepts the Left hand sides rows and creates a new
    * {@code SortableEnumerable} that will match the batch of rows.
    *
-   * @param joinNode The {@link Join} relation for this nest join.
+   * @param joinNode      The {@link Join} relation for this nest join.
+   * @param compareUtil   collection of static methods that implement equals and
+   *                      hashCode
+   * @param joinCondition boolean function that matches rows on the left with rows
+   *                      on the right
    *
    * @return a function that produces another {@code SortableEnumerable} that
    *         matches the batches passed in.
    */
-  public Function1<List<Object>, Enumerable<Object>> nestedJoinPredicates(final Join joinNode) {
+  public Function1<List<Object>, Enumerable<Object>> nestedJoinPredicates(final Join joinNode,
+      final EqualityComparer<Object> compareUtil, final Predicate2<Object, Object> joinCondition) {
     final Project rightSideProjection;
     if (joinNode.getRight().getInput(0) instanceof KuduProjectRel) {
       rightSideProjection = (KuduProjectRel) joinNode.getRight().getInput(0);
@@ -558,15 +565,6 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
         .accept(new TranslationPredicate.ConditionTranslationVisitor(joinNode.getLeft().getRowType().getFieldCount(),
             rightSideProjection, this.getTableSchema()));
     final KuduEnumerable rootEnumerable = this;
-    return new Function1<List<Object>, Enumerable<Object>>() {
-      @Override
-      public Enumerable<Object> apply(final List<Object> batch) {
-        final Set<List<CalciteKuduPredicate>> pushDownPredicates = batch.stream().map(s -> {
-          return rowTranslators.stream().map(t -> t.toPredicate((Object[]) s)).collect(Collectors.toList());
-        }).collect(Collectors.toSet());
-        // @TODO: refactor all of this to use Set<List<>> instead of List<List<>>>.
-        return rootEnumerable.clone(new LinkedList<>(pushDownPredicates));
-      }
-    };
+    return new NestedJoinFactory(joinCondition, compareUtil, rowTranslators, rootEnumerable);
   }
 }

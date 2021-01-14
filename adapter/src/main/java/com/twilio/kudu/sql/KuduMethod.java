@@ -20,8 +20,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.collect.ImmutableMap;
 
+import org.apache.calcite.linq4j.function.EqualityComparer;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Predicate1;
+import org.apache.calcite.linq4j.function.Predicate2;
 import org.apache.calcite.linq4j.tree.Types;
 import org.apache.calcite.rel.core.Join;
 
@@ -34,7 +36,8 @@ public enum KuduMethod {
       boolean.class),
   KUDU_MUTATE_TUPLES_METHOD(CalciteKuduTable.KuduQueryable.class, "mutateTuples", List.class, List.class),
   KUDU_MUTATE_ROW_METHOD(CalciteKuduTable.KuduQueryable.class, "mutateRow", List.class, List.class),
-  NESTED_JOIN_PREDICATES(KuduEnumerable.class, "nestedJoinPredicates", Join.class);
+  NESTED_JOIN_PREDICATES(KuduEnumerable.class, "nestedJoinPredicates", Join.class, EqualityComparer.class,
+      Predicate2.class);
 
   public final Method method;
 
