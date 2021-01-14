@@ -40,7 +40,7 @@ jobs:
         run: ./.github/scripts/decrypt_secret.sh
 
       - name: Deploy to Maven Central
-        run: mvn -e -X -Prelease deploy --settings settings.xml
+        run: mvn -Prelease deploy --settings settings.xml
         env:
           SONATYPE_USER: ${{ secrets.SONATYPE_USER }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
