@@ -21,15 +21,28 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
+import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.CalciteKuduPredicate;
+import com.twilio.kudu.sql.CalciteKuduTable;
 import com.twilio.kudu.sql.ComparisonPredicate;
+import com.twilio.kudu.sql.InListPredicate;
 import com.twilio.kudu.sql.NullPredicate;
 
 import org.apache.calcite.avatica.util.TimeUnitRange;
+import org.apache.calcite.rel.rel2sql.SqlImplementor;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexBiVisitor;
+import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexProgram;
+import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlUtil;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexOver;
@@ -43,12 +56,18 @@ import org.apache.calcite.rex.RexPatternFieldRef;
 import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexDynamicParam;
+
+import java.util.Map;
 import java.util.Optional;
 
 import org.apache.calcite.rex.RexNode;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+import org.apache.calcite.util.RangeSets;
+import org.apache.calcite.util.Sarg;
 import org.apache.kudu.client.KuduPredicate;
 
 import org.slf4j.Logger;
@@ -68,6 +87,12 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
   static final Logger logger = LoggerFactory.getLogger(KuduPredicatePushDownVisitor.class);
 
   private boolean allExpressionsConverted = true;
+
+  private final RexBuilder rexBuilder;
+
+  public KuduPredicatePushDownVisitor(RexBuilder rexBuilder) {
+    this.rexBuilder = rexBuilder;
+  }
 
   /**
    * @return true if we can push down all filters to kudu
@@ -149,6 +174,33 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
   }
 
   /**
+   * Converts a Sarg to SQL, generating "operand IN (c1, c2, ...)" if the ranges
+   * are all points.
+   *
+   **/
+  private <C extends Comparable<C>> List<List<CalciteKuduPredicate>> visitSearch(RexCall call, RexCall parent) {
+    final RexLiteral literal = (RexLiteral) call.operands.get(1);
+    final Sarg<C> sarg = literal.getValueAs(Sarg.class);
+    if (sarg.isPoints()) {
+      final List<RexNode> inNodes = sarg.rangeSet.asRanges().stream()
+          .map(range -> rexBuilder.makeLiteral(range.lowerEndpoint(), literal.getType(), true, true))
+          .collect(Collectors.toList());
+      int columnIndex = getColumnIndex(call.operands.get(0));
+      // If there is only one value, use EQUAL instead of IN LIST.
+      if (inNodes.size() == 1) {
+        return Collections.singletonList(Collections.singletonList(new ComparisonPredicate(columnIndex,
+            KuduPredicate.ComparisonOp.EQUAL, castLiteral((RexLiteral) inNodes.get(0)))));
+      } else {
+        List<Object> inList = inNodes.stream().map(node -> castLiteral((RexLiteral) node)).collect(Collectors.toList());
+        return Collections.singletonList(Collections.singletonList(new InListPredicate(columnIndex, inList)));
+      }
+    } else {
+      final RexNode condition = RexUtil.expandSearch(rexBuilder, null, call);
+      return condition.accept(this, parent);
+    }
+  }
+
+  /**
    * A sql function call, process it. Including handling boolean calls.
    *
    * @param call this is the relational call object to process
@@ -159,6 +211,8 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     final SqlKind callType = call.getOperator().getKind();
 
     switch (callType) {
+    case SEARCH:
+      return visitSearch(call, parent);
     case EQUALS:
     case PERIOD_EQUALS:
     case NOT_EQUALS: // Not equals will still return setEmpty() as findKuduOp method will return

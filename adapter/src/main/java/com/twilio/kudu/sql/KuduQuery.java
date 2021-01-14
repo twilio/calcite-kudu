@@ -69,10 +69,6 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     // since kudu is a columnar store we never want to push an aggregate past a
     // project
     planner.removeRule(CoreRules.AGGREGATE_PROJECT_MERGE);
-    // see WirelessUsageIt.testPaginationOverFactAggregation for why this rule is
-    // removed
-    // disable ReduceExpressionsRule until RC-1274 is implemented
-    planner.removeRule(CoreRules.FILTER_REDUCE_EXPRESSIONS);
 
     // Join Commute Rule reorders the left and right tables of inner joins
     // preventing KuduSortRel
@@ -83,9 +79,15 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     planner.removeRule(CoreRules.JOIN_COMMUTE_OUTER);
 
     // After removing the Join Commute Rule, Merge Join is chosen over Hash Join,
-    // negating the
-    // work down to push the KuduSortRel into the large table.
+    // negating the work down to push the KuduSortRel into the large table.
     planner.removeRule(org.apache.calcite.adapter.enumerable.EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
+
+    // This rule does not handle SArg filters correctly, which causes filters to not
+    // get pushed
+    // past outer joins, which causes KuduSortRule to not get matched. Replace it
+    // with
+    // KuduFilterIntoJoinRule which expands SArgs
+    planner.removeRule(CoreRules.FILTER_INTO_JOIN);
 
     for (RelOptRule rule : KuduRules.RULES) {
       planner.addRule(rule);
