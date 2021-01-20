@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.IntStream;
 
-public class IdListGenerator extends IdGenerator {
+public class SidListGenerator extends RandomSidGenerator {
 
   private final Random rand = new Random();
   private final List<String> values = new ArrayList<>();
@@ -27,11 +27,11 @@ public class IdListGenerator extends IdGenerator {
   public String sidPrefix;
   public int numValues;
 
-  private IdListGenerator() {
+  private SidListGenerator() {
     super("BA");
   }
 
-  public IdListGenerator(final String sidPrefix, final int numValues) {
+  public SidListGenerator(final String sidPrefix, final int numValues) {
     super(sidPrefix);
     this.numValues = numValues;
     this.sidPrefix = sidPrefix;

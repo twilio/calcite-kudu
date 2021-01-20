@@ -22,8 +22,8 @@ import com.twilio.kudu.dataloader.generator.SingleColumnValueGenerator;
 import com.twilio.kudu.dataloader.generator.ConstantValueGenerator;
 import com.twilio.kudu.dataloader.generator.EnvironmentVariableGenerator;
 import com.twilio.kudu.dataloader.generator.PhoneNumberListGenerator;
-import com.twilio.kudu.dataloader.generator.IdGenerator;
-import com.twilio.kudu.dataloader.generator.IdListGenerator;
+import com.twilio.kudu.dataloader.generator.RandomSidGenerator;
+import com.twilio.kudu.dataloader.generator.SidListGenerator;
 import com.twilio.kudu.dataloader.generator.TimestampGenerator;
 import com.twilio.kudu.dataloader.generator.UniformBigDecimalValueGenerator;
 import com.twilio.kudu.dataloader.generator.UniformIntegerValueGenerator;
@@ -51,11 +51,11 @@ public class Scenario {
   private static ObjectMapper mapper = new ObjectMapper();
 
   static {
-    mapper.registerSubtypes(new NamedType(IdGenerator.class, "RandomSidGenerator"),
+    mapper.registerSubtypes(new NamedType(RandomSidGenerator.class, "RandomSidGenerator"),
         new NamedType(ConstantValueGenerator.class, "ConstantValueGenerator"),
         new NamedType(UniformLongValueGenerator.class, "UniformLongValueGenerator"),
         new NamedType(UniformIntegerValueGenerator.class, "UniformIntegerValueGenerator"),
-        new NamedType(IdListGenerator.class, "SidListGenerator"),
+        new NamedType(SidListGenerator.class, "SidListGenerator"),
         new NamedType(ValueListGenerator.class, "ValueListGenerator"),
         new NamedType(PhoneNumberListGenerator.class, "PhoneNumberListGenerator"),
         new NamedType(UniformBigDecimalValueGenerator.class, "UniformBigDecimalValueGenerator"),
