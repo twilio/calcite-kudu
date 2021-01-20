@@ -21,7 +21,7 @@ import java.security.NoSuchProviderException;
 import java.security.SecureRandom;
 import org.apache.commons.codec.digest.DigestUtils;
 
-public class IdGenerator extends SingleColumnValueGenerator<String> {
+public class RandomSidGenerator extends SingleColumnValueGenerator<String> {
 
   private static final String RANDOM_ALG = "SHA1PRNG";
   private static final String RANDOM_PROVIDER = "SUN";
@@ -49,10 +49,10 @@ public class IdGenerator extends SingleColumnValueGenerator<String> {
     }
   }
 
-  private IdGenerator() {
+  private RandomSidGenerator() {
   }
 
-  public IdGenerator(final String sidPrefix) {
+  public RandomSidGenerator(final String sidPrefix) {
     this.sidPrefix = sidPrefix;
   }
 
@@ -66,6 +66,6 @@ public class IdGenerator extends SingleColumnValueGenerator<String> {
     srand.nextBytes(bytes);
     final String random = new String(bytes);
 
-    return DigestUtils.md5Hex(ADDR + random + System.currentTimeMillis());
+    return sidPrefix + DigestUtils.md5Hex(ADDR + random + System.currentTimeMillis());
   }
 }
