@@ -38,7 +38,7 @@ public class KuduScannerUtil {
    * @param client a async Kudu client for the cluster
    * @param table  table that we are scanning against.
    * @return a async scanner for the serialized scan token
-   * @throws IOException
+   * @throws IOException thows an {@link IOException}
    */
   public static AsyncKuduScanner deserializeIntoAsyncScanner(byte[] buf, AsyncKuduClient client, KuduTable table)
       throws IOException {
