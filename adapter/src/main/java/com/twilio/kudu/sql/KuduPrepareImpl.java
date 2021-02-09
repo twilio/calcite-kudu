@@ -159,15 +159,17 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         PartialRow lowerBound = tableSchema.newPartialRow();
         PartialRow upperBound = tableSchema.newPartialRow();
 
-        // Set range partition to EPOCH.MAX - minvalue for DESC case.
-        if (isRowTimeStampColDesc.get()) {
-          lowerBound.addTimestamp(rowTimestampColumn,
-              new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
-          upperBound.addTimestamp(rowTimestampColumn,
-              new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
-        } else {
-          lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
-          upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+        if (kuduSchema.createDummyPartition) {
+          // Set range partition to EPOCH.MAX - minvalue for DESC case.
+          if (isRowTimeStampColDesc.get()) {
+            lowerBound.addTimestamp(rowTimestampColumn,
+                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
+            upperBound.addTimestamp(rowTimestampColumn,
+                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
+          } else {
+            lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
+            upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+          }
         }
         createTableOptions.addRangePartition(lowerBound, upperBound);
         createTableOptions.setRangePartitionColumns(rowTimestampColumns);
@@ -284,8 +286,11 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           if (colSchema.getWireType().equals(org.apache.kudu.Common.DataType.UNIXTIME_MICROS)) {
             rangePartitionCols.add(s);
           }
+          ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(colSchema);
+          columnSchemaBuilder.nullable(false);
+          columnSchemaBuilder.key(true);
           // Get the column schema for pk from the original table.
-          cubeColumnSchemas.add(colSchema);
+          cubeColumnSchemas.add(columnSchemaBuilder.build());
         }
 
         for (SqlNode sqlnode : selectList.getList()) {
@@ -303,7 +308,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
               }
 
               String originalColumnName = operand.toString();
-              String columnName = operator.getName() + "_" + originalColumnName;
+              String columnName = operator.getName().toLowerCase() + "_" + originalColumnName;
 
               // use originalColumnName to get the column schema
               ColumnSchema colSchema = kuduTable.getSchema().getColumn(originalColumnName);
@@ -325,12 +330,19 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
               cubeColumnSchemas.add(columnSchemaBuilder.build());
             }
             // if node is a column from the original table use the same column schema
-            else {
+            else if (kuduTable.getSchema().hasColumn(sqlnode.toString())) {
               ColumnSchema colSchema = kuduTable.getSchema().getColumn(sqlnode.toString());
               cubeColumnSchemas.add(colSchema);
             }
           }
         }
+
+        // add the count_records column
+        org.apache.kudu.Common.DataType dataType = Common.DataType.INT64;
+        org.apache.kudu.Type kuduType = org.apache.kudu.Type.INT64;
+        ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder("count_records",
+            kuduType).key(false).nullable(false).wireType(dataType);
+        cubeColumnSchemas.add(columnSchemaBuilder.build());
 
         final Schema cubeSchema = new Schema(cubeColumnSchemas);
 
@@ -361,15 +373,17 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           PartialRow lowerBound = cubeSchema.newPartialRow();
           PartialRow upperBound = cubeSchema.newPartialRow();
 
-          // Set range partition to EPOCH.MAX - minvalue for DESC case.
-          if (calciteTable.isColumnOrderedDesc(rowTimestampColumn)) {
-            lowerBound.addTimestamp(rowTimestampColumn,
-                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
-            upperBound.addTimestamp(rowTimestampColumn,
-                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
-          } else {
-            lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
-            upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+          if (kuduSchema.createDummyPartition) {
+            // Set range partition to EPOCH.MAX - minvalue for DESC case.
+            if (calciteTable.isColumnOrderedDesc(rowTimestampColumn)) {
+              lowerBound.addTimestamp(rowTimestampColumn,
+                  new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
+              upperBound.addTimestamp(rowTimestampColumn,
+                  new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
+            } else {
+              lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
+              upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+            }
           }
           createCubeOptions.addRangePartition(lowerBound, upperBound);
           createCubeOptions.setRangePartitionColumns(rangePartitionCols);

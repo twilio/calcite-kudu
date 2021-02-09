@@ -150,7 +150,7 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "COUNT_INT32_COL", Type.INT64, false, null);
+    validateColumnSchema(schema, "count_INT32_COL", Type.INT64, false, null);
   }
 
   @Test
@@ -212,8 +212,8 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "COUNT_INT32_COL", Type.INT64, false, null);
-    validateColumnSchema(schema, "SUM_INT8_COL", Type.INT8, false, null);
+    validateColumnSchema(schema, "count_INT32_COL", Type.INT64, false, null);
+    validateColumnSchema(schema, "sum_INT8_COL", Type.INT8, false, null);
   }
 
   @Test
@@ -274,7 +274,7 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "COUNT_INT32_COL", Type.INT64, false, null);
+    validateColumnSchema(schema, "count_INT32_COL", Type.INT64, false, null);
   }
 
   @Test
@@ -562,7 +562,7 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "SUM_INT32_COL", Type.INT32, false, null);
+    validateColumnSchema(schema, "sum_INT32_COL", Type.INT32, false, null);
   }
 
   @Test
@@ -871,7 +871,7 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "SUM_INT32_COL", Type.INT32, false, null);
+    validateColumnSchema(schema, "sum_INT32_COL", Type.INT32, false, null);
   }
 
   @Test

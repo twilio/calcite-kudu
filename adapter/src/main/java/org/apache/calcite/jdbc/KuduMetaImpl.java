@@ -50,4 +50,10 @@ public class KuduMetaImpl extends CalciteMetaImpl {
         (k) -> new MutationState(calciteKuduTable));
   }
 
+  public void clearMutationState() {
+    for (MutationState mutationState : mutationStateMap.values()) {
+      mutationState.clear();
+    }
+  }
+
 }

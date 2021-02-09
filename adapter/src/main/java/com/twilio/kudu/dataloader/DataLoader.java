@@ -19,12 +19,12 @@ import com.twilio.kudu.dataloader.generator.MultipleColumnValueGenerator;
 import com.twilio.kudu.dataloader.generator.UniformLongValueGenerator;
 import com.twilio.kudu.sql.CalciteModifiableKuduTable;
 import com.twilio.kudu.sql.schema.BaseKuduSchemaFactory;
-import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import com.twilio.kudu.sql.CalciteKuduTable;
 import org.apache.calcite.jdbc.CalciteConnection;
+import org.apache.calcite.jdbc.KuduCalciteConnectionImpl;
+import org.apache.calcite.jdbc.KuduMetaImpl;
 import org.apache.calcite.runtime.SqlFunctions;
-import org.apache.calcite.schema.SchemaFactory;
 import org.apache.kudu.ColumnSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +57,9 @@ public class DataLoader {
   private final Scenario scenario;
   private final CalciteKuduTable calciteKuduTable;
   private String url;
-  private final int batchSize = 1000;
+  private final int COMMIT_BATCH_SIZE = 1000;
+  // limit the amount of state that is tracked in CubeMutationState
+  private final int CUBE_MUTATION_SIZE = 100000;
   private final long scenarioStartTimestamp;
   private final long scenarioEndTimestamp;
   private final long cubeGranularityFloorMod;
@@ -83,16 +85,17 @@ public class DataLoader {
     timestampGenerator.getColumnValue();
     this.scenarioStartTimestamp = timestampGenerator.minValue;
     this.scenarioEndTimestamp = timestampGenerator.maxValue;
-    // pick the first cube to determine the FLOOR mod value
-    // TODO figure out how to handle a mix of different cube time rollup
-    // granularities
-    this.cubeGranularityFloorMod = calciteKuduTable.getCubeTables().isEmpty() ? DateTimeUtils.MILLIS_PER_SECOND
-        : ((CalciteModifiableKuduTable) calciteKuduTable.getCubeTables().get(0)).getCubeMaintainer().getFloorMod();
+    // Use the largest cube granularity to determine the total number of tasks that
+    // can be
+    // parallelized. Eg. if the scenario time range is 14 days and we have 1 hourly
+    // and 1 daily
+    // cube, we can run 14 tasks in parallel (one for each day).
+    this.cubeGranularityFloorMod = getMaxCubeGranularity();
     int numTasks = (int) Math.ceil((float) (scenarioEndTimestamp - scenarioStartTimestamp) / cubeGranularityFloorMod);
 
     // set thread pool to MIN(2 * number of cpus, numTasks) by default
-    this.threadPoolSize = threadPoolSize != null ? threadPoolSize
-        : Math.min(Runtime.getRuntime().availableProcessors() * 2, numTasks);
+    this.threadPoolSize = Math
+        .min(threadPoolSize != null ? threadPoolSize : Runtime.getRuntime().availableProcessors() * 2, numTasks);
     logger.info("Thread pool size {}", this.threadPoolSize);
     this.threadPool = Executors.newFixedThreadPool(this.threadPoolSize, new ThreadFactory() {
       int threadCounter = 0;
@@ -103,6 +106,16 @@ public class DataLoader {
       }
     });
     this.completionService = new ExecutorCompletionService<>(threadPool);
+  }
+
+  /**
+   * @return If there are cube tables, return the largest granularity of the cubes
+   *         or else just use the smallest granularity
+   */
+  private Long getMaxCubeGranularity() {
+    Optional<Long> option = calciteKuduTable.getCubeTables().stream()
+        .map(t -> ((CalciteModifiableKuduTable) t).getCubeMaintainer().getFloorMod()).min(Long::compare);
+    return option.orElse(DateTimeUtils.MILLIS_PER_SECOND);
   }
 
   private String buildSql() {
@@ -263,67 +276,95 @@ public class DataLoader {
   }
 
   public void loadData(final Optional<Integer> numRowsOverrideOption) {
+    logger.info("scenario start timestamp {}", new Date(scenarioStartTimestamp));
+    logger.info("scenario end timestamp {}", new Date(scenarioEndTimestamp));
     long startTime = System.currentTimeMillis();
 
-    long startTimestamp;
-    long endTimestamp = scenarioStartTimestamp;
-    long delta = (scenarioEndTimestamp - scenarioStartTimestamp) / threadPoolSize;
+    long prevThreadEndTimestamp = scenarioStartTimestamp;
+    long rangePerThread = (scenarioEndTimestamp - scenarioStartTimestamp) / threadPoolSize;
+    long threadDelta = Math.max(rangePerThread, cubeGranularityFloorMod);
     List<CalciteKuduTable> cubeTables = calciteKuduTable.getCubeTables();
     int numRows = numRowsOverrideOption.orElseGet(scenario::getNumRows);
     for (int t = 0; t < threadPoolSize; ++t) {
-      long floorMod = cubeTables.isEmpty() ? DateTimeUtils.MILLIS_PER_SECOND : cubeGranularityFloorMod;
       // for each thread the start time stamp is the previous threads end timestamp
-      // (other than
-      // the first thread for which we set it to the scenario min timestamp)
-      startTimestamp = endTimestamp;
+      // (except the first thread for which we set it to the scenario min timestamp)
       // for each thread the end timestamp is set to the floor of the (start timestamp
-      // + delta) to
-      // DAY so that cubes are aggregated correctly (other than the last thread for
-      // which we set
-      // it to the scenario max timestamp)
+      // + delta)
+      // truncated to the max cube granularity DAY so that cubes are aggregated
+      // correctly
+      // (except the last thread for which we set it to the scenario max timestamp)
       boolean lastThread = t == threadPoolSize - 1;
-      endTimestamp = lastThread ? scenarioEndTimestamp : SqlFunctions.floor(startTimestamp + delta, floorMod);
+      final long threadStartTimestamp = prevThreadEndTimestamp;
+      final long threadEndTimestamp = lastThread ? scenarioEndTimestamp
+          : SqlFunctions.floor(threadStartTimestamp + threadDelta, cubeGranularityFloorMod);
 
-      long finalStartTimestamp = startTimestamp;
-      long finalEndTimestamp = endTimestamp;
+      // further divide the time range that each thread is responsible for so that we
+      // limit
+      // the amount of state in CubeMutationState
+      int numTasksPerThread = (int) Math
+          .ceil((float) (threadEndTimestamp - threadStartTimestamp) / cubeGranularityFloorMod);
+
       // callable implemented as lambda expression
+      final int threadIndex = t;
       Callable<Void> callableObj = () -> {
-        logger.info("startTimestamp {}", new Date(finalStartTimestamp));
-        logger.info("endTimestamp {}", new Date(finalEndTimestamp));
-        int numRowsWrittenPerThread = numRows / threadPoolSize;
+        logger.info("thread{} start timestamp {}", threadIndex, new Date(threadStartTimestamp));
+        logger.info("thread{} end timestamp {}", threadIndex, new Date(threadEndTimestamp));
+        int numRowsPerThread = numRows / threadPoolSize;
         if (lastThread) {
           // let the last thread write any remaining rows
-          numRowsWrittenPerThread += numRows % threadPoolSize;
+          numRowsPerThread += numRows % threadPoolSize;
         }
+        int maxBatchesPerThread = (int) Math.ceil((float) (numRowsPerThread) / CUBE_MUTATION_SIZE);
+        int numCubeMutationBatches = Math.min(numTasksPerThread, maxBatchesPerThread);
+        logger.info("Number of mutation batches per thread {}", numCubeMutationBatches);
         long threadStartTime = System.currentTimeMillis();
-        // create a timestamp column value generator that generates timestamps for this
-        // subset
-        // of time ranges
-        UniformLongValueGenerator subsetTimestampGenerator = new UniformLongValueGenerator(finalStartTimestamp,
-            finalEndTimestamp);
         try (Connection conn = DriverManager.getConnection(url)) {
           // Create prepared statement that can be reused
           String sql = buildSql();
           PreparedStatement stmt = conn.prepareStatement(sql);
-
           // populate table with data
-          for (int i = 1; i <= numRowsWrittenPerThread; ++i) {
-            bindValues(stmt, subsetTimestampGenerator);
-            stmt.execute();
-            if (i % batchSize == 0) {
-              conn.commit();
-              logger.info("Total number of rows committed {} time taken for " + "current batch {}", i,
-                  (System.currentTimeMillis() - threadStartTime));
-              threadStartTime = System.currentTimeMillis();
+          int rowCount = 0;
+          long batchStartTimestamp;
+          long batchEndTimestamp = threadStartTimestamp;
+          for (int i = 1; i <= numCubeMutationBatches; ++i) {
+            long rangePerBatch = (threadEndTimestamp - threadStartTimestamp) / numCubeMutationBatches;
+            long cubeDelta = Math.max(rangePerBatch, cubeGranularityFloorMod);
+            batchStartTimestamp = batchEndTimestamp;
+            batchEndTimestamp = i == numCubeMutationBatches ? threadEndTimestamp
+                : SqlFunctions.floor(batchStartTimestamp + cubeDelta, cubeGranularityFloorMod);
+            logger.info("batch {} start timestamp {}", i, new Date(batchStartTimestamp));
+            logger.info("batch {} end timestamp {}", i, new Date(batchEndTimestamp));
+            // create a timestamp column value generator that generates timestamps for this
+            // subset of time ranges
+            UniformLongValueGenerator subsetTimestampGenerator = new UniformLongValueGenerator(batchStartTimestamp,
+                batchEndTimestamp);
+            int numRowsInBatch = numRowsPerThread / numCubeMutationBatches;
+            // add any remaining rows to the last batch
+            if (i == numCubeMutationBatches) {
+              numRowsInBatch += numRowsPerThread % numCubeMutationBatches;
             }
+            for (int j = 1; j <= numRowsInBatch; ++j) {
+              bindValues(stmt, subsetTimestampGenerator);
+              stmt.execute();
+              if (++rowCount % COMMIT_BATCH_SIZE == 0) {
+                conn.commit();
+                logger.info("Total number of rows committed {} time taken {}", rowCount,
+                    (System.currentTimeMillis() - threadStartTime));
+                threadStartTime = System.currentTimeMillis();
+              }
+            }
+            // commit any remaining rows
+            conn.commit();
+            KuduMetaImpl kuduMetaImpl = (conn.unwrap(KuduCalciteConnectionImpl.class)).getMeta();
+            kuduMetaImpl.clearMutationState();
           }
-          conn.commit();
         }
-        logger.info("Total number of rows committed {} time taken {}", numRowsWrittenPerThread,
+        logger.info("Total number of rows committed {} time taken {}", numRowsPerThread,
             (System.currentTimeMillis() - threadStartTime));
         return null;
       };
       completionService.submit(callableObj);
+      prevThreadEndTimestamp = threadEndTimestamp;
     }
 
     for (int i = 0; i < threadPoolSize; i++) {

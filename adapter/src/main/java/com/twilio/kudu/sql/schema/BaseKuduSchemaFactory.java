@@ -38,10 +38,9 @@ public abstract class BaseKuduSchemaFactory implements SchemaFactory {
 
   @Override
   public Schema create(SchemaPlus parentSchema, String name, Map<String, Object> operand) {
-    final String connectString = (String) operand.get("connect");
-    final String enableInserts = (String) operand.get("enableInserts");
+    final String connectString = (String) operand.get(KuduSchema.KUDU_CONNECTION_STRING);
     return schemaCache.computeIfAbsent(connectString,
-        (masterAddresses) -> new KuduSchema(masterAddresses, kuduTableConfigMap, enableInserts));
+        (masterAddresses) -> new KuduSchema(masterAddresses, kuduTableConfigMap, operand));
   }
 
   public Optional<CalciteKuduTable> getTable(String tableName) {

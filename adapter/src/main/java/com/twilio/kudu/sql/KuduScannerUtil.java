@@ -33,7 +33,7 @@ public class KuduScannerUtil {
 
   /**
    * Deserializes a {@code KuduScanToken} into a {@link AsyncKuduScanner}.
-   * 
+   *
    * @param buf    a byte array containing the serialized scan token.
    * @param client a async Kudu client for the cluster
    * @param table  table that we are scanning against.
