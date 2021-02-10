@@ -62,26 +62,27 @@ public class ScenarioIT {
           + "PARTITION BY HASH (\"account_sid\") PARTITIONS 2 NUM_REPLICAS 1";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"Feedback\" AS " + "SELECT SUM(\"base_price\")"
+      String ddl2 = "CREATE MATERIALIZED VIEW \"Feedback\" AS "
+          + "SELECT SUM(\"base_price\") as \"sum_base_price\", COUNT(*) as \"count_records\" "
           + "FROM \"ReportCenter.OutboundMessages\" "
           + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
           + "\"msg_app_sid\", \"error_code\", \"to_cc\", \"mcc\", \"mnc\", \"provide_feedback\", \"feedback_outcome\"";
       conn.createStatement().execute(ddl2);
 
-      String ddl3 = "CREATE MATERIALIZED VIEW \"MessagingApp\" AS " + "SELECT 1 "
+      String ddl3 = "CREATE MATERIALIZED VIEW \"MessagingApp\" AS " + "SELECT COUNT(*) as \"count_records\" "
           + "FROM \"ReportCenter.OutboundMessages\" "
           + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
           + "\"msg_app_sid\", \"status\", \"error_code\", \"to_cc\", \"channel\", \"num_segments\", \"mcc\", \"mnc\"";
       conn.createStatement().execute(ddl3);
 
-      String ddl4 = "CREATE MATERIALIZED VIEW \"PhoneNumber\" AS " + "SELECT 1 "
+      String ddl4 = "CREATE MATERIALIZED VIEW \"PhoneNumber\" AS " + "SELECT COUNT(*) as \"count_records\" "
           + "FROM \"ReportCenter.OutboundMessages\" "
           + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
           + "\"msg_app_sid\", \"phone_number\", \"status\", \"error_code\", \"to_cc\", \"channel\", "
           + "\"num_segments\", \"mcc\", \"mnc\"";
       conn.createStatement().execute(ddl4);
 
-      String ddl5 = "CREATE MATERIALIZED VIEW \"SubAccount\" AS " + "SELECT 1 "
+      String ddl5 = "CREATE MATERIALIZED VIEW \"SubAccount\" AS " + "SELECT COUNT(*) as \"count_records\" "
           + "FROM \"ReportCenter.OutboundMessages\" "
           + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
           + "\"status\", \"error_code\", \"to_cc\", \"channel\", \"num_segments\", \"mcc\", \"mnc\"";
@@ -143,7 +144,8 @@ public class ScenarioIT {
           + "PARTITION BY HASH (\"usage_account_sid\") PARTITIONS 2 NUM_REPLICAS 1";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"Cube\" AS " + "SELECT SUM(\"amount\"), SUM(\"quantity\")"
+      String ddl2 = "CREATE MATERIALIZED VIEW \"Cube\" AS SELECT "
+          + "SUM(\"amount\") as \"sum_amount\", SUM(\"quantity\") as \"sum_quantity\", COUNT(*) as \"count_records\""
           + "FROM \"ReportCenter.UsageReportTransactions\" "
           + "GROUP BY \"usage_account_sid\", FLOOR(\"date_initiated\" TO DAY), \"billable_item\", \"units\", \"sub_account_sid\"";
       conn.createStatement().execute(ddl2);

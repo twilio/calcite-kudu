@@ -95,7 +95,7 @@ public class DataLoader {
 
     // set thread pool to MIN(2 * number of cpus, numTasks) by default
     this.threadPoolSize = Math
-        .min(threadPoolSize != null ? threadPoolSize : Runtime.getRuntime().availableProcessors() * 2, numTasks);
+        .min(threadPoolSize != null ? threadPoolSize : Runtime.getRuntime().availableProcessors() * 10, numTasks);
     logger.info("Thread pool size {}", this.threadPoolSize);
     this.threadPool = Executors.newFixedThreadPool(this.threadPoolSize, new ThreadFactory() {
       int threadCounter = 0;
@@ -276,8 +276,8 @@ public class DataLoader {
   }
 
   public void loadData(final Optional<Integer> numRowsOverrideOption) {
-    logger.info("scenario start timestamp {}", new Date(scenarioStartTimestamp));
-    logger.info("scenario end timestamp {}", new Date(scenarioEndTimestamp));
+    logger.info("scenario start timestamp {} end timestamp {}", new Date(scenarioStartTimestamp),
+        new Date(scenarioEndTimestamp));
     long startTime = System.currentTimeMillis();
 
     long prevThreadEndTimestamp = scenarioStartTimestamp;
