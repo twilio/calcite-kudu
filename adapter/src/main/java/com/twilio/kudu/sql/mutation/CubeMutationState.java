@@ -90,7 +90,7 @@ public class CubeMutationState extends MutationState {
     for (Map.Entry<Integer, Object> pkEntry : cubeDeltaRow.left.entrySet()) {
       row.addObject(pkEntry.getKey(), pkEntry.getValue());
     }
-    ByteVec rowKey = ByteVec.wrap(KuduUtil.encodePrimaryKey(row));
+    ByteVec rowKey = ByteVec.wrap(row.encodePrimaryKey());
 
     Iterator<Integer> nonPKColIndexIterator = calciteModifiableKuduTable.getCubeMaintainer().getNonPKColumnIndexes();
     if (aggregatedValues.containsKey(rowKey)) {
@@ -122,7 +122,7 @@ public class CubeMutationState extends MutationState {
         for (Map.Entry<Integer, Object> pkEntry : cubePK.entrySet()) {
           partialRow.addObject(pkEntry.getKey(), pkEntry.getValue());
         }
-        ByteVec rowKey = ByteVec.wrap(KuduUtil.encodePrimaryKey(partialRow));
+        ByteVec rowKey = ByteVec.wrap(partialRow.encodePrimaryKey());
 
         // set the non pk values
         Iterator<Integer> nonPkColumnIndexIterator = calciteModifiableKuduTable.getCubeMaintainer()
