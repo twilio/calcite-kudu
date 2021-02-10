@@ -18,7 +18,6 @@ import com.twilio.kudu.sql.CalciteModifiableKuduTable;
 import org.apache.calcite.util.Pair;
 import org.apache.kudu.Type;
 import org.apache.kudu.client.KuduException;
-import org.apache.kudu.client.KuduUtil;
 import org.apache.kudu.client.OperationResponse;
 import org.apache.kudu.client.PartialRow;
 import org.apache.kudu.client.Upsert;
