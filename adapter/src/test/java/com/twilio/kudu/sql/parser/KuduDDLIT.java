@@ -150,7 +150,7 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "count_INT32_COL", Type.INT64, false, null);
+    validateColumnSchema(schema, "COUNT_INT32_COL", Type.INT64, false, null);
   }
 
   @Test
@@ -212,8 +212,8 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "count_INT32_COL", Type.INT64, false, null);
-    validateColumnSchema(schema, "sum_INT8_COL", Type.INT8, false, null);
+    validateColumnSchema(schema, "COUNT_INT32_COL", Type.INT64, false, null);
+    validateColumnSchema(schema, "SUM_INT8_COL", Type.INT8, false, null);
   }
 
   @Test
@@ -274,7 +274,7 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "count_INT32_COL", Type.INT64, false, null);
+    validateColumnSchema(schema, "COUNT_INT32_COL", Type.INT64, false, null);
   }
 
   @Test
@@ -463,14 +463,11 @@ public class KuduDDLIT {
           + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
+      // Creating a cube with aliases for column names should work
       String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_6\" "
-          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) AS X " + "FROM \"my_schema.MY_TABLE_6\" "
-          + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
-      try {
-        conn.createStatement().execute(ddl2);
-        fail("Creating a cube with aliases for column names should fail");
-      } catch (SQLException e) {
-      }
+          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) AS SUM_INT32_COL FROM" +
+        " \"my_schema.MY_TABLE_6\" GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
+      conn.createStatement().execute(ddl2);
     }
   }
 
@@ -562,7 +559,7 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "sum_INT32_COL", Type.INT32, false, null);
+    validateColumnSchema(schema, "SUM_INT32_COL", Type.INT32, false, null);
   }
 
   @Test
@@ -871,7 +868,7 @@ public class KuduDDLIT {
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
-    validateColumnSchema(schema, "sum_INT32_COL", Type.INT32, false, null);
+    validateColumnSchema(schema, "SUM_INT32_COL", Type.INT32, false, null);
   }
 
   @Test
