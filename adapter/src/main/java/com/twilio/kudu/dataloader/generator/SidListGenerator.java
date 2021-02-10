@@ -24,18 +24,16 @@ public class SidListGenerator extends RandomSidGenerator {
   private final Random rand = new Random();
   private final List<String> values = new ArrayList<>();
 
-  public String sidPrefix;
   public int numValues;
 
   private SidListGenerator() {
-    super("BA");
+    super("XX");
   }
 
   public SidListGenerator(final String sidPrefix, final int numValues) {
     super(sidPrefix);
     this.numValues = numValues;
     this.sidPrefix = sidPrefix;
-    this.numValues = numValues;
   }
 
   @Override

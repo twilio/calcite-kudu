@@ -22,6 +22,7 @@ import org.apache.calcite.util.Pair;
 import org.apache.kudu.Schema;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -58,6 +59,7 @@ public class CubeMaintainer {
       String cubeColumnName = cubeSchema.getColumnByIndex(cubeColIndex).getName();
       if (cubeColumnName.equals("count_records")) {
         countRecordsColIndex = cubeColIndex;
+        nonPkColIndexMap.put(cubeColIndex, -1);
       } else {
         String factColumnName = cubeColumnName.substring(cubeColumnName.indexOf("_") + 1);
         nonPkColIndexMap.put(cubeColIndex, factSchema.getColumnIndex(factColumnName));
@@ -91,12 +93,12 @@ public class CubeMaintainer {
    * to the cube rollup time
    * 
    * @param colIndexToValueMap map from fact table column index to column value
-   * @return pair of ( map from cube table pk column index to column value, map
-   *         from cube table non-pk column index to column value)
+   * @return pair of ( map from cube table pk column index to column value, array
+   *         of non-pk column values)
    */
-  public Pair<Map<Integer, Object>, Map<Integer, Object>> generateCubeDelta(Map<Integer, Object> colIndexToValueMap) {
+  public Pair<Map<Integer, Object>, Object[]> generateCubeDelta(Map<Integer, Object> colIndexToValueMap) {
     Map<Integer, Object> pkColumnValuesMap = new HashMap<>();
-    Map<Integer, Object> nonPkColumnValuesMap = new HashMap<>();
+    Object[] nonPkColumnValues = new Object[nonPkColIndexMap.size()];
 
     // set column values for dimensions
     for (Map.Entry<Integer, Integer> entry : pkColIndexMap.entrySet()) {
@@ -122,15 +124,22 @@ public class CubeMaintainer {
     }
 
     // set column values for measures
+    int index = 0;
     for (Map.Entry<Integer, Integer> entry : nonPkColIndexMap.entrySet()) {
       int cubeColIndex = entry.getKey();
       int factColIndex = entry.getValue();
-      nonPkColumnValuesMap.put(cubeColIndex, colIndexToValueMap.get(factColIndex));
+      if (cubeColIndex == countRecordsColIndex) {
+        // add 1 for the count_records columns
+        nonPkColumnValues[index++] = 1l;
+      } else {
+        nonPkColumnValues[index++] = colIndexToValueMap.get(factColIndex);
+      }
     }
-    // add 1 for the count_records columns
-    nonPkColumnValuesMap.put(countRecordsColIndex, 1l);
+    return new Pair<>(pkColumnValuesMap, nonPkColumnValues);
+  }
 
-    return new Pair<>(pkColumnValuesMap, nonPkColumnValuesMap);
+  public Iterator<Integer> getNonPKColumnIndexes() {
+    return nonPkColIndexMap.keySet().iterator();
   }
 
 }

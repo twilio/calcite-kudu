@@ -28,6 +28,7 @@ import org.apache.calcite.sql.SqlColumnDefNode;
 import org.apache.calcite.sql.SqlColumnNameNode;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlIntervalQualifier;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
@@ -159,15 +160,17 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         PartialRow lowerBound = tableSchema.newPartialRow();
         PartialRow upperBound = tableSchema.newPartialRow();
 
-        // Set range partition to EPOCH.MAX - minvalue for DESC case.
-        if (isRowTimeStampColDesc.get()) {
-          lowerBound.addTimestamp(rowTimestampColumn,
-              new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
-          upperBound.addTimestamp(rowTimestampColumn,
-              new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
-        } else {
-          lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
-          upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+        if (kuduSchema.createDummyPartition) {
+          // Set range partition to EPOCH.MAX - minvalue for DESC case.
+          if (isRowTimeStampColDesc.get()) {
+            lowerBound.addTimestamp(rowTimestampColumn,
+                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
+            upperBound.addTimestamp(rowTimestampColumn,
+                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
+          } else {
+            lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
+            upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+          }
         }
         createTableOptions.addRangePartition(lowerBound, upperBound);
         createTableOptions.setRangePartitionColumns(rowTimestampColumns);
@@ -284,8 +287,11 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           if (colSchema.getWireType().equals(org.apache.kudu.Common.DataType.UNIXTIME_MICROS)) {
             rangePartitionCols.add(s);
           }
+          ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(colSchema);
+          columnSchemaBuilder.nullable(false);
+          columnSchemaBuilder.key(true);
           // Get the column schema for pk from the original table.
-          cubeColumnSchemas.add(colSchema);
+          cubeColumnSchemas.add(columnSchemaBuilder.build());
         }
 
         for (SqlNode sqlnode : selectList.getList()) {
@@ -293,39 +299,47 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           if (!pkColumns.contains(sqlnode.toString())) {
             // if node is an aggregate determine the appropriate column schema
             if (sqlnode instanceof SqlBasicCall) {
-              SqlNode operand = ((SqlBasicCall) sqlnode).operands[0];
-              SqlOperator operator = ((SqlBasicCall) sqlnode).getOperator();
+              SqlBasicCall callNode = (SqlBasicCall) sqlnode;
+              SqlOperator operator = callNode.getOperator();
+              SqlNode operand = callNode.operands[0];
+              // SUM(COLUMN_NAME) will be stored in a column named SUM_COLUMN_NAME
+              String factColumnName = operand.toString();
+              String columnName = operator.getName() + "_" + factColumnName;
 
-              // This also handles case where node contains AS eg : "SUM(INT32_COL) AS X".
-              // Do not support this since aliases can get confusing.
+              // handle alias eg: SUM(COLUMN_NAME) AS \"sum_column_name\" will be stored in a
+              // column named sum_column_name
+              if (callNode.getKind().equals(SqlKind.AS)) {
+                SqlBasicCall aliasedNode = callNode.operand(0);
+                operator = aliasedNode.getOperator();
+                operand = callNode.operand(1);
+                columnName = operand.toString();
+                factColumnName = aliasedNode.operands[0].toString();
+              }
+
+              // validate that the aggregate function is supported
               if (!supportedAggregatesSet.contains(operator.getName())) {
                 throw new IllegalArgumentException("Aggregate operator not supported");
               }
 
-              String originalColumnName = operand.toString();
-              String columnName = operator.getName() + "_" + originalColumnName;
-
-              // use originalColumnName to get the column schema
-              ColumnSchema colSchema = kuduTable.getSchema().getColumn(originalColumnName);
-
               // use datatype from fact table for all aggregates except COUNT.
-              org.apache.kudu.Common.DataType dataType = Common.DataType.INT64;
-              org.apache.kudu.Type kuduType = org.apache.kudu.Type.INT64;
-              if (!operator.getName().equals("COUNT")) {
-                dataType = colSchema.getWireType();
-                kuduType = colSchema.getType();
+              if (operator.getName().equals("COUNT")) {
+                ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
+                    org.apache.kudu.Type.INT64).key(false) // all columns should be non-nullable
+                        .nullable(false).wireType(Common.DataType.INT64);
+                cubeColumnSchemas.add(columnSchemaBuilder.build());
+              } else {
+                // use originalColumnName to get the column schema
+                ColumnSchema colSchema = kuduTable.getSchema().getColumn(factColumnName);
+                ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
+                    colSchema.getType()).key(false) // all columns should be non-nullable
+                        .nullable(false).desiredBlockSize(colSchema.getDesiredBlockSize())
+                        .encoding(colSchema.getEncoding()).compressionAlgorithm(colSchema.getCompressionAlgorithm())
+                        .typeAttributes(colSchema.getTypeAttributes()).wireType(colSchema.getWireType());
+                cubeColumnSchemas.add(columnSchemaBuilder.build());
               }
-
-              ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
-                  kuduType).key(false).nullable(false) // all columns should be non-nullable
-                      .desiredBlockSize(colSchema.getDesiredBlockSize()).encoding(colSchema.getEncoding())
-                      .compressionAlgorithm(colSchema.getCompressionAlgorithm())
-                      .typeAttributes(colSchema.getTypeAttributes()).wireType(dataType);
-
-              cubeColumnSchemas.add(columnSchemaBuilder.build());
             }
             // if node is a column from the original table use the same column schema
-            else {
+            else if (kuduTable.getSchema().hasColumn(sqlnode.toString())) {
               ColumnSchema colSchema = kuduTable.getSchema().getColumn(sqlnode.toString());
               cubeColumnSchemas.add(colSchema);
             }
@@ -361,15 +375,17 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           PartialRow lowerBound = cubeSchema.newPartialRow();
           PartialRow upperBound = cubeSchema.newPartialRow();
 
-          // Set range partition to EPOCH.MAX - minvalue for DESC case.
-          if (calciteTable.isColumnOrderedDesc(rowTimestampColumn)) {
-            lowerBound.addTimestamp(rowTimestampColumn,
-                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
-            upperBound.addTimestamp(rowTimestampColumn,
-                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
-          } else {
-            lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
-            upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+          if (kuduSchema.createDummyPartition) {
+            // Set range partition to EPOCH.MAX - minvalue for DESC case.
+            if (calciteTable.isColumnOrderedDesc(rowTimestampColumn)) {
+              lowerBound.addTimestamp(rowTimestampColumn,
+                  new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
+              upperBound.addTimestamp(rowTimestampColumn,
+                  new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
+            } else {
+              lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
+              upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
+            }
           }
           createCubeOptions.addRangePartition(lowerBound, upperBound);
           createCubeOptions.setRangePartitionColumns(rangePartitionCols);

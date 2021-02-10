@@ -18,14 +18,18 @@ import com.twilio.kudu.sql.CalciteModifiableKuduTable;
 import org.apache.calcite.util.Pair;
 import org.apache.kudu.Type;
 import org.apache.kudu.client.KuduException;
+import org.apache.kudu.client.OperationResponse;
 import org.apache.kudu.client.PartialRow;
 import org.apache.kudu.client.Upsert;
+import org.apache.kudu.util.ByteVec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -33,15 +37,15 @@ public class CubeMutationState extends MutationState {
 
   private static final Logger logger = LoggerFactory.getLogger(CubeMutationState.class);
 
-  // map from dimensions (pk columns of cube table) to measures (non pk columns)
-  // the inner map is from column index to column value
-  // the event time column value is truncated to the cube time rollup
-  private final Map<Map<Integer, Object>, Map<Integer, Object>> aggregatedValues = new HashMap<>();
+  // map from dimensions (pk columns of cube table encoded as a byte[]) to
+  // measures (non pk columns)
+  // the event time pk column value is truncated to the cube time rollup
+  private final Map<ByteVec, Object[]> aggregatedValues = new HashMap<>();
 
   // set containing the cube pk row values that represent the current fact rows in
-  // the batch that
-  // were aggregated
-  // used so that we limit the data being upserted to each cube that is maintained
+  // the batch that were aggregated used so that we limit the data being upserted
+  // to each cube
+  // that is maintained
   private final Set<Map<Integer, Object>> currentBatchAggregations = new HashSet<>();
 
   public CubeMutationState(CalciteModifiableKuduTable calciteModifiableKuduTable) {
@@ -76,19 +80,28 @@ public class CubeMutationState extends MutationState {
    */
   @Override
   protected void updateMutationState(Map<Integer, Object> colIndexToValueMap) {
-    Pair<Map<Integer, Object>, Map<Integer, Object>> cubeDeltaRow = calciteModifiableKuduTable.getCubeMaintainer()
+    Pair<Map<Integer, Object>, Object[]> cubeDeltaRow = calciteModifiableKuduTable.getCubeMaintainer()
         .generateCubeDelta(colIndexToValueMap);
 
-    if (aggregatedValues.containsKey(cubeDeltaRow.left)) {
-      Map<Integer, Object> currentAggregatedColValues = aggregatedValues.get(cubeDeltaRow.left);
-      for (Map.Entry<Integer, Object> entry : currentAggregatedColValues.entrySet()) {
-        Integer colIndex = entry.getKey();
-        Object currentValue = entry.getValue();
-        Object deltaValue = cubeDeltaRow.right.get(colIndex);
-        currentAggregatedColValues.put(colIndex, increment(colIndex, currentValue, deltaValue));
+    final Upsert upsert = kuduTable.newUpsert();
+    final PartialRow row = upsert.getRow();
+    // set the pk values in partialRow
+    for (Map.Entry<Integer, Object> pkEntry : cubeDeltaRow.left.entrySet()) {
+      row.addObject(pkEntry.getKey(), pkEntry.getValue());
+    }
+    ByteVec rowKey = ByteVec.wrap(row.encodePrimaryKey());
+
+    Iterator<Integer> nonPKColIndexIterator = calciteModifiableKuduTable.getCubeMaintainer().getNonPKColumnIndexes();
+    if (aggregatedValues.containsKey(rowKey)) {
+      Object[] currentAggregatedColValues = aggregatedValues.get(rowKey);
+      for (int i = 0; i < currentAggregatedColValues.length; ++i) {
+        Object currentValue = currentAggregatedColValues[i];
+        Integer colIndex = nonPKColIndexIterator.next();
+        Object deltaValue = cubeDeltaRow.right[i];
+        currentAggregatedColValues[i] = increment(colIndex, currentValue, deltaValue);
       }
     } else {
-      aggregatedValues.put(cubeDeltaRow.left, cubeDeltaRow.right);
+      aggregatedValues.put(rowKey, cubeDeltaRow.right);
     }
     currentBatchAggregations.add(cubeDeltaRow.left);
   }
@@ -108,9 +121,13 @@ public class CubeMutationState extends MutationState {
         for (Map.Entry<Integer, Object> pkEntry : cubePK.entrySet()) {
           partialRow.addObject(pkEntry.getKey(), pkEntry.getValue());
         }
+        ByteVec rowKey = ByteVec.wrap(partialRow.encodePrimaryKey());
+
         // set the non pk values
-        for (Map.Entry<Integer, Object> nonPkEntry : aggregatedValues.get(cubePK).entrySet()) {
-          partialRow.addObject(nonPkEntry.getKey(), nonPkEntry.getValue());
+        Iterator<Integer> nonPkColumnIndexIterator = calciteModifiableKuduTable.getCubeMaintainer()
+            .getNonPKColumnIndexes();
+        for (Object nonPKColValue : aggregatedValues.get(rowKey)) {
+          partialRow.addObject(nonPkColumnIndexIterator.next(), nonPKColValue);
         }
         session.apply(upsert);
         // TODO make this configurable
@@ -126,8 +143,13 @@ public class CubeMutationState extends MutationState {
       // clear the list of cube pk values
       currentBatchAggregations.clear();
     }
-    logger.info("Map size " + aggregatedValues.size() + " rows. Flushed " + mutationCount + " cube " + "rows in "
-        + (System.currentTimeMillis() - startTime) + " ms.");
+    logger.info("Cube table {} map size {} rows. Flushed mutationCount cube rows in {} ms.", kuduTable.getName(),
+        aggregatedValues.size(), (System.currentTimeMillis() - startTime));
+  }
+
+  public void clear() {
+    aggregatedValues.clear();
+    currentBatchAggregations.clear();
   }
 
 }

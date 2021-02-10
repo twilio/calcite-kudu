@@ -45,14 +45,22 @@ public final class KuduSchema extends AbstractSchema {
   private final Map<String, KuduTableMetadata> kuduTableMetadataMap;
   private Optional<Map<String, Table>> cachedTableMap = Optional.empty();
 
-  private boolean enableInserts;
+  // properties
+  public static String KUDU_CONNECTION_STRING = "connect";
+  public static String ENABLE_INSERTS_FLAG = "enableInserts";
+  public static String CREATE_DUMMY_PARTITION_FLAG = "createDummyPartition";
+
+  public final boolean enableInserts;
+  public final boolean createDummyPartition;
 
   public KuduSchema(final String connectString, final Map<String, KuduTableMetadata> kuduTableMetadataMap,
-      final String enableInsertsString) {
+      final Map<String, Object> propertyMap) {
     this.client = new AsyncKuduClient.AsyncKuduClientBuilder(connectString).build();
     this.kuduTableMetadataMap = kuduTableMetadataMap;
-    // We disable inserts by default as this feaure is meant for testing purposes
-    this.enableInserts = (enableInsertsString != null) ? Boolean.valueOf(enableInsertsString) : false;
+    // We disable inserts by default as this feature has not been thoroughly tested
+
+    this.enableInserts = Boolean.valueOf((String) propertyMap.getOrDefault(ENABLE_INSERTS_FLAG, "false"));
+    this.createDummyPartition = Boolean.valueOf((String) propertyMap.getOrDefault(CREATE_DUMMY_PARTITION_FLAG, "true"));
   }
 
   public void clearCachedTableMap() {
@@ -115,7 +123,7 @@ public final class KuduSchema extends AbstractSchema {
           logger.error("Unable to open table " + tableName, e);
         }
 
-        if (!timeStampColumnName.isEmpty() && !this.kuduTableMetadataMap.containsKey(tableName)) {
+        if (!timeStampColumnName.isEmpty()) {
           if (factToCubeListMap.get(tableName) != null) {
             this.kuduTableMetadataMap.put(tableName,
                 new KuduTableMetadata.KuduTableMetadataBuilder().setTimestampColumnName(timeStampColumnName)

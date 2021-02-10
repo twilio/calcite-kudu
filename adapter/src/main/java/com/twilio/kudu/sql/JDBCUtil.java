@@ -16,6 +16,7 @@ package com.twilio.kudu.sql;
 
 import com.twilio.kudu.sql.parser.KuduSqlParserImpl;
 import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
+import com.twilio.kudu.sql.schema.KuduSchema;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.jdbc.KuduDriver;
 
@@ -35,15 +36,16 @@ public class JDBCUtil {
   // which is not correct if a table is being written to from multiple processes.
   // This also enables DDL support which allows used to create tables.
   public static String CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED = "jdbc:kudu:"
-      + CalciteConnectionProperty.SCHEMA_FACTORY.camelName() + "=%s" + ";schema.connect=%s" + ";"
+      + CalciteConnectionProperty.SCHEMA_FACTORY.camelName() + "=%s" + ";"
       + CalciteConnectionProperty.SCHEMA.camelName() + "=kudu" + ";" + CalciteConnectionProperty.TIME_ZONE.camelName()
-      + "=UTC" + ";" + CalciteConnectionProperty.CASE_SENSITIVE.camelName() + "=false" + ";schema.enableInserts=true"
-      + ";" + CalciteConnectionProperty.PARSER_FACTORY.camelName() + "=" + KuduSqlParserImpl.class.getName()
-      + "#FACTORY";
+      + "=UTC" + ";" + CalciteConnectionProperty.CASE_SENSITIVE.camelName() + "=false" + ";"
+      + CalciteConnectionProperty.PARSER_FACTORY.camelName() + "=" + KuduSqlParserImpl.class.getName() + "#FACTORY"
+      + ";schema." + KuduSchema.KUDU_CONNECTION_STRING + "=%s" + ";schema." + KuduSchema.ENABLE_INSERTS_FLAG + "=true";
 
   public static String CALCITE_MODEL_TEMPLATE = "jdbc:kudu:" + CalciteConnectionProperty.SCHEMA_FACTORY.camelName()
-      + "=%s" + ";schema.connect=%s" + ";" + CalciteConnectionProperty.SCHEMA.camelName() + "=kudu" + ";"
+      + "=%s" + ";" + CalciteConnectionProperty.SCHEMA.camelName() + "=kudu" + ";"
       + CalciteConnectionProperty.TIME_ZONE.camelName() + "=UTC" + ";"
-      + CalciteConnectionProperty.CASE_SENSITIVE.camelName() + "=false";
+      + CalciteConnectionProperty.CASE_SENSITIVE.camelName() + "=false" + ";schema." + KuduSchema.KUDU_CONNECTION_STRING
+      + "=%s";
 
 }

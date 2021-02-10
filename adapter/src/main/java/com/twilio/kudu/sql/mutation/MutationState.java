@@ -230,4 +230,14 @@ public class MutationState {
     }
   }
 
+  /**
+   * Clears the cube mutation state (and thus frees up memory)
+   */
+  public void clear() {
+    for (MutationState cubeMutationState : cubeMutationStateList) {
+      cubeMutationState.clear();
+    }
+    numFactRowsInBatch = 0;
+  }
+
 }

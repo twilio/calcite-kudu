@@ -463,14 +463,11 @@ public class KuduDDLIT {
           + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
       conn.createStatement().execute(ddl);
 
+      // Creating a cube with aliases for column names should work
       String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_6\" "
-          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) AS X " + "FROM \"my_schema.MY_TABLE_6\" "
-          + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
-      try {
-        conn.createStatement().execute(ddl2);
-        fail("Creating a cube with aliases for column names should fail");
-      } catch (SQLException e) {
-      }
+          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) AS SUM_INT32_COL FROM"
+          + " \"my_schema.MY_TABLE_6\" GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
+      conn.createStatement().execute(ddl2);
     }
   }
 
