@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
@@ -41,6 +42,7 @@ import org.apache.calcite.sql.SqlKind;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.concurrent.BlockingQueue;
@@ -54,6 +56,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.AsyncKuduScanner;
+import org.apache.kudu.client.KuduPredicate;
 import org.apache.kudu.client.KuduScanToken;
 import org.apache.kudu.Schema;
 
@@ -532,8 +535,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     // everything.
     // @TODO: can we generate unique predicates? What happens when it contains the
     // same one.
-    final List<List<CalciteKuduPredicate>> merged = KuduPredicatePushDownVisitor.mergePredicateLists(SqlKind.AND,
-        this.predicates, conjunctions);
+      final List<List<CalciteKuduPredicate>> merged = processForInList(
+          KuduPredicatePushDownVisitor.mergePredicateLists(SqlKind.AND, this.predicates, conjunctions));
     return new KuduEnumerable(merged, columnIndices, client, calciteKuduTable, limit, offset, sort, groupBySorted,
         scanStats, cancelFlag, projection, filterFunction, isSingleObject);
   }
@@ -565,8 +568,92 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
           return rowTranslators.stream().map(t -> t.toPredicate((Object[]) s)).collect(Collectors.toList());
         }).collect(Collectors.toSet());
         // @TODO: refactor all of this to use Set<List<>> instead of List<List<>>>.
-        return rootEnumerable.clone(new LinkedList<>(pushDownPredicates));
+            final List<List<CalciteKuduPredicate>> optimized = processForInList(new LinkedList<>(pushDownPredicates));
+            System.out.println(optimized);
+        return rootEnumerable.clone(optimized);
       }
     };
+  }
+
+  static Set<Integer> columnsInAllScans(final List<List<CalciteKuduPredicate>> scans, final Set<Integer> allFields) {
+
+    return allFields.stream()
+        .filter(i -> scans.stream().allMatch(subScan -> subScan.stream().filter(p -> p.inListOptimizationAllowed(i))
+            // Each scan must have this predicate exactly once.
+            // https://twilioincidents.appspot.com/incident/4859603272597504/view
+            .count() == 1L))
+        .collect(Collectors.toSet());
+  }
+
+  static List<List<CalciteKuduPredicate>> processForInList(final List<List<CalciteKuduPredicate>> original) {
+
+    // Collect all column indexes in all scans
+    final HashSet<Integer> allFields = new HashSet<>();
+    for (List<CalciteKuduPredicate> scan : original) {
+      for (CalciteKuduPredicate pred : scan) {
+        allFields.add(pred.getColumnIdx());
+      }
+    }
+
+    // Find column indices that are shared in each scan and each scan uses a EQUAL
+    // on that field.
+    final Set<Integer> inAllScans = columnsInAllScans(original, allFields);
+    // When there isn't any fields with in list optimization, return original.
+    if (inAllScans.isEmpty()) {
+      return original;
+    }
+
+    // Initialize a Map from Column Index to Set of all values. A Set is used so
+    // remove duplicate scan predicates -- for instance account_sid = AC123 being
+    // present
+    // in each scan.
+    final Map<Integer, HashSet<Object>> inPredicates = inAllScans.stream()
+        .collect(Collectors.<Integer, Integer, HashSet<Object>>toMap(c -> c, c -> new HashSet<Object>()));
+
+    Set<List<CalciteKuduPredicate>> updatedPredicates = new HashSet<>();
+    for (List<CalciteKuduPredicate> scan : original) {
+      final ArrayList<CalciteKuduPredicate> updatedScan = new ArrayList<>();
+
+      for (CalciteKuduPredicate pred : scan) {
+        if (!inAllScans.contains(pred.getColumnIdx())) {
+          updatedScan.add(pred);
+        } else {
+          inPredicates.get(pred.getColumnIdx()).add(((ComparisonPredicate) pred).rightHandValue);
+        }
+      }
+      if (!updatedScan.isEmpty()) {
+        updatedPredicates.add(updatedScan);
+      }
+    }
+
+    int inListCount = 0;
+    final List<CalciteKuduPredicate> inListScan = new ArrayList<>();
+    for (Map.Entry<Integer, HashSet<Object>> idxListPair : inPredicates.entrySet()) {
+      // If there is only one value, use EQUAL instead of IN LIST.
+      if (idxListPair.getValue().size() == 1) {
+        inListScan.add(new ComparisonPredicate(idxListPair.getKey(), KuduPredicate.ComparisonOp.EQUAL,
+            idxListPair.getValue().iterator().next()));
+      } else {
+        inListCount++;
+        inListScan.add(new InListPredicate(idxListPair.getKey(), new ArrayList<>(idxListPair.getValue())));
+      }
+    }
+
+    // Optimization created 0 InListPredicates, therefore just return original.
+    if (inListCount == 0) {
+      return original;
+    }
+
+    if (updatedPredicates.isEmpty()) {
+      return Collections.singletonList(inListScan);
+    } else if (updatedPredicates.size() == 1) {
+      // Similar to {@link KuduPredicatePushDownVisitor#mergePredicateLists(AND, left,
+      // right)}
+      updatedPredicates.stream().forEach(scan -> scan.addAll(inListScan));
+      return new ArrayList<>(updatedPredicates);
+    } else {
+      return original;
+    }
+
   }
 }
