@@ -557,16 +557,6 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     final List<TranslationPredicate> rowTranslators = joinNode.getCondition()
         .accept(new TranslationPredicate.ConditionTranslationVisitor(joinNode.getLeft().getRowType().getFieldCount(),
             rightSideProjection, this.getTableSchema()));
-    final KuduEnumerable rootEnumerable = this;
-    return new Function1<List<Object>, Enumerable<Object>>() {
-      @Override
-      public Enumerable<Object> apply(final List<Object> batch) {
-        final Set<List<CalciteKuduPredicate>> pushDownPredicates = batch.stream().map(s -> {
-          return rowTranslators.stream().map(t -> t.toPredicate((Object[]) s)).collect(Collectors.toList());
-        }).collect(Collectors.toSet());
-        // @TODO: refactor all of this to use Set<List<>> instead of List<List<>>>.
-        return rootEnumerable.clone(new LinkedList<>(pushDownPredicates));
-      }
-    };
+    return new NestedJoinFactory(1000, rowTranslators, this);
   }
 }
