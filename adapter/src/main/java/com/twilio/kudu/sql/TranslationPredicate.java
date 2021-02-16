@@ -23,41 +23,39 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate.ComparisonOp;
 
 public class TranslationPredicate {
   private final int leftKuduIndex;
   private final int rightKuduIndex;
   private final ComparisonOp operation;
-  // @TODO: remove this property it is no longer used
-  private final Schema tableSchema;
 
-  public TranslationPredicate(final int leftOrdinal, final int rightOrdinal, final RexCall functionCall,
-      final Schema tableSchema) {
+  public TranslationPredicate(final int leftOrdinal, final int rightOrdinal, final ComparisonOp operation) {
     this.leftKuduIndex = leftOrdinal;
     this.rightKuduIndex = rightOrdinal;
-    this.tableSchema = tableSchema;
+    this.operation = operation;
+  }
 
+  private static ComparisonOp findOpFromCall(final RexCall functionCall) {
     switch (functionCall.getOperator().getKind()) {
     case EQUALS:
-      this.operation = ComparisonOp.EQUAL;
-      break;
+      return ComparisonOp.EQUAL;
     case GREATER_THAN:
-      this.operation = ComparisonOp.GREATER;
-      break;
+      return ComparisonOp.GREATER;
     case GREATER_THAN_OR_EQUAL:
-      this.operation = ComparisonOp.GREATER_EQUAL;
-      break;
+      return ComparisonOp.GREATER_EQUAL;
     case LESS_THAN:
-      this.operation = ComparisonOp.LESS;
-      break;
+      return ComparisonOp.LESS;
     case LESS_THAN_OR_EQUAL:
-      this.operation = ComparisonOp.LESS_EQUAL;
+      return ComparisonOp.LESS_EQUAL;
     default:
       throw new IllegalArgumentException(String.format("TranslationPredicate is unable to handle this call type: %s",
           functionCall.getOperator().getKind()));
     }
+  }
+
+  public TranslationPredicate(final int leftOrdinal, final int rightOrdinal, final RexCall functionCall) {
+    this(leftOrdinal, rightOrdinal, findOpFromCall(functionCall));
   }
 
   public CalciteKuduPredicate toPredicate(final Object[] leftRow) {
@@ -69,15 +67,12 @@ public class TranslationPredicate {
    */
   public static class ConditionTranslationVisitor extends RexVisitorImpl<List<TranslationPredicate>> {
     private final int leftSize;
-    private final Schema tableSchema;
     private final Project rightSideProjection;
 
-    public ConditionTranslationVisitor(final int leftSize, final Project rightSideProjection,
-        final Schema tableSchema) {
+    public ConditionTranslationVisitor(final int leftSize, final Project rightSideProjection) {
 
       super(true);
       this.leftSize = leftSize;
-      this.tableSchema = tableSchema;
       this.rightSideProjection = rightSideProjection;
     }
 
@@ -113,7 +108,7 @@ public class TranslationPredicate {
             rightIndex = rightPositionInEnumerable;
           }
 
-          return Collections.singletonList(new TranslationPredicate(left.getIndex(), rightIndex, call, tableSchema));
+          return Collections.singletonList(new TranslationPredicate(left.getIndex(), rightIndex, call));
         } else {
           throw new IllegalArgumentException(
               "Unable to construct a Kudu Predicate for join condition that doesn't contain two InputRefs");

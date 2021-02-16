@@ -17,7 +17,6 @@ package com.twilio.kudu.sql;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -38,7 +37,7 @@ import org.apache.kudu.client.AsyncKuduScanner;
 public final class NestedJoinFactory implements Function1<List<Object>, Enumerable<Object>> {
 
   private final ResultCache resultCache;
-  private final KuduEnumerable rootEnumerable;
+  private final CloneableEnumerable<Object> rootEnumerable;
   private final List<TranslationPredicate> rowTranslators;
 
   /**
@@ -49,10 +48,10 @@ public final class NestedJoinFactory implements Function1<List<Object>, Enumerab
    * @param rowTranslators bindable predicates that depend on the row from the
    *                       left side of the join
    * @param rootEnumerable base enumerable that will be
-   *                       {@link KuduEnumerable#clone(List)}
+   *                       {@link CloneableEnumerable#clone(List)}
    */
   public NestedJoinFactory(final int capacity, final List<TranslationPredicate> rowTranslators,
-      final KuduEnumerable rootEnumerable) {
+      final CloneableEnumerable<Object> rootEnumerable) {
     this.resultCache = new ResultCache(capacity);
     this.rowTranslators = rowTranslators;
     this.rootEnumerable = rootEnumerable;
