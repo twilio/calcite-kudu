@@ -26,6 +26,8 @@ import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.kudu.client.AsyncKuduScanner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * {@code NestedJoinFactory} is an implementation of {@link Function1} that
@@ -35,6 +37,8 @@ import org.apache.kudu.client.AsyncKuduScanner;
  * going creating {@link AsyncKuduScanner} for repeated rows
  */
 public final class NestedJoinFactory implements Function1<List<Object>, Enumerable<Object>> {
+
+  private static final Logger LOG = LoggerFactory.getLogger(NestedJoinFactory.class);
 
   private final ResultCache resultCache;
   private final CloneableEnumerable<Object> rootEnumerable;
@@ -59,6 +63,11 @@ public final class NestedJoinFactory implements Function1<List<Object>, Enumerab
 
   @Override
   public Enumerable<Object> apply(final List<Object> batchFromLeftTable) {
+    if (batchFromLeftTable.size() >= resultCache.capacity) {
+      LOG.warn(
+          "Batch (count: {}) is larger than the result cache size (size: {}). This makes prevents the cache from being effective",
+          batchFromLeftTable.size(), resultCache.capacity);
+    }
     final List<Enumerator<Object>> enumerators = batchFromLeftTable.stream()
         .map(rowFromLeft -> rowTranslators.stream().map(t -> t.toPredicate((Object[]) rowFromLeft))
             .collect(Collectors.toList()))
@@ -182,6 +191,10 @@ public final class NestedJoinFactory implements Function1<List<Object>, Enumerab
     private int capacity;
 
     ResultCache(final int capacity) {
+      // Use default capacity and load factor and *finally* set access order to create
+      // a proper
+      // cache
+      super(16, 0.75f, true);
       this.capacity = capacity;
     }
 

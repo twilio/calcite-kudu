@@ -54,12 +54,12 @@ public final class NestedJoinCacheTest {
     when(mockBaseEnumerable.clone(secondRowPredicates)).thenReturn(mockEnumerableSecondRow);
     when(mockBaseEnumerable.clone(thirdRowPredicates)).thenReturn(mockEnumerableThirdRow);
 
-    when(mockEnumerableFirstRow.enumerator()).thenReturn(
-        new ListEnumerator<Object>(Collections.singletonList(new Object[] { Integer.valueOf(1), "OneRow" })));
-    when(mockEnumerableSecondRow.enumerator()).thenReturn(
-        new ListEnumerator<Object>(Collections.singletonList(new Object[] { Integer.valueOf(2), "TwoRow" })));
-    when(mockEnumerableThirdRow.enumerator()).thenReturn(
-        new ListEnumerator<Object>(Collections.singletonList(new Object[] { Integer.valueOf(3), "ThirdRow" })));
+    when(mockEnumerableFirstRow.enumerator()).thenAnswer(
+        x -> new ListEnumerator<Object>(Collections.singletonList(new Object[] { Integer.valueOf(1), "OneRow" })));
+    when(mockEnumerableSecondRow.enumerator()).thenAnswer(
+        x -> new ListEnumerator<Object>(Collections.singletonList(new Object[] { Integer.valueOf(2), "TwoRow" })));
+    when(mockEnumerableThirdRow.enumerator()).thenAnswer(
+        x -> new ListEnumerator<Object>(Collections.singletonList(new Object[] { Integer.valueOf(3), "ThirdRow" })));
 
     // Run the same rows through a bunch of times.
     for (int i = 0; i < 1000; i++) {
@@ -75,6 +75,55 @@ public final class NestedJoinCacheTest {
 
     // Test to make sure we created a clone only 3 times.
     verify(mockBaseEnumerable, times(3)).clone(any());
+  }
+
+  @Test
+  public void smallCache() {
+    final List<TranslationPredicate> joinTranslations = Collections
+        .singletonList(new TranslationPredicate(1, 0, ComparisonOp.EQUAL));
+    final CloneableEnumerable<Object> mockBaseEnumerable = mock(CloneableEnumerable.class);
+    final NestedJoinFactory joinFactory = new NestedJoinFactory(2, joinTranslations, mockBaseEnumerable);
+    final CloneableEnumerable<Object> mockEnumerableFirstRow = mock(CloneableEnumerable.class);
+    final CloneableEnumerable<Object> mockEnumerableSecondRow = mock(CloneableEnumerable.class);
+    final CloneableEnumerable<Object> mockEnumerableThirdRow = mock(CloneableEnumerable.class);
+    final List<Object> firstBatch = Arrays.asList(new Object[] { "Awesome", Integer.valueOf(1) },
+        new Object[] { "Awesome2", Integer.valueOf(2) }, new Object[] { "Awesome3", Integer.valueOf(3) });
+
+    List<List<CalciteKuduPredicate>> firstRowPredicates = Collections
+        .singletonList(Arrays.asList(new ComparisonPredicate(0, ComparisonOp.EQUAL, Integer.valueOf(1))));
+    List<List<CalciteKuduPredicate>> secondRowPredicates = Collections
+        .singletonList(Arrays.asList(new ComparisonPredicate(0, ComparisonOp.EQUAL, Integer.valueOf(2))));
+    List<List<CalciteKuduPredicate>> thirdRowPredicates = Collections
+        .singletonList(Arrays.asList(new ComparisonPredicate(0, ComparisonOp.EQUAL, Integer.valueOf(3))));
+
+    when(mockBaseEnumerable.clone(firstRowPredicates)).thenReturn(mockEnumerableFirstRow);
+    when(mockBaseEnumerable.clone(secondRowPredicates)).thenReturn(mockEnumerableSecondRow);
+    when(mockBaseEnumerable.clone(thirdRowPredicates)).thenReturn(mockEnumerableThirdRow);
+
+    when(mockEnumerableFirstRow.enumerator()).thenAnswer(
+        x -> new ListEnumerator<Object>(Collections.singletonList(new Object[] { Integer.valueOf(1), "OneRow" })));
+    when(mockEnumerableSecondRow.enumerator()).thenAnswer(
+        x -> new ListEnumerator<Object>(Collections.singletonList(new Object[] { Integer.valueOf(2), "TwoRow" })));
+    when(mockEnumerableThirdRow.enumerator()).thenAnswer(
+        x -> new ListEnumerator<Object>(Collections.singletonList(new Object[] { Integer.valueOf(3), "ThirdRow" })));
+
+    // Run the same rows through a bunch of times.
+    for (int i = 0; i < 3; i++) {
+      final List<Object> rightHandSide = joinFactory.apply(firstBatch).toList();
+      // Prime the second row in the cache to keep it up front.
+      joinFactory.apply(Collections.singletonList(firstBatch.get(1)));
+
+      assertEquals(String.format("Right hand side should return three rows it returned %d", rightHandSide.size()), 3,
+          rightHandSide.size());
+    }
+
+    verify(mockEnumerableFirstRow, times(3)).enumerator();
+    verify(mockEnumerableSecondRow, times(1)).enumerator();
+    verify(mockEnumerableThirdRow, times(3)).enumerator();
+
+    verify(mockBaseEnumerable, times(3)).clone(firstRowPredicates);
+    verify(mockBaseEnumerable, times(3)).clone(thirdRowPredicates);
+    verify(mockBaseEnumerable, times(1)).clone(secondRowPredicates);
   }
 
   class ListEnumerator<T> implements Enumerator<T> {
@@ -103,7 +152,6 @@ public final class NestedJoinCacheTest {
     @Override
     public void reset() {
       i = -1;
-
     }
 
     @Override
