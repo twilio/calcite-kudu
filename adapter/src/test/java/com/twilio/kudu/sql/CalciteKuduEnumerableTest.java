@@ -60,4 +60,18 @@ public final class CalciteKuduEnumerableTest {
     assertFalse("Should be no more rows", enumerable.moveNext());
     assertEquals("current() should still be the previous row", singleRow[0], enumerable.current().getRowData());
   }
+
+  @Test
+  public void errorResult() {
+    final LinkedBlockingQueue<CalciteScannerMessage<CalciteRow>> queue = new LinkedBlockingQueue<>(10);
+    final Enumerator<CalciteRow> enumerable = new CalciteKuduEnumerable(queue, new AtomicBoolean(false)).enumerator();
+    final Object[] singleRow = { Long.valueOf(1) };
+    queue.add(new CalciteScannerMessage<CalciteRow>(
+        new CalciteRow(rowSchema, singleRow, Arrays.asList(0), Collections.<Integer>emptyList())));
+    queue.add(new CalciteScannerMessage<CalciteRow>(new RuntimeException("Testing exit")));
+    assertTrue("Should signal there are messages", enumerable.moveNext());
+    assertEquals("Row should match", singleRow[0], enumerable.current().getRowData());
+    assertFalse("Should be no more rows", enumerable.moveNext());
+    assertEquals("current() should still be the previous row", singleRow[0], enumerable.current().getRowData());
+  }
 }

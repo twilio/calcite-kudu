@@ -107,4 +107,13 @@ public final class CalciteScannerMessage<T> {
     this.failure = Optional.empty();
     this.callback = Optional.empty();
   }
+
+  /**
+   * Whether or not this message means the end of the scan
+   *
+   * @return true if the scanner is no longer processing rows.
+   */
+  public boolean isTerminal() {
+    return type == MessageType.CLOSE || type == MessageType.ERROR;
+  }
 }
