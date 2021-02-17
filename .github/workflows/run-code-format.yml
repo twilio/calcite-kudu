@@ -33,4 +33,4 @@ jobs:
       with:
         java-version: 11
     - name: Verify Code Format
-      run: mvn spotless:check
+      run: mvn -q spotless:check
