@@ -105,10 +105,10 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
             }
           }
 
-        } while (iterationNext == null || (iterationNext.type != CalciteScannerMessage.MessageType.CLOSE
-            && iterationNext.type != CalciteScannerMessage.MessageType.ROW));
+        } while (iterationNext == null
+            || (!iterationNext.isTerminal() && iterationNext.type != CalciteScannerMessage.MessageType.ROW));
 
-        if (iterationNext.type == CalciteScannerMessage.MessageType.CLOSE) {
+        if (iterationNext.isTerminal()) {
           logger.info("No more results in queue, exiting");
           finished = true;
           return false;
