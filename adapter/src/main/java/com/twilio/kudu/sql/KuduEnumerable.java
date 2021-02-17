@@ -70,7 +70,7 @@ import org.apache.kudu.client.KuduScannerUtil;
  * {@link org.apache.kudu.client.AsyncKuduScanner} will return rows sorted by
  * primary key.
  */
-public final class KuduEnumerable extends AbstractEnumerable<Object> {
+public final class KuduEnumerable extends AbstractEnumerable<Object> implements CloneableEnumerable<Object> {
   private static final Logger logger = LoggerFactory.getLogger(KuduEnumerable.class);
 
   private final AtomicBoolean scansShouldStop;
@@ -527,7 +527,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     return scanners;
   }
 
-  public KuduEnumerable clone(final List<List<CalciteKuduPredicate>> conjunctions) {
+  @Override
+  public CloneableEnumerable<Object> clone(final List<List<CalciteKuduPredicate>> conjunctions) {
     // The result of the merge can be an empty list. That means we are scanning
     // everything.
     // @TODO: can we generate unique predicates? What happens when it contains the
@@ -556,17 +557,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> {
     }
     final List<TranslationPredicate> rowTranslators = joinNode.getCondition()
         .accept(new TranslationPredicate.ConditionTranslationVisitor(joinNode.getLeft().getRowType().getFieldCount(),
-            rightSideProjection, this.getTableSchema()));
-    final KuduEnumerable rootEnumerable = this;
-    return new Function1<List<Object>, Enumerable<Object>>() {
-      @Override
-      public Enumerable<Object> apply(final List<Object> batch) {
-        final Set<List<CalciteKuduPredicate>> pushDownPredicates = batch.stream().map(s -> {
-          return rowTranslators.stream().map(t -> t.toPredicate((Object[]) s)).collect(Collectors.toList());
-        }).collect(Collectors.toSet());
-        // @TODO: refactor all of this to use Set<List<>> instead of List<List<>>>.
-        return rootEnumerable.clone(new LinkedList<>(pushDownPredicates));
-      }
-    };
+            rightSideProjection));
+    return new NestedJoinFactory(1000, rowTranslators, this);
   }
 }
