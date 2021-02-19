@@ -58,7 +58,7 @@ public class KuduFilterRule extends RelOptRule {
       }
       final RelNode converted = new KuduFilterRel(filter.getCluster(),
           filter.getTraitSet().replace(KuduRelNode.CONVENTION), convert(filter.getInput(), KuduRelNode.CONVENTION),
-          filter.getCondition(), predicates, kuduQuery.calciteKuduTable.getKuduTable().getSchema(),
+          condition, predicates, kuduQuery.calciteKuduTable.getKuduTable().getSchema(),
           !predicateParser.areAllFiltersApplied());
 
       call.transformTo(converted);
