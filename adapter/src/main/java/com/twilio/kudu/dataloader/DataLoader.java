@@ -114,7 +114,7 @@ public class DataLoader {
    */
   private Long getMaxCubeGranularity() {
     Optional<Long> option = calciteKuduTable.getCubeTables().stream()
-        .map(t -> ((CalciteModifiableKuduTable) t).getCubeMaintainer().getFloorMod()).min(Long::compare);
+        .map(t -> ((CalciteModifiableKuduTable) t).getCubeMaintainer().getFloorMod()).max(Long::compare);
     return option.orElse(DateTimeUtils.MILLIS_PER_SECOND);
   }
 
@@ -283,7 +283,6 @@ public class DataLoader {
     long prevThreadEndTimestamp = scenarioStartTimestamp;
     long rangePerThread = (scenarioEndTimestamp - scenarioStartTimestamp) / threadPoolSize;
     long threadDelta = Math.max(rangePerThread, cubeGranularityFloorMod);
-    List<CalciteKuduTable> cubeTables = calciteKuduTable.getCubeTables();
     int numRows = numRowsOverrideOption.orElseGet(scenario::getNumRows);
     for (int t = 0; t < threadPoolSize; ++t) {
       // for each thread the start time stamp is the previous threads end timestamp
