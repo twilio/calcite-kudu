@@ -62,6 +62,12 @@ public class ScenarioIT {
           + "PARTITION BY HASH (\"account_sid\") PARTITIONS 2 NUM_REPLICAS 1";
       conn.createStatement().execute(ddl);
 
+      String ddl1 = "CREATE MATERIALIZED VIEW \"MessagingAppHourly\" AS " + "SELECT COUNT(*) as \"count_records\" "
+          + "FROM \"ReportCenter.OutboundMessages\" "
+          + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO HOUR), \"sub_account_sid\", "
+          + "\"msg_app_sid\", \"status\", \"error_code\", \"to_cc\", \"channel\", \"num_segments\", \"mcc\", \"mnc\"";
+      conn.createStatement().execute(ddl1);
+
       String ddl2 = "CREATE MATERIALIZED VIEW \"Feedback\" AS "
           + "SELECT SUM(\"base_price\") as \"sum_base_price\", COUNT(*) as \"count_records\" "
           + "FROM \"ReportCenter.OutboundMessages\" "
@@ -102,6 +108,12 @@ public class ScenarioIT {
       assertFalse(rs.next());
 
       // verify the cube row counts match
+      rs = conn.createStatement().executeQuery(
+          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-MessagingAppHourly-Hour-Aggregation\"");
+      assertTrue(rs.next());
+      assertEquals(scenario.getNumRows(), rs.getInt(1));
+      assertFalse(rs.next());
+
       rs = conn.createStatement().executeQuery(
           "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-Feedback-Day-Aggregation\"");
       assertTrue(rs.next());
