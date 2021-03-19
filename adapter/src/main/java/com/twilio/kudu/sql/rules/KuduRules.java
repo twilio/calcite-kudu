@@ -28,18 +28,10 @@ public class KuduRules {
   public static final RelOptRule SORT = KuduSortRule.SIMPLE_SORT_RULE;
   public static final KuduLimitRule LIMIT = new KuduLimitRule();
   public static final RelOptRule SORT_OVER_JOIN_TRANSPOSE = new SortInnerJoinTranspose(RelFactories.LOGICAL_BUILDER);
-  public static final KuduNestedJoinRule NESTED_JOIN = new KuduNestedJoinRule.KuduNestedOverFilter(
-      RelFactories.LOGICAL_BUILDER);
-  public static final KuduNestedJoinRule NESTED_JOIN_OVER_SORT = new KuduNestedJoinRule.KuduNestedOverSortAndFilter(
-      RelFactories.LOGICAL_BUILDER);
-  public static final KuduNestedJoinRule NESTED_JOIN_OVER_LIMIT = new KuduNestedJoinRule.KuduNestedOverSortAndFilter(
-      RelFactories.LOGICAL_BUILDER);
-  public static final KuduNestedJoinRule NESTED_JOIN_OVER_LIMIT_SORT_FILTER = new KuduNestedJoinRule.KuduNestedOverLimitAndSortAndFilter(
-      RelFactories.LOGICAL_BUILDER);
+  public static final KuduNestedJoinRule NESTED_JOIN = new KuduNestedJoinRule(RelFactories.LOGICAL_BUILDER);
 
   public static List<RelOptRule> RULES = Arrays.asList(FILTER, PROJECT, SORT, FILTER_SORT, LIMIT,
       SORT_OVER_JOIN_TRANSPOSE, KuduSortedAggregationRule.SORTED_AGGREGATION_RULE,
-      KuduSortedAggregationRule.SORTED_AGGREGATION_LIMIT_RULE, NESTED_JOIN, NESTED_JOIN_OVER_SORT,
-      NESTED_JOIN_OVER_LIMIT, NESTED_JOIN_OVER_LIMIT_SORT_FILTER, KuduToEnumerableConverter.INSTANCE,
+      KuduSortedAggregationRule.SORTED_AGGREGATION_LIMIT_RULE, NESTED_JOIN, KuduToEnumerableConverter.INSTANCE,
       KuduFilterIntoJoinRule.KUDU_FILTER_INTO_JOIN);
 }

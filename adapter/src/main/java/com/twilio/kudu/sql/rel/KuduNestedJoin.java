@@ -92,25 +92,10 @@ public class KuduNestedJoin extends Join implements EnumerableRel {
 
   @Override
   public RelOptCost computeSelfCost(final RelOptPlanner planner, final RelMetadataQuery mq) {
-    final double rowCount = mq.getRowCount(this);
-
-    // We expect rightRowCount to be *at most* three records.
-    // We expect our right scan to match one row but hold out for at most 3.
-    final double leftRowCount = left.estimateRowCount(mq);
-
-    // If row on the left doesn't have an estimate, or if right's estimate is >
-    // left,
-    // return infinite. Our join algorithm will not perform well.
-    if (Double.isInfinite(leftRowCount) || Double.isInfinite(right.estimateRowCount(mq))
-        || right.estimateRowCount(mq) > left.estimateRowCount(mq)) {
-      return planner.getCostFactory().makeInfiniteCost();
-    }
-
-    /**
-     * @TODO: figure out how to make a cost that beats
-     *        {@link org.apache.calcite.adapter.enumerable.EnumerableHashJoin#computeSelfCost}
-     */
-    return planner.getCostFactory().makeTinyCost();
+    double dRows = Double.MIN_VALUE;
+    double dCpu = 0;
+    double dIo = 0;
+    return planner.getCostFactory().makeCost(dRows, dCpu, dIo);
   }
 
   @Override
