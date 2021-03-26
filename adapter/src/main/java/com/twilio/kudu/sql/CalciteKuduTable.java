@@ -32,7 +32,10 @@ import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.kudu.client.KuduTable;
+import org.apache.kudu.client.KuduTableStatistics;
+
 import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.kudu.util.TimestampUtil;
 import org.apache.kudu.Schema;
 import org.apache.kudu.ColumnSchema;
@@ -41,6 +44,7 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
 import org.apache.kudu.client.AsyncKuduClient;
+import org.apache.kudu.client.KuduException;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -75,10 +79,6 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
   public static final Long EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS = EPOCH_DAY_FOR_REVERSE_SORT.toEpochMilli();
   public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = TimestampUtil
       .timestampToMicros(new Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
-
-  private final static Double DIMENSION_TABLE_ROW_COUNT = 1000.0;
-  private final static Double CUBE_TABLE_ROW_COUNT = 2000000.0;
-  private final static Double FACT_TABLE_ROW_COUNT = 20000000.0;
 
   protected final KuduTable kuduTable;
   protected final AsyncKuduClient client;
@@ -135,33 +135,20 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
   public Statistic getStatistic() {
     final List<ImmutableBitSet> primaryKeys = Collections
         .singletonList(ImmutableBitSet.range(this.kuduTable.getSchema().getPrimaryKeyColumnCount()));
-    switch (tableType) {
-    case CUBE:
-      return Statistics.of(CUBE_TABLE_ROW_COUNT, primaryKeys, Collections.emptyList(),
-          // We don't always sort for two reasons:
-          // 1. When applying a Filter we want to also sort that doesn't magically happen
-          // by
-          // setting this as a RelCollation
-          // 2. Awhile ago we saw performance degrade with always sorting.
-          Collections.emptyList());
-    case FACT:
-      return Statistics.of(FACT_TABLE_ROW_COUNT, primaryKeys, Collections.emptyList(),
-          // We don't always sort for two reasons:
-          // 1. When applying a Filter we want to also sort that doesn't magically happen
-          // by
-          // setting this as a RelCollation
-          // 2. Awhile ago we saw performance degrade with always sorting.
-          Collections.emptyList());
-    case DIMENSION:
-      return Statistics.of(DIMENSION_TABLE_ROW_COUNT, primaryKeys, Collections.emptyList(),
-          // We don't always sort for two reasons:
-          // 1. When applying a Filter we want to also sort that doesn't magically happen
-          // by
-          // setting this as a RelCollation
-          // 2. Awhile ago we saw performance degrade with always sorting.
-          Collections.emptyList());
+
+    // Effectively final? Compiler will not allow final to be applied.
+    Double rowCount;
+    try {
+      final KuduTableStatistics stats = client.syncClient().getTableStatistics(kuduTable.getName());
+      rowCount = Double.valueOf(stats.getLiveRowCount());
+    } catch (KuduException failedToGetTable) {
+      logger.error("Failed to get table statistics. Using hardcoded row counts", failedToGetTable);
+      rowCount = tableType.getRowCount();
     }
-    return super.getStatistic();
+    return Statistics.of(rowCount, primaryKeys, Collections.emptyList(),
+        // This doesn't return any RelCollations because sorting reduces the
+        // concurrency of the system. Sort Rules will apply the sort when required
+        Collections.emptyList());
   }
 
   /**

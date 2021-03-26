@@ -213,7 +213,8 @@ public class PaginationIT {
     try (Connection conn = DriverManager.getConnection(url)) {
       String sql = String.format("SELECT * FROM %s LIMIT 3", tableName);
       String expectedPlan = String.format(
-          "KuduToEnumerableRel\n" + "  KuduLimitRel(limit=[3])\n" + "    KuduQuery(table=[[kudu, %s]])\n", tableName);
+          "EnumerableLimit(fetch=[3])\n" + "  KuduToEnumerableRel\n" + "    KuduQuery(table=[[kudu, %s]])\n",
+          tableName);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       assertEquals("Unexpected plan ", expectedPlan, plan);
@@ -236,7 +237,8 @@ public class PaginationIT {
       String sql = String.format(sqlFormat, tableName, ACCOUNT1);
 
       // verify plan
-      String expectedPlanFormat = "KuduToEnumerableRel\n" + "  KuduLimitRel(offset=[5], limit=[20])\n"
+      String expectedPlanFormat = "KuduToEnumerableRel\n"
+          + "  KuduSortRel(offset=[5], fetch=[20], groupBySorted=[false])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
       String expectedPlan = String.format(expectedPlanFormat, ACCOUNT1, tableName);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);

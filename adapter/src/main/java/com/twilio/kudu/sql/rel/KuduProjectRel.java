@@ -64,10 +64,7 @@ public class KuduProjectRel extends Project implements KuduRelNode {
 
   @Override
   public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
-    double dRows = 1.0;
-    double dCpu = 0;
-    double dIo = 0;
-    return planner.getCostFactory().makeCost(dRows, dCpu, dIo);
+    return super.computeSelfCost(planner, mq).multiplyBy(0.1);
   }
 
   @Override
@@ -103,7 +100,7 @@ public class KuduProjectRel extends Project implements KuduRelNode {
 
     /**
      * Extact the columns used an inputs to functions
-     * 
+     *
      * @param call function call
      * @return list of column indexes
      */
@@ -200,7 +197,7 @@ public class KuduProjectRel extends Project implements KuduRelNode {
 
     /**
      * Extract the columns used an inputs to functions
-     * 
+     *
      * @param call function call
      * @return list of column indexes
      */

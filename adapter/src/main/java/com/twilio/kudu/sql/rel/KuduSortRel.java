@@ -65,17 +65,14 @@ public class KuduSortRel extends Sort implements KuduRelNode {
 
   @Override
   public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
-    double dRows = Double.MIN_VALUE;
-    double dCpu = 0;
-    double dIo = 0;
-    return planner.getCostFactory().makeCost(dRows, dCpu, dIo);
+    return super.computeSelfCost(planner, mq).multiplyBy(0.001);
   }
 
   @Override
   public void implement(Implementor implementor) {
     implementor.visitChild(0, getInput());
     // create a sorted enumerator
-    implementor.sorted = true;
+    implementor.sorted = !collation.getFieldCollations().isEmpty();
     // set the offset
     if (offset != null) {
       final RexLiteral parsedOffset = (RexLiteral) offset;

@@ -19,7 +19,6 @@ import java.util.Optional;
 import com.twilio.kudu.sql.KuduQuery;
 import com.twilio.kudu.sql.KuduRelNode;
 import com.twilio.kudu.sql.rel.KuduSortRel;
-import com.twilio.kudu.sql.rel.KuduToEnumerableRel;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -65,10 +64,6 @@ public abstract class KuduSortRule extends RelOptRule {
     // If there is no sort -- i.e. there is only a limit
     // don't pay the cost of returning rows in sorted order.
     final RelCollation collation = sortTraits.getTrait(RelCollationTraitDef.INSTANCE);
-
-    if (collation.getFieldCollations().isEmpty()) {
-      return false;
-    }
 
     if (sortTraits.contains(KuduRelNode.CONVENTION)) {
       return false;
