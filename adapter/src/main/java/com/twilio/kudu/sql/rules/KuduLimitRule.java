@@ -16,29 +16,32 @@ package com.twilio.kudu.sql.rules;
 
 import com.twilio.kudu.sql.KuduRelNode;
 import com.twilio.kudu.sql.rel.KuduLimitRel;
-import org.apache.calcite.adapter.enumerable.EnumerableLimit;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.Sort;
 
 public class KuduLimitRule extends RelOptRule {
 
   public KuduLimitRule() {
-    super(operand(EnumerableLimit.class, any()), "KuduLimitRule");
+    super(operand(Sort.class, any()), "KuduLimitRule");
   }
 
-  public RelNode convert(EnumerableLimit limit) {
+  public RelNode convert(Sort limit) {
     final RelTraitSet traitSet = limit.getTraitSet().replace(KuduRelNode.CONVENTION);
     return new KuduLimitRel(limit.getCluster(), traitSet, convert(limit.getInput(), KuduRelNode.CONVENTION),
         limit.offset, limit.fetch);
   }
 
   public void onMatch(RelOptRuleCall call) {
-    final EnumerableLimit limit = call.rel(0);
-    final RelNode converted = convert(limit);
-    if (converted != null) {
-      call.transformTo(converted);
+    final Sort limit = call.rel(0);
+    if (limit.getCollation() == RelCollations.EMPTY && (limit.fetch != null || limit.offset != null)) {
+      final RelNode converted = convert(limit);
+      if (converted != null) {
+        call.transformTo(converted);
+      }
     }
   }
 

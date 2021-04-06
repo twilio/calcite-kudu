@@ -495,10 +495,17 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       if (!columnIndices.isEmpty()) {
         tokenBuilder.setProjectedColumnIndexes(columnIndices);
       }
-      // we can only push down the limit if we are ordering by the pk columns
-      // and if there is no offset
-      if (sort && offset == -1 && limit != -1 && !groupBySorted) {
-        tokenBuilder.limit(limit);
+      // Push down the limit if present AND
+      // 1. Not doing a group aggregation.
+      // 2. All the predicates are pushed into the scan.
+      // When those are true, the Scanners can inform the datanode that it only
+      // requires a small number of rows.
+      if (limit > 0 && !groupBySorted && filterFunction == Predicate1.TRUE) {
+        if (offset > 0) {
+          tokenBuilder.limit(offset + limit);
+        } else {
+          tokenBuilder.limit(limit);
+        }
       }
       subScan.stream().forEach(predicate -> {
         tokenBuilder.addPredicate(predicate.toPredicate(calciteKuduTable));
