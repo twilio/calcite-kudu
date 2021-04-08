@@ -193,23 +193,25 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
     final Expression mapFunction = Expressions.new_(Function1.class, Collections.emptyList(), Expressions.methodDecl(
         Modifier.PUBLIC, Object.class, "apply", Collections.singletonList(inputRow), projectExpressionBlock.toBlock()));
 
-    // This is builds a predicate function that will always be present. It checks if
-    // the RowResult
-    // should be returned in the KuduEnumerable.
-    final BlockBuilder filterBuilder = new BlockBuilder();
-    final Expression condition;
+    final Expression filterFunction;
     if (!kuduImplementor.filterProjections.isEmpty()) {
-      condition = RexToLixTranslator.translateCondition(projectionFunctions, implementor.getTypeFactory(),
-          filterBuilder, inputGetter, null, implementor.getConformance());
+      // This is builds a predicate function that will always be present. It checks if
+      // the RowResult
+      // should be returned in the KuduEnumerable.
+      final BlockBuilder filterBuilder = new BlockBuilder();
+      final Expression condition = RexToLixTranslator.translateCondition(projectionFunctions,
+          implementor.getTypeFactory(), filterBuilder, inputGetter, null, implementor.getConformance());
+      filterBuilder.add(Expressions.return_(null, condition));
+      filterFunction = Expressions.new_(Predicate1.class, Collections.emptyList(), Expressions.methodDecl(
+          Modifier.PUBLIC, boolean.class, "apply", Collections.singletonList(inputRow), filterBuilder.toBlock()));
 
     } else {
-      condition = RexImpTable.TRUE_EXPR;
+      try {
+        filterFunction = Expressions.field(null, Predicate1.class.getDeclaredField("TRUE"));
+      } catch (NoSuchFieldException | SecurityException e) {
+        throw new RuntimeException("Unable to access the TRUE predicate from Predicate1 class", e);
+      }
     }
-
-    filterBuilder.add(Expressions.return_(null, condition));
-    final Expression filterFunction = Expressions.new_(Predicate1.class, Collections.emptyList(),
-        Expressions.methodDecl(Modifier.PUBLIC, boolean.class, "apply", Collections.singletonList(inputRow),
-            filterBuilder.toBlock()));
 
     final Expression fields = list.append("kuduFields", implementor.stash(kuduColumnIndices, List.class));
 
