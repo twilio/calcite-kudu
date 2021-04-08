@@ -14,7 +14,6 @@
  */
 package com.twilio.kudu.sql.rules;
 
-import com.google.common.collect.ImmutableList;
 import com.twilio.kudu.sql.KuduRelNode;
 import com.twilio.kudu.sql.rel.KuduProjectRel;
 import org.apache.calcite.plan.Convention;

@@ -92,7 +92,7 @@ public class KuduNestedJoin extends Join implements EnumerableRel {
 
   @Override
   public RelOptCost computeSelfCost(final RelOptPlanner planner, final RelMetadataQuery mq) {
-    double dRows = Double.MIN_VALUE;
+    double dRows = 0;
     double dCpu = 0;
     double dIo = 0;
     return planner.getCostFactory().makeCost(dRows, dCpu, dIo);

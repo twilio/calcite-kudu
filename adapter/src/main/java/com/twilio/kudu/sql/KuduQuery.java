@@ -14,6 +14,7 @@
  */
 package com.twilio.kudu.sql;
 
+import com.google.common.collect.ImmutableList;
 import com.twilio.kudu.sql.rules.KuduRules;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
@@ -47,7 +48,7 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
    */
   public KuduQuery(RelOptCluster cluster, RelTraitSet traitSet, RelOptTable table, CalciteKuduTable calciteKuduTable,
       RelDataType projectRowType) {
-    super(cluster, traitSet, table);
+    super(cluster, traitSet, ImmutableList.of(), table);
     this.calciteKuduTable = calciteKuduTable;
     this.projectRowType = projectRowType;
     assert getConvention() == KuduRelNode.CONVENTION;

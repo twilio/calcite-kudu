@@ -76,11 +76,6 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
   }
 
   @Override
-  public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
-    return super.computeSelfCost(planner, mq).multiplyBy(.1);
-  }
-
-  @Override
   public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
     if (input instanceof KuduWrite) {
       return executeMutation(implementor, pref);

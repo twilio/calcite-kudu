@@ -26,12 +26,10 @@ public class KuduRules {
   public static final KuduProjectRule PROJECT = new KuduProjectRule(RelFactories.LOGICAL_BUILDER);
   public static final RelOptRule FILTER_SORT = KuduSortRule.FILTER_SORT_RULE;
   public static final RelOptRule SORT = KuduSortRule.SIMPLE_SORT_RULE;
-  public static final KuduLimitRule LIMIT = new KuduLimitRule();
   public static final RelOptRule SORT_OVER_JOIN_TRANSPOSE = new SortInnerJoinTranspose(RelFactories.LOGICAL_BUILDER);
   public static final KuduNestedJoinRule NESTED_JOIN = new KuduNestedJoinRule(RelFactories.LOGICAL_BUILDER);
 
-  public static List<RelOptRule> RULES = Arrays.asList(FILTER, PROJECT, SORT, FILTER_SORT, LIMIT,
-      SORT_OVER_JOIN_TRANSPOSE, KuduSortedAggregationRule.SORTED_AGGREGATION_RULE,
-      KuduSortedAggregationRule.SORTED_AGGREGATION_LIMIT_RULE, NESTED_JOIN, KuduToEnumerableConverter.INSTANCE,
-      KuduFilterIntoJoinRule.KUDU_FILTER_INTO_JOIN);
+  public static List<RelOptRule> RULES = Arrays.asList(FILTER, PROJECT, SORT, FILTER_SORT, SORT_OVER_JOIN_TRANSPOSE,
+      KuduSortedAggregationRule.SORTED_AGGREGATION_RULE, KuduSortedAggregationRule.SORTED_AGGREGATION_LIMIT_RULE,
+      NESTED_JOIN, KuduToEnumerableConverter.INSTANCE, KuduFilterIntoJoinRule.KUDU_FILTER_INTO_JOIN);
 }

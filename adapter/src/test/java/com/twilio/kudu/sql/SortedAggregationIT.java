@@ -51,7 +51,6 @@ public final class SortedAggregationIT {
 
   @BeforeClass
   public static void setup() throws Exception {
-    System.setProperty("org.codehaus.janino.source_debugging.enable", "true");
     final List<ColumnSchema> columns = Arrays.asList(
         new ColumnSchema.ColumnSchemaBuilder("ACCOUNT_SID", Type.STRING).key(true).build(),
         new ColumnSchema.ColumnSchemaBuilder("REVERSE_BYTE_FIELD", Type.INT8).key(true).build(),
@@ -72,13 +71,24 @@ public final class SortedAggregationIT {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       PreparedStatement stmt = conn
           .prepareStatement("INSERT INTO \"" + descendingSortTableName + "\" " + "VALUES (?,?,?,?,?,?)");
-      insertRow(stmt, (byte) 4, new Short("32"), 100, 1000L, "message-body");
-      insertRow(stmt, (byte) 4, new Short("33"), 101, 1001L, "message-body");
-      insertRow(stmt, (byte) 5, new Short("32"), 100, 50L, "message-body");
-      insertRow(stmt, (byte) 5, new Short("32"), 101, 30L, "message-body");
-      insertRow(stmt, (byte) 6, new Short("32"), 100, 1001L, "user-login");
-      insertRow(stmt, (byte) 6, new Short("33"), 101, 1001L, "user-login");
-      conn.commit();
+      // This row count was created by taking the Cube table estimated counts and
+      // dividing by 10
+      // until the plans changed to an incorrect plan. The more rows, the slower the
+      // test.
+      for (int rowCount = 0; rowCount < 200000; rowCount++) {
+        final String resourceType;
+        if (rowCount % 2 == 0) {
+          resourceType = "message-body";
+        } else {
+          resourceType = "user-login";
+        }
+        insertRow(stmt, ((byte) (4 + rowCount)), Short.valueOf((short) rowCount), 100 + rowCount, 1000L + rowCount,
+            resourceType);
+
+        if (rowCount % 1000 == 0) {
+          conn.commit();
+        }
+      }
     }
 
   }
@@ -139,7 +149,7 @@ public final class SortedAggregationIT {
       assertTrue(String.format("KuduSortRel should have groupBySorted set to true. It doesn't\n%s", plan),
           plan.contains("groupBySorted=[true]"));
       assertEquals("Full SQL plan has changed\n", expectedPlan, plan);
-      assertEquals("Incorrect aggregated value", 2081, queryResult.getLong(2));
+      assertEquals("Incorrect aggregated value", 9999850500L, queryResult.getLong(2));
       assertFalse("Should not have any more results", queryResult.next());
     }
   }
@@ -168,9 +178,9 @@ public final class SortedAggregationIT {
       assertTrue(String.format("KuduSortRel should have groupBySorted set to true. It doesn't\n%s", plan),
           plan.contains("groupBySorted=[true]"));
       assertEquals("Full SQL plan has changed\n", expectedPlan, plan);
-      assertEquals("Incorrect aggregated value", 80, queryResult.getLong(2));
+      assertEquals("Incorrect aggregated value", 78049650, queryResult.getLong(2));
       assertTrue("Should have more results", queryResult.next());
-      assertEquals("Incorrect aggregated value", 2001, queryResult.getLong(2));
+      assertEquals("Incorrect aggregated value", 78048096, queryResult.getLong(2));
       assertFalse("Should not have any more results", queryResult.next());
     }
   }
@@ -194,8 +204,8 @@ public final class SortedAggregationIT {
 
       assertTrue("Should have results to iterate over", queryResult.next());
       assertFalse(String.format("Plan should not contain KuduSortRel. It is\n%s", plan), plan.contains("KuduSortRel"));
-      assertEquals("Full SQL plan has changed\n", expectedPlan, plan);
-      assertEquals("Incorrect aggregated value", 2081, queryResult.getLong(2));
+      assertEquals(String.format("Full SQL plan has changed\n%s", plan), expectedPlan, plan);
+      assertEquals("Incorrect aggregated value", 9999850500L, queryResult.getLong(2));
       assertFalse("Should not have any more results", queryResult.next());
     }
   }
@@ -223,7 +233,7 @@ public final class SortedAggregationIT {
       assertTrue(String.format("KuduSortRel should have groupBySorted set to true. It doesn't\n%s", plan),
           plan.contains("groupBySorted=[true]"));
       assertEquals("Full SQL plan has changed\n", expectedPlan, plan);
-      assertEquals("Incorrect aggregated value", 80, queryResult.getLong(2));
+      assertEquals("Incorrect aggregated value", 78049650, queryResult.getLong(2));
       assertFalse("Should not have any more results", queryResult.next());
     }
   }
@@ -274,14 +284,17 @@ public final class SortedAggregationIT {
       assertTrue(String.format("KuduSortRel should have groupBySorted set to true. It doesn't\n%s", plan),
           plan.contains("groupBySorted=[true]"));
 
-      assertEquals("Should be grouped second by Byte of 6", (byte) 6, queryResult.getByte(2));
+      assertEquals("Should be grouped second by Byte of 127", (byte) 127, queryResult.getByte(2));
       assertTrue("Should have more results", queryResult.next());
 
-      assertEquals("Should be grouped first by Byte of 4", (byte) 5, queryResult.getByte(2));
+      assertEquals("Should be grouped first by Byte of 126", (byte) 126, queryResult.getByte(2));
       assertTrue("Should have more results", queryResult.next());
 
-      assertEquals("Should be grouped first by Byte of 4", (byte) 4, queryResult.getByte(2));
-      assertFalse("Should only have three results", queryResult.next());
+      assertEquals("Should be grouped first by Byte of 125", (byte) 125, queryResult.getByte(2));
+      assertTrue("Should have more results", queryResult.next());
+
+      assertEquals("Should be grouped first by Byte of 124", (byte) 124, queryResult.getByte(2));
+      assertFalse("Should only have four results", queryResult.next());
 
       assertEquals(String.format("Full SQL plan has changed\n%s", plan), expectedPlan, plan);
 
