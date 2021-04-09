@@ -15,5 +15,20 @@
 package com.twilio.kudu.sql;
 
 public enum TableType {
-  FACT, CUBE, DIMENSION, SYSTEM
+  FACT(20000000.0d), CUBE(2000000.0), DIMENSION(1000.0), SYSTEM(1000.0);
+
+  private double estimatedRowCount;
+
+  private TableType(final double estimatedRowCount) {
+    this.estimatedRowCount = Double.valueOf(estimatedRowCount);
+  }
+
+  /**
+   * Returns the estimated row count for this table type.
+   *
+   * @return estimated row count
+   */
+  public Double getRowCount() {
+    return this.estimatedRowCount;
+  }
 }

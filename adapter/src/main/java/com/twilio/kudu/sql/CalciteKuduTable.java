@@ -76,10 +76,6 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
   public static final Long EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS = TimestampUtil
       .timestampToMicros(new Timestamp(EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS));
 
-  private final static Double DIMENSION_TABLE_ROW_COUNT = 1000.0;
-  private final static Double CUBE_TABLE_ROW_COUNT = 2000000.0;
-  private final static Double FACT_TABLE_ROW_COUNT = 20000000.0;
-
   protected final KuduTable kuduTable;
   protected final AsyncKuduClient client;
 
@@ -135,33 +131,13 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
   public Statistic getStatistic() {
     final List<ImmutableBitSet> primaryKeys = Collections
         .singletonList(ImmutableBitSet.range(this.kuduTable.getSchema().getPrimaryKeyColumnCount()));
-    switch (tableType) {
-    case CUBE:
-      return Statistics.of(CUBE_TABLE_ROW_COUNT, primaryKeys, Collections.emptyList(),
-          // We don't always sort for two reasons:
-          // 1. When applying a Filter we want to also sort that doesn't magically happen
-          // by
-          // setting this as a RelCollation
-          // 2. Awhile ago we saw performance degrade with always sorting.
-          Collections.emptyList());
-    case FACT:
-      return Statistics.of(FACT_TABLE_ROW_COUNT, primaryKeys, Collections.emptyList(),
-          // We don't always sort for two reasons:
-          // 1. When applying a Filter we want to also sort that doesn't magically happen
-          // by
-          // setting this as a RelCollation
-          // 2. Awhile ago we saw performance degrade with always sorting.
-          Collections.emptyList());
-    case DIMENSION:
-      return Statistics.of(DIMENSION_TABLE_ROW_COUNT, primaryKeys, Collections.emptyList(),
-          // We don't always sort for two reasons:
-          // 1. When applying a Filter we want to also sort that doesn't magically happen
-          // by
-          // setting this as a RelCollation
-          // 2. Awhile ago we saw performance degrade with always sorting.
-          Collections.emptyList());
-    }
-    return super.getStatistic();
+    return Statistics.of(tableType.getRowCount(), primaryKeys, Collections.emptyList(),
+        // We don't always sort for two reasons:
+        // 1. When applying a Filter we want to also sort that doesn't magically happen
+        // by
+        // setting this as a RelCollation
+        // 2. Awhile ago we saw performance degrade with always sorting.
+        Collections.emptyList());
   }
 
   /**
