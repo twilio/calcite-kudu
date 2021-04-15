@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.calcite.linq4j.AbstractEnumerable;
@@ -68,16 +69,20 @@ public final class NestedJoinFactory implements Function1<List<Object>, Enumerab
           "Batch (count: {}) is larger than the result cache size (size: {}). This makes prevents the cache from being effective",
           batchFromLeftTable.size(), resultCache.capacity);
     }
+
     final List<Enumerator<Object>> enumerators = batchFromLeftTable.stream()
         .map(rowFromLeft -> rowTranslators.stream().map(t -> t.toPredicate((Object[]) rowFromLeft))
-            .collect(Collectors.toList()))
-        .map(predicates -> resultCache.compute(predicates, (existingPredicates, existingEnumerator) -> {
+            .collect(Collectors.toSet()))
+        // Make all the Sub scans unique to reduce work and to ensure this works
+        // properly.
+        .distinct().map(predicates -> resultCache.compute(predicates, (existingPredicates, existingEnumerator) -> {
           if (existingEnumerator == null) {
             return new CachingEnumerator(
-                rootEnumerable.clone(Collections.singletonList(existingPredicates)).enumerator());
+                rootEnumerable.clone(Collections.singletonList(new ArrayList<>(existingPredicates))).enumerator());
+          } else {
+            existingEnumerator.reset();
+            return existingEnumerator;
           }
-          existingEnumerator.reset();
-          return existingEnumerator;
         })).collect(Collectors.toList());
 
     return new AbstractEnumerable<Object>() {
@@ -183,7 +188,7 @@ public final class NestedJoinFactory implements Function1<List<Object>, Enumerab
     }
   }
 
-  private final class ResultCache extends LinkedHashMap<List<CalciteKuduPredicate>, CachingEnumerator> {
+  private final class ResultCache extends LinkedHashMap<Set<CalciteKuduPredicate>, CachingEnumerator> {
     /**
      * Default Serialization id for the {@link LinkedHashMap} interface
      */
@@ -199,7 +204,7 @@ public final class NestedJoinFactory implements Function1<List<Object>, Enumerab
     }
 
     @Override
-    protected boolean removeEldestEntry(Map.Entry<List<CalciteKuduPredicate>, CachingEnumerator> eldest) {
+    protected boolean removeEldestEntry(Map.Entry<Set<CalciteKuduPredicate>, CachingEnumerator> eldest) {
       return size() > capacity;
     }
   }
