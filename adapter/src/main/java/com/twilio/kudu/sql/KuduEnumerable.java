@@ -20,13 +20,14 @@ import com.twilio.kudu.sql.rules.KuduPredicatePushDownVisitor;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.EnumerableDefaults;
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.kudu.client.KuduScanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
-import java.util.Set;
 
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.Linq4j;
@@ -58,7 +59,6 @@ import org.apache.kudu.client.KuduScanToken;
 import org.apache.kudu.Schema;
 
 // This class resides in this project under the org.apache namespace
-import org.apache.kudu.client.KuduScannerUtil;
 
 /**
  * An {@link Enumerable} that *can* returns Kudu records in Ascending order on
@@ -511,16 +511,16 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
         tokenBuilder.addPredicate(predicate.toPredicate(calciteKuduTable));
       });
       return tokenBuilder.build();
-    }).flatMap(tokens -> {
-      return tokens.stream().map(token -> {
-        try {
-          return KuduScannerUtil.deserializeIntoAsyncScanner(token.serialize(), client,
-              calciteKuduTable.getKuduTable());
-        } catch (java.io.IOException ioe) {
-          throw new RuntimeException("Failed to setup scanner from token.", ioe);
-        }
-      });
-    }).collect(Collectors.toList());
+    }).flatMap(tokens -> tokens.stream().map(token -> {
+      try {
+        KuduScanner scanner = token.intoScanner(client.syncClient());
+        Field asyncScannerField = KuduScanner.class.getDeclaredField("asyncScanner");
+        asyncScannerField.setAccessible(true);
+        return (AsyncKuduScanner) asyncScannerField.get(scanner);
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to setup scanner from token.", e);
+      }
+    })).collect(Collectors.toList());
 
     if (predicates.isEmpty()) {
       // Scan the whole table !
