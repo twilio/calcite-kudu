@@ -246,7 +246,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         for (SqlNode sqlnode : groupByNode.getList()) {
           // sqlnode contains Floor
           if (sqlnode instanceof SqlBasicCall) {
-            if (((SqlBasicCall) sqlnode).getOperator().getName().equalsIgnoreCase("FLOOR")) {
+            if (((SqlBasicCall) sqlnode).getOperator().getName().equals("FLOOR")) {
               groupByContainsFloor = true;
               for (SqlNode operand : ((SqlBasicCall) sqlnode).operands) {
                 if (operand instanceof SqlIntervalQualifier) {
@@ -285,7 +285,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         for (String s : pkColumns) {
           ColumnSchema colSchema = kuduTable.getSchema().getColumn(s);
           if (colSchema.getWireType().equals(org.apache.kudu.Common.DataType.UNIXTIME_MICROS)) {
-            rangePartitionCols.add(s.toLowerCase());
+            rangePartitionCols.add(s);
           }
           ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(colSchema);
           columnSchemaBuilder.nullable(false);
@@ -318,19 +318,19 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
 
               // validate that the aggregate function is supported
               if (!supportedAggregatesSet.contains(operator.getName())) {
-                throw new IllegalArgumentException("Aggregate operator not supported" + operator.getName());
+                throw new IllegalArgumentException("Aggregate operator not supported");
               }
 
               // use datatype from fact table for all aggregates except COUNT.
               if (operator.getName().equals("COUNT")) {
-                ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName.toLowerCase(),
+                ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
                     org.apache.kudu.Type.INT64).key(false) // all columns should be non-nullable
                         .nullable(false).wireType(Common.DataType.INT64);
                 cubeColumnSchemas.add(columnSchemaBuilder.build());
               } else {
                 // use originalColumnName to get the column schema
                 ColumnSchema colSchema = kuduTable.getSchema().getColumn(factColumnName);
-                ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName.toLowerCase(),
+                ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
                     colSchema.getType()).key(false) // all columns should be non-nullable
                         .nullable(false).desiredBlockSize(colSchema.getDesiredBlockSize())
                         .encoding(colSchema.getEncoding()).compressionAlgorithm(colSchema.getCompressionAlgorithm())
@@ -357,7 +357,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         for (Integer i : kuduTable.getPartitionSchema().getHashBucketSchemas().get(0).getColumnIds()) {
           String colName = kuduTable.getSchema().getColumnByIndex(i).getName();
           if (pkColumns.contains(colName)) {
-            hashPartitionColNames.add(colName.toLowerCase());
+            hashPartitionColNames.add(colName);
           }
         }
 
