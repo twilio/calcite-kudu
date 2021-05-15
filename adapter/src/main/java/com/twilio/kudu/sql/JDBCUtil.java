@@ -38,7 +38,7 @@ public class JDBCUtil {
   public static String CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED = "jdbc:kudu:"
       + CalciteConnectionProperty.SCHEMA_FACTORY.camelName() + "=%s" + ";"
       + CalciteConnectionProperty.SCHEMA.camelName() + "=kudu" + ";" + CalciteConnectionProperty.TIME_ZONE.camelName()
-      + "=UTC" + ";" + CalciteConnectionProperty.CASE_SENSITIVE.camelName() + "=true" + ";"
+      + "=UTC" + ";" + CalciteConnectionProperty.CASE_SENSITIVE.camelName() + "=false" + ";"
       + CalciteConnectionProperty.PARSER_FACTORY.camelName() + "=" + KuduSqlParserImpl.class.getName() + "#FACTORY"
       + ";schema." + KuduSchema.KUDU_CONNECTION_STRING + "=%s" + ";schema." + KuduSchema.ENABLE_INSERTS_FLAG + "=true";
 
