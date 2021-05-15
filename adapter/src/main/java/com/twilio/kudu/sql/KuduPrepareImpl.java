@@ -317,12 +317,12 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
               }
 
               // validate that the aggregate function is supported
-              if (!supportedAggregatesSet.contains(operator.getName())) {
-                throw new IllegalArgumentException("Aggregate operator not supported");
+              if (!supportedAggregatesSet.contains(operator.getName().toUpperCase())) {
+                throw new IllegalArgumentException("Aggregate operator not supported" + operator.getName());
               }
 
               // use datatype from fact table for all aggregates except COUNT.
-              if (operator.getName().equals("COUNT")) {
+              if (operator.getName().equalsIgnoreCase("COUNT")) {
                 ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
                     org.apache.kudu.Type.INT64).key(false) // all columns should be non-nullable
                         .nullable(false).wireType(Common.DataType.INT64);
