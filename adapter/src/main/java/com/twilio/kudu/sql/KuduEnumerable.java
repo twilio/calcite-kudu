@@ -56,6 +56,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.AsyncKuduScanner;
 import org.apache.kudu.client.KuduScanToken;
+import org.apache.kudu.client.ReplicaSelection;
 import org.apache.kudu.Schema;
 
 // This class resides in this project under the org.apache namespace
@@ -487,11 +488,13 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     List<AsyncKuduScanner> scanners = predicates.stream().map(subScan -> {
       KuduScanToken.KuduScanTokenBuilder tokenBuilder = client.syncClient()
           .newScanTokenBuilder(calciteKuduTable.getKuduTable());
-      if (sort) {
-        // Allows for consistent row order in reads as it puts in ORDERED by Pk when
-        // faultTolerant is set to true
-        tokenBuilder.setFaultTolerant(true);
-      }
+      // ReplicaSelection added to avoid querying leader always
+      tokenBuilder.replicaSelection(ReplicaSelection.CLOSEST_REPLICA);
+      // FaultTolerant allows to retry scans in case of failures
+      // Also allows for consistent row order in reads as it puts in ORDERED by Pk
+      // when
+      // faultTolerant is set to true
+      tokenBuilder.setFaultTolerant(true);
       if (!columnIndices.isEmpty()) {
         tokenBuilder.setProjectedColumnIndexes(columnIndices);
       }
