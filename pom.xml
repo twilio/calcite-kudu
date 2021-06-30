@@ -3,7 +3,7 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <version>1.0.29-SNAPSHOT</version>
+    <version>1.0.30-SNAPSHOT</version>
     <groupId>com.twilio</groupId>
     <artifactId>kudu-sql</artifactId>
     <name>SQL parsing, optimization and execution for Apache Kudu</name>
@@ -62,7 +62,7 @@
         <mockito.version>3.7.7</mockito.version>
         <jackson.version>2.11.1</jackson.version>
         <spotless.version>2.0.1</spotless.version>
-        <freemarker-version>2.3.29</freemarker-version>
+        <freemarker-version>2.3.30</freemarker-version>
         <json-version>20200518</json-version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
