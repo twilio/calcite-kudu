@@ -490,11 +490,11 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
           .newScanTokenBuilder(calciteKuduTable.getKuduTable());
       // ReplicaSelection added to avoid querying leader always
       tokenBuilder.replicaSelection(ReplicaSelection.CLOSEST_REPLICA);
-      // FaultTolerant allows to retry scans in case of failures
-      // Also allows for consistent row order in reads as it puts in ORDERED by Pk
-      // when
-      // faultTolerant is set to true
-      tokenBuilder.setFaultTolerant(true);
+      if (sort) {
+        // Allows for consistent row order in reads as it puts in ORDERED by Pk when
+        // faultTolerant is set to true
+        tokenBuilder.setFaultTolerant(true);
+      }
       if (!columnIndices.isEmpty()) {
         tokenBuilder.setProjectedColumnIndexes(columnIndices);
       }
