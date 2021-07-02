@@ -85,9 +85,9 @@ public final class KuduSchema extends AbstractSchema {
     // populate the cubetables which were created using DDL statements.
     for (String tableName : tableNames) {
       // cube table
-      String[] tableNameSplit = tableName.split("-");
+      String[] tableNameSplit = tableName.split("(-|_)");
       if (tableNameSplit.length == 4 && tableName.endsWith("Aggregation")) {
-        // Cube table name is of the form TableName-CubeName-Interval-Aggregation
+        // Cube table name is of the form TableName-CubeName_Interval-Aggregation
         CubeTableInfo cubeTableInfo = new CubeTableInfo(tableName,
             CubeTableInfo.EventTimeAggregationType.valueOf(tableNameSplit[2].toLowerCase()));
         String factTableName = tableNameSplit[0];

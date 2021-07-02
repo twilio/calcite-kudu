@@ -111,12 +111,12 @@ public class KuduDDLIT {
           + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO hour)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE-CubeName-Hour-Aggregation\"");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE-CubeName_Hour-Aggregation\"");
       assertFalse(rs.next());
     }
 
     KuduClient client = testHarness.getClient();
-    KuduTable kuduTable = client.openTable("MY_TABLE-CubeName-Hour-Aggregation");
+    KuduTable kuduTable = client.openTable("MY_TABLE-CubeName_Hour-Aggregation");
 
     // validate hash partitioning
     List<PartitionSchema.HashBucketSchema> hashBucketSchemas = kuduTable.getPartitionSchema().getHashBucketSchemas();
@@ -175,12 +175,12 @@ public class KuduDDLIT {
           + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO YEAR)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE_24-CubeName1-Year-Aggregation\"");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE_24-CubeName1_Year-Aggregation\"");
       assertFalse(rs.next());
     }
 
     KuduClient client = testHarness.getClient();
-    KuduTable kuduTable = client.openTable("MY_TABLE_24-CubeName1-Year-Aggregation");
+    KuduTable kuduTable = client.openTable("MY_TABLE_24-CubeName1_Year-Aggregation");
 
     // validate hash partitioning
     List<PartitionSchema.HashBucketSchema> hashBucketSchemas = kuduTable.getPartitionSchema().getHashBucketSchemas();
@@ -237,12 +237,12 @@ public class KuduDDLIT {
           + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE_14-CubeName2-Day-Aggregation\"");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE_14-CubeName2_Day-Aggregation\"");
       assertFalse(rs.next());
     }
 
     KuduClient client = testHarness.getClient();
-    KuduTable kuduTable = client.openTable("MY_TABLE_14-CubeName2-Day-Aggregation");
+    KuduTable kuduTable = client.openTable("MY_TABLE_14-CubeName2_Day-Aggregation");
 
     // validate hash partitioning
     List<PartitionSchema.HashBucketSchema> hashBucketSchemas = kuduTable.getPartitionSchema().getHashBucketSchemas();
@@ -343,7 +343,7 @@ public class KuduDDLIT {
           + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO HOUR)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE11-CubeName4-Hour-Aggregation\"");
+      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE11-CubeName4_Hour-Aggregation\"");
       assertFalse(rs.next());
 
       // create the cube again
@@ -522,12 +522,12 @@ public class KuduDDLIT {
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
       ResultSet rs = conn.createStatement()
-          .executeQuery("SELECT * FROM \"my_schema.MY_TAB_8-LinkName-Day-Aggregation\"");
+          .executeQuery("SELECT * FROM \"my_schema.MY_TAB_8-LinkName_Day-Aggregation\"");
       assertFalse(rs.next());
     }
 
     KuduClient client = testHarness.getClient();
-    KuduTable kuduTable = client.openTable("my_schema.MY_TAB_8-LinkName-Day-Aggregation");
+    KuduTable kuduTable = client.openTable("my_schema.MY_TAB_8-LinkName_Day-Aggregation");
 
     // validate hash partitioning
     List<PartitionSchema.HashBucketSchema> hashBucketSchemas = kuduTable.getPartitionSchema().getHashBucketSchemas();
@@ -831,12 +831,12 @@ public class KuduDDLIT {
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
       ResultSet rs = conn.createStatement()
-          .executeQuery("SELECT * FROM \"my_schema.MY_TABLE_8-LinkName-Day-Aggregation\"");
+          .executeQuery("SELECT * FROM \"my_schema.MY_TABLE_8-LinkName_Day-Aggregation\"");
       assertFalse(rs.next());
     }
 
     KuduClient client = testHarness.getClient();
-    KuduTable kuduTable = client.openTable("my_schema.MY_TABLE_8-LinkName-Day-Aggregation");
+    KuduTable kuduTable = client.openTable("my_schema.MY_TABLE_8-LinkName_Day-Aggregation");
 
     // validate hash partitioning
     List<PartitionSchema.HashBucketSchema> hashBucketSchemas = kuduTable.getPartitionSchema().getHashBucketSchemas();

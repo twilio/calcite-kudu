@@ -109,31 +109,31 @@ public class ScenarioIT {
 
       // verify the cube row counts match
       rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-MessagingAppHourly-Hour-Aggregation\"");
+          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-MessagingAppHourly_Hour-Aggregation\"");
       assertTrue(rs.next());
       assertEquals(scenario.getNumRows(), rs.getInt(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-Feedback-Day-Aggregation\"");
+          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-Feedback_Day-Aggregation\"");
       assertTrue(rs.next());
       assertEquals(scenario.getNumRows(), rs.getInt(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-MessagingApp-Day-Aggregation\"");
+          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-MessagingApp_Day-Aggregation\"");
       assertTrue(rs.next());
       assertEquals(scenario.getNumRows(), rs.getInt(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-PhoneNumber-Day-Aggregation\"");
+          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-PhoneNumber_Day-Aggregation\"");
       assertTrue(rs.next());
       assertEquals(scenario.getNumRows(), rs.getInt(1));
       assertFalse(rs.next());
 
       rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-SubAccount-Day-Aggregation\"");
+          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-SubAccount_Day-Aggregation\"");
       assertTrue(rs.next());
       assertEquals(scenario.getNumRows(), rs.getInt(1));
       assertFalse(rs.next());
@@ -176,7 +176,7 @@ public class ScenarioIT {
 
       // verify the cube row counts match
       rs = conn.createStatement().executeQuery(
-          "SELECT SUM(\"count_records\") FROM " + "\"ReportCenter.UsageReportTransactions-Cube-Day-Aggregation\"");
+          "SELECT SUM(\"count_records\") FROM " + "\"ReportCenter.UsageReportTransactions-Cube_Day-Aggregation\"");
       assertTrue(rs.next());
       assertEquals(scenario.getNumRows(), rs.getInt(1));
       assertFalse(rs.next());

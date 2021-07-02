@@ -271,7 +271,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
               "GROUP BY clause should contain a FLOOR function on the timestamp column and an interval");
         }
 
-        String physicalCubeTableName = kuduTable.getName() + "-" + cubeName + "-" + interval + "-" + "Aggregation";
+        String physicalCubeTableName = kuduTable.getName() + "-" + cubeName + "_" + interval + "-" + "Aggregation";
 
         // return if the cube already exists
         if (createMaterializedViewNode.ifNotExists && kuduClient.tableExists(physicalCubeTableName)) {
