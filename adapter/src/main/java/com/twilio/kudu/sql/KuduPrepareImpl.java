@@ -41,8 +41,6 @@ import org.apache.kudu.client.KuduException;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.client.PartialRow;
 import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -57,8 +55,6 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 public class KuduPrepareImpl extends CalcitePrepareImpl {
-
-  private static final Logger logger = LoggerFactory.getLogger(KuduPrepareImpl.class);
 
   public enum TimeAggregationType {
     YEAR("Year"), MONTH("Month"), DAY("Day"), HOUR("Hour"), MINUTE("Minute"), SECOND("Second");
@@ -291,8 +287,11 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           if (colSchema.getWireType().equals(org.apache.kudu.Common.DataType.UNIXTIME_MICROS)) {
             rangePartitionCols.add(s);
           }
+          ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(colSchema);
+          columnSchemaBuilder.nullable(false);
+          columnSchemaBuilder.key(true);
           // Get the column schema for pk from the original table.
-          cubeColumnSchemas.add(colSchema);
+          cubeColumnSchemas.add(columnSchemaBuilder.build());
         }
 
         for (SqlNode sqlnode : selectList.getList()) {
@@ -300,40 +299,47 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           if (!pkColumns.contains(sqlnode.toString())) {
             // if node is an aggregate determine the appropriate column schema
             if (sqlnode instanceof SqlBasicCall) {
-              SqlNode operand = ((SqlBasicCall) sqlnode).operands[0];
-              SqlOperator operator = ((SqlBasicCall) sqlnode).getOperator();
+              SqlBasicCall callNode = (SqlBasicCall) sqlnode;
+              SqlOperator operator = callNode.getOperator();
+              SqlNode operand = callNode.operands[0];
+              // SUM(COLUMN_NAME) will be stored in a column named SUM_COLUMN_NAME
+              String factColumnName = operand.toString();
+              String columnName = operator.getName() + "_" + factColumnName;
+
+              // handle alias eg: SUM(COLUMN_NAME) AS \"sum_column_name\" will be stored in a
+              // column named sum_column_name
+              if (callNode.getKind().equals(SqlKind.AS)) {
+                SqlBasicCall aliasedNode = callNode.operand(0);
+                operator = aliasedNode.getOperator();
+                operand = callNode.operand(1);
+                columnName = operand.toString();
+                factColumnName = aliasedNode.operands[0].toString();
+              }
 
               // validate that the aggregate function is supported
-              if (!supportedAggregatesSet.contains(operator.getName())) {
+              if (!supportedAggregatesSet.contains(operator.getName().toUpperCase())) {
                 throw new IllegalArgumentException("Aggregate operator not supported" + operator.getName());
               }
 
-              String originalColumnName = operand.toString();
-              String columnName = operator.getName() + "_" + originalColumnName;
-
               // use datatype from fact table for all aggregates except COUNT.
-              org.apache.kudu.Common.DataType dataType = Common.DataType.INT64;
-              org.apache.kudu.Type kuduType = org.apache.kudu.Type.INT64;
-              if (!operator.getName().equals("COUNT")) {
-                // use originalColumnName to get the column schema
-                ColumnSchema colSchema = kuduTable.getSchema().getColumn(originalColumnName);
-                dataType = colSchema.getWireType();
-                kuduType = colSchema.getType();
-
+              if (operator.getName().equalsIgnoreCase("COUNT")) {
                 ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
-                        kuduType).key(false).nullable(false) // all columns should be non-nullable
-                        .desiredBlockSize(colSchema.getDesiredBlockSize()).encoding(colSchema.getEncoding())
-                        .compressionAlgorithm(colSchema.getCompressionAlgorithm())
-                        .typeAttributes(colSchema.getTypeAttributes()).wireType(dataType);
-
+                    org.apache.kudu.Type.INT64).key(false) // all columns should be non-nullable
+                        .nullable(false).wireType(Common.DataType.INT64);
+                cubeColumnSchemas.add(columnSchemaBuilder.build());
+              } else {
+                // use originalColumnName to get the column schema
+                ColumnSchema colSchema = kuduTable.getSchema().getColumn(factColumnName);
+                ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
+                    colSchema.getType()).key(false) // all columns should be non-nullable
+                        .nullable(false).desiredBlockSize(colSchema.getDesiredBlockSize())
+                        .encoding(colSchema.getEncoding()).compressionAlgorithm(colSchema.getCompressionAlgorithm())
+                        .typeAttributes(colSchema.getTypeAttributes()).wireType(colSchema.getWireType());
                 cubeColumnSchemas.add(columnSchemaBuilder.build());
               }
             }
             // if node is a column from the original table use the same column schema
-            else {
-              logger.info("Using column from original table:" + sqlnode.toString());
-              logger.error("Using column from original table:" + sqlnode.toString());
-              System.out.println("Using column from original table:" + sqlnode.toString());
+            else if (kuduTable.getSchema().hasColumn(sqlnode.toString())) {
               ColumnSchema colSchema = kuduTable.getSchema().getColumn(sqlnode.toString());
               cubeColumnSchemas.add(colSchema);
             }

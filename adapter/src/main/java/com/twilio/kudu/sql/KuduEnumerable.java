@@ -56,6 +56,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.AsyncKuduScanner;
 import org.apache.kudu.client.KuduScanToken;
+import org.apache.kudu.client.ReplicaSelection;
 import org.apache.kudu.Schema;
 
 // This class resides in this project under the org.apache namespace
