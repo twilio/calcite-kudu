@@ -96,7 +96,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
     // processed?
 
     // If the scanner can continue and we are not stopping
-    if (scanner.hasMoreRows() && !earlyExit.get() && !scansShouldStop.get() &&
+    if (scanner.hasMoreRows() && !scansShouldStop.get() && !earlyExit.get() &&
     // allow `null` as cancel flag isn't guaranteed to be set. Instead of handling
     // null
     // in constructor check it here, .get() can be costly as it is atomic.
@@ -114,7 +114,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
       // Else -> scanner has completed, notify the consumer of rowResults
       try {
         // This blocks to ensure the query finishes.
-        logger.debug("Closing scanner: {} {} {} {}", scanner.hasMoreRows(), earlyExit.get(), scansShouldStop.get(),
+        logger.debug("Closing scanner: {} {} {} {}", scanner.hasMoreRows(), earlyExit, scansShouldStop,
             cancelFlag.get());
         rowResults.put(CLOSE_MESSAGE);
       } catch (InterruptedException threadInterrupted) {
