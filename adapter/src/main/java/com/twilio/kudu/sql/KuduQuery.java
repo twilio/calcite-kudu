@@ -14,7 +14,10 @@
  */
 package com.twilio.kudu.sql;
 
+import java.util.List;
+
 import com.twilio.kudu.sql.rules.KuduRules;
+
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -24,8 +27,8 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataType;
-
-import java.util.List;
+import org.apache.kudu.client.AsyncKuduClient;
+import org.apache.kudu.client.KuduTable;
 
 /**
  * Relational expression representing a scan of a KuduTable
@@ -101,5 +104,32 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     impl.descendingColumns = this.calciteKuduTable.getDescendingOrderedColumnIndexes();
     impl.table = this.table;
     impl.tableDataType = getRowType();
+  }
+
+  /**
+   * Return internal abstraction of the table
+   * 
+   * @return {@link CalciteKuduTable} that holds some stats for the query.
+   */
+  public CalciteKuduTable getCalciteKuduTable() {
+    return calciteKuduTable;
+  }
+
+  /**
+   * Get an {@link KuduTable} for this query.
+   * 
+   * @return {@link KuduTable} used for the query
+   */
+  public KuduTable getKuduTable() {
+    return calciteKuduTable.getKuduTable();
+  }
+
+  /**
+   * Get the connected {@link AsyncKuduClient} for the query
+   * 
+   * @return Kudu client that is connected to the active cluster.
+   */
+  public AsyncKuduClient getKuduClient() {
+    return calciteKuduTable.getClient();
   }
 }

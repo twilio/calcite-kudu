@@ -14,6 +14,8 @@
  */
 package com.twilio.kudu.sql.rel;
 
+import java.util.List;
+
 import com.twilio.kudu.sql.CalciteKuduPredicate;
 import com.twilio.kudu.sql.KuduRelNode;
 import com.twilio.kudu.sql.rel.KuduProjectRel.KuduColumnVisitor;
@@ -29,33 +31,39 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.kudu.Schema;
 
-import java.util.List;
-
 public class KuduFilterRel extends Filter implements KuduRelNode {
   public final List<List<CalciteKuduPredicate>> scanPredicates;
   public final Schema kuduSchema;
   public final boolean useInMemoryFiltering;
+  private final double totalTablets;
+  private final double filteredTablets;
 
   public KuduFilterRel(final RelOptCluster cluster, final RelTraitSet traitSet, final RelNode child,
       final RexNode condition, final List<List<CalciteKuduPredicate>> predicates, final Schema kuduSchema,
-      boolean useInMemoryFiltering) {
+      final boolean useInMemoryFiltering, final double totalTablets, final double filteredTablets) {
     super(cluster, traitSet, child, condition);
     this.scanPredicates = predicates;
     this.kuduSchema = kuduSchema;
     this.useInMemoryFiltering = useInMemoryFiltering;
+    this.totalTablets = totalTablets;
+    this.filteredTablets = filteredTablets;
   }
 
   @Override
   public RelOptCost computeSelfCost(final RelOptPlanner planner, final RelMetadataQuery mq) {
-    // Really lower the cost.
-    // @TODO: consider if the predicates include primary keys
-    // and adjust the cost accordingly.
-    return super.computeSelfCost(planner, mq).multiplyBy(0.1);
+    // totalTablets is the number of tablets for the table
+    // filteredTablets is the number of tablets that are removed from this filter
+
+    if (filteredTablets == totalTablets) {
+      return super.computeSelfCost(planner, mq).multiplyBy(0.1);
+    }
+    final double tabletFilterPercentage = filteredTablets / totalTablets;
+    return super.computeSelfCost(planner, mq).multiplyBy(tabletFilterPercentage);
   }
 
   public KuduFilterRel copy(final RelTraitSet traitSet, final RelNode input, final RexNode condition) {
     return new KuduFilterRel(getCluster(), traitSet, input, condition, this.scanPredicates, kuduSchema,
-        useInMemoryFiltering);
+        useInMemoryFiltering, totalTablets, filteredTablets);
   }
 
   @Override
