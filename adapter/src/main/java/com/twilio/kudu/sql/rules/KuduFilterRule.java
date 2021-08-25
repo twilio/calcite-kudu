@@ -26,6 +26,9 @@ import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.tools.RelBuilderFactory;
+import org.apache.kudu.client.AsyncKuduClient;
+import org.apache.kudu.client.KuduScanToken;
+import org.apache.kudu.client.KuduScanToken.KuduScanTokenBuilder;
 
 import java.util.List;
 
@@ -42,6 +45,7 @@ public class KuduFilterRule extends RelOptRule {
   public void onMatch(RelOptRuleCall call) {
     final LogicalFilter filter = (LogicalFilter) call.getRelList().get(0);
     final KuduQuery kuduQuery = (KuduQuery) call.getRelList().get(1);
+
     if (filter.getTraitSet().contains(Convention.NONE)) {
       final RexBuilder rexBuilder = filter.getCluster().getRexBuilder();
       // expand row value expression into a series of OR-AND expressions
@@ -56,10 +60,26 @@ public class KuduFilterRule extends RelOptRule {
         // handle filtering
         return;
       }
+
+      // From kuduQuery, call getCalciteTable, and then call get getClient().
+      // Using the client, call syncClient() and newScanTokeBuilder
+      final AsyncKuduClient client = kuduQuery.getKuduClient();
+
+      // Build tokens without the predicates and then with predicates apply.
+      final int totalTablets = client.syncClient().newScanTokenBuilder(kuduQuery.getKuduTable()).build().size();
+
+      final int filteredTablets = predicates.stream().mapToInt(subScan -> {
+        final KuduScanTokenBuilder predicateBuilder = client.syncClient().newScanTokenBuilder(kuduQuery.getKuduTable());
+
+        subScan.stream().forEach(p -> predicateBuilder.addPredicate(p.toPredicate(kuduQuery.getCalciteKuduTable())));
+
+        return predicateBuilder.build().size();
+      }).sum();
+
       final RelNode converted = new KuduFilterRel(filter.getCluster(),
           filter.getTraitSet().replace(KuduRelNode.CONVENTION), convert(filter.getInput(), KuduRelNode.CONVENTION),
           condition, predicates, kuduQuery.calciteKuduTable.getKuduTable().getSchema(),
-          !predicateParser.areAllFiltersApplied());
+          !predicateParser.areAllFiltersApplied(), totalTablets, filteredTablets);
 
       call.transformTo(converted);
     }
