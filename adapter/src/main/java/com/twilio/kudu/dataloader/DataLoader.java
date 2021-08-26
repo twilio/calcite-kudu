@@ -79,15 +79,9 @@ public class DataLoader {
         .orElseThrow(() -> new RuntimeException("Table not found " + scenario.getTableName()));
     this.url = url;
 
-    // we assume the first UNIXTIME_MICROS column is the timestamp column
-    String timestampColumnName = null;
-    final Schema tableSchema = calciteKuduTable.getKuduTable().getSchema();
-    for (int i = 0; i < calciteKuduTable.getKuduTable().getSchema().getColumnCount(); i++) {
-      if (tableSchema.getColumnByIndex(i).getType() == Type.UNIXTIME_MICROS) {
-        timestampColumnName = tableSchema.getColumnByIndex(i).getName();
-        break;
-      }
-    }
+    // we assume there is one UNIXTIME_MICROS column in a table
+    String timestampColumnName = calciteKuduTable.getKuduTable().getSchema()
+        .getColumnByIndex(calciteKuduTable.getTimestampColumnIndex()).getName();
     UniformLongValueGenerator timestampGenerator = (UniformLongValueGenerator) scenario.getColumnNameToValueGenerator()
         .get(timestampColumnName);
     // initialize minValue and maxValue if the generator is a TimestampGenerator
