@@ -87,7 +87,7 @@ public class KuduNestedJoinRule extends RelOptRule {
     final boolean containsActorSid = join.getRight().getRowType().getFieldList().stream()
         .anyMatch(fl -> fl.getName().equalsIgnoreCase("actor_sid"));
 
-    return isValid && containsActorSid;
+    return isValid != null && isValid && containsActorSid;
   }
 
   @Override
