@@ -14,14 +14,14 @@
  */
 package com.twilio.kudu.sql.rules;
 
-import java.util.EnumSet;
-
 import com.twilio.kudu.sql.rel.KuduNestedJoin;
-
+import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
@@ -30,7 +30,10 @@ import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.tools.RelBuilderFactory;
 
-// @TODO: this rule is primed to be moved into our internal project and out of OSS.
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
+
 public class KuduNestedJoinRule extends RelOptRule {
   public final static EnumSet<SqlKind> VALID_CALL_TYPES = EnumSet.of(SqlKind.EQUALS, SqlKind.GREATER_THAN,
       SqlKind.GREATER_THAN_OR_EQUAL, SqlKind.LESS_THAN, SqlKind.LESS_THAN_OR_EQUAL);
@@ -38,20 +41,23 @@ public class KuduNestedJoinRule extends RelOptRule {
   public static final int DEFAULT_BATCH_SIZE = 100;
   private int batchSize;
 
+  public static final String HINT_NAME = "USE_KUDU_NESTED_JOIN";
+
   public KuduNestedJoinRule(RelBuilderFactory relBuilderFactory) {
     this(relBuilderFactory, DEFAULT_BATCH_SIZE);
   }
 
   public KuduNestedJoinRule(RelBuilderFactory relBuilderFactory, final int batchSize) {
-    super(operand(Join.class, any()), relBuilderFactory, "KuduNestedLoopRule");
+    super(operand(LogicalJoin.class, any()), relBuilderFactory, "KuduNestedJoinRule");
     this.batchSize = DEFAULT_BATCH_SIZE;
   }
 
   @Override
   public boolean matches(final RelOptRuleCall call) {
     final Join join = call.rel(0);
-
-    if (join.getJoinType() != JoinRelType.INNER && join.getJoinType() != JoinRelType.LEFT) {
+    // only match this rule if a hint is specified
+    if (!join.getHints().stream().map(h -> h.hintName).anyMatch(s -> s.equalsIgnoreCase(HINT_NAME))
+        || (join.getJoinType() != JoinRelType.INNER && join.getJoinType() != JoinRelType.LEFT)) {
       return false;
     }
 
@@ -83,22 +89,27 @@ public class KuduNestedJoinRule extends RelOptRule {
 
     final Boolean isValid = condition.accept(validateJoinCondition);
 
-    // @TODO: Hack for the moment.
-    final boolean containsActorSid = join.getRight().getRowType().getFieldList().stream()
-        .anyMatch(fl -> fl.getName().equalsIgnoreCase("actor_sid"));
-
-    return isValid != null && isValid && containsActorSid;
+    return isValid != null && isValid;
   }
 
   @Override
   public void onMatch(final RelOptRuleCall call) {
-    final Join join = call.rel(0);
+    LogicalJoin join = call.rel(0);
+    List<RelNode> newInputs = new ArrayList<>();
+    for (RelNode input : join.getInputs()) {
+      if (!(input.getConvention() instanceof EnumerableConvention)) {
+        input = convert(input, input.getTraitSet().replace(EnumerableConvention.INSTANCE));
+      }
+      newInputs.add(input);
+    }
+    final RelNode left = newInputs.get(0);
+    final RelNode right = newInputs.get(1);
 
     final JoinRelType joinType = join.getJoinType();
 
-    final KuduNestedJoin newJoin = KuduNestedJoin.create(join.getLeft(), join.getRight(), join.getCondition(), joinType,
-        this.batchSize);
+    final KuduNestedJoin newJoin = KuduNestedJoin.create(left, right, join.getCondition(), joinType, this.batchSize);
 
     call.transformTo(newJoin);
   }
+
 }
