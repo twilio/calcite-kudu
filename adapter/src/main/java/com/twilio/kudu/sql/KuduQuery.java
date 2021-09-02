@@ -15,6 +15,7 @@
 package com.twilio.kudu.sql;
 
 import com.twilio.kudu.sql.rules.KuduRules;
+import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -80,7 +81,7 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
 
     // After removing the Join Commute Rule, Merge Join is chosen over Hash Join,
     // negating the work down to push the KuduSortRel into the large table.
-    planner.removeRule(org.apache.calcite.adapter.enumerable.EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
+    planner.removeRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
 
     // This rule does not handle SArg filters correctly, which causes filters to not
     // get pushed

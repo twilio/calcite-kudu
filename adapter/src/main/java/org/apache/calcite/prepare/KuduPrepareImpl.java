@@ -12,15 +12,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.twilio.kudu.sql;
+package org.apache.calcite.prepare;
 
 import com.google.common.collect.ImmutableMap;
+import com.twilio.kudu.sql.CalciteKuduTable;
 import com.twilio.kudu.sql.parser.SortOrder;
 import com.twilio.kudu.sql.parser.SqlAlterTable;
 import com.twilio.kudu.sql.parser.SqlCreateMaterializedView;
 import com.twilio.kudu.sql.parser.SqlCreateTable;
 import com.twilio.kudu.sql.schema.KuduSchema;
-import org.apache.calcite.prepare.CalcitePrepareImpl;
+import org.apache.calcite.rel.core.RelFactories;
+import org.apache.calcite.rel.hint.HintPredicates;
+import org.apache.calcite.rel.hint.HintStrategyTable;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
@@ -33,6 +36,8 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOptionNode;
+import org.apache.calcite.sql2rel.SqlToRelConverter;
+import org.apache.calcite.util.ImmutableBeans;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Common;
 import org.apache.kudu.Schema;
@@ -42,9 +47,10 @@ import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.client.PartialRow;
 import org.json.JSONObject;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -469,6 +475,33 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
       }
     }
     throw new RuntimeException("Unable to find KuduSchema in " + rootSchema);
+  }
+
+  static void setFinalStatic(Field field, Object newValue) throws Exception {
+    field.setAccessible(true);
+
+    Field modifiersField = Field.class.getDeclaredField("modifiers");
+    modifiersField.setAccessible(true);
+    modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+
+    field.set(null, newValue);
+  }
+
+  // TODO figure out a better way to set the HintStrategyTable for sql queries
+  static {
+    try {
+      HintStrategyTable hintStrategyTable = HintStrategyTable.builder().hintStrategy(
+        "USE_KUDU_NESTED_JOIN", HintPredicates.JOIN).build();
+      SqlToRelConverter.Config CONFIG_MODIFIED =
+        ImmutableBeans.create(SqlToRelConverter.Config.class)
+          .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+          .withRelBuilderConfigTransform(c -> c.withPushJoinCondition(true))
+          .withHintStrategyTable(hintStrategyTable);
+      // change SqlToRelConverter.CONFIG to use one that has the above HintStrategyTable
+      setFinalStatic(SqlToRelConverter.class.getDeclaredField("CONFIG"), CONFIG_MODIFIED);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
 }
