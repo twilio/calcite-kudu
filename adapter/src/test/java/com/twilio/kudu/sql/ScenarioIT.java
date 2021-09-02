@@ -41,13 +41,37 @@ public class ScenarioIT {
   @ClassRule
   public static KuduTestHarness testHarness = new KuduTestHarness();
   private static String JDBC_URL;
+  private static Scenario usageReportTransactionScenario;
 
   @BeforeClass
-  public static void setup() {
+  public static void setup() throws SQLException, IOException {
     String urlFormat = JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED + ";schema."
         + KuduSchema.CREATE_DUMMY_PARTITION_FLAG + "=false";
     JDBC_URL = String.format(urlFormat, DefaultKuduSchemaFactory.class.getName(),
         testHarness.getMasterAddressesAsString());
+
+    // create the UsageReportTransactions table
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl = "CREATE TABLE \"ReportCenter.UsageReportTransactions\" (" + "\"usage_account_sid\" VARCHAR, "
+          + "\"date_initiated\" TIMESTAMP DESC ROW_TIMESTAMP, " + "\"transaction_id\" VARCHAR, "
+          + "\"units\" SMALLINT, " + "\"billable_item\" VARCHAR, " + "\"calculated_sid\" VARCHAR, "
+          + "\"sub_account_sid\" VARCHAR, " + "\"phonenumber\" VARCHAR, " + "\"to\" VARCHAR, " + "\"from\" VARCHAR, "
+          + "\"amount\" DECIMAL(22, 6), " + "\"quantity\" DECIMAL(22, 6), "
+          + "PRIMARY KEY (\"usage_account_sid\", \"date_initiated\", \"transaction_id\"))"
+          + "PARTITION BY HASH (\"usage_account_sid\") PARTITIONS 2 NUM_REPLICAS 1";
+      conn.createStatement().execute(ddl);
+
+      String ddl2 = "CREATE MATERIALIZED VIEW \"Cube\" AS SELECT "
+          + "SUM(\"amount\") as \"sum_amount\", SUM(\"quantity\") as \"sum_quantity\", COUNT(*) as \"count_records\""
+          + "FROM \"ReportCenter.UsageReportTransactions\" "
+          + "GROUP BY \"usage_account_sid\", FLOOR(\"date_initiated\" TO DAY), \"billable_item\", \"units\", \"sub_account_sid\"";
+      conn.createStatement().execute(ddl2);
+
+      usageReportTransactionScenario = Scenario
+          .loadScenario(ScenarioIT.class.getResource("/scenarios/ReportCenter.UsageReportTransactions.json"));
+      // load data
+      new DataLoader(JDBC_URL, usageReportTransactionScenario).loadData(Optional.empty());
+    }
   }
 
   @Test
@@ -145,15 +169,6 @@ public class ScenarioIT {
   @Test
   public void testKuduNestedLoopJoin() throws Exception {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
-      String ddl = "CREATE TABLE \"ReportCenter.UsageReportTransactions\" (" + "\"usage_account_sid\" VARCHAR, "
-          + "\"date_initiated\" TIMESTAMP DESC ROW_TIMESTAMP, " + "\"transaction_id\" VARCHAR, "
-          + "\"units\" SMALLINT, " + "\"billable_item\" VARCHAR, " + "\"calculated_sid\" VARCHAR, "
-          + "\"sub_account_sid\" VARCHAR, " + "\"phonenumber\" VARCHAR, " + "\"to\" VARCHAR, " + "\"from\" VARCHAR, "
-          + "\"amount\" DECIMAL(22, 6), " + "\"quantity\" DECIMAL(22, 6), "
-          + "PRIMARY KEY (\"usage_account_sid\", \"date_initiated\", \"transaction_id\"))"
-          + "PARTITION BY HASH (\"usage_account_sid\") PARTITIONS 2 NUM_REPLICAS 1";
-      conn.createStatement().execute(ddl);
-
       String ddl2 = "CREATE TABLE \"OrganizationAccounts\" (" + "\"organization_sid\" VARCHAR, "
           + "\"account_sid\" VARCHAR, " + "PRIMARY KEY (\"organization_sid\", \"account_sid\"))"
           + "PARTITION BY HASH (\"organization_sid\") PARTITIONS 2 NUM_REPLICAS 1";
@@ -167,11 +182,6 @@ public class ScenarioIT {
       stmt.setString(2, "ACCOUNT_2");
       stmt.execute();
       conn.commit();
-
-      Scenario scenario = Scenario
-          .loadScenario(this.getClass().getResource("/scenarios/ReportCenter.UsageReportTransactions.json"));
-      // load data
-      new DataLoader(JDBC_URL, scenario).loadData(Optional.empty());
 
       String sqlFormat = "SELECT %s"
           + "USAGE_ACCOUNT_SID, SUM(\"quantity\") AS \"SUM_QUANTITY\" FROM \"OrganizationAccounts\" "
@@ -219,43 +229,19 @@ public class ScenarioIT {
 
   @Test
   public void testUsageReportTransactions() throws IOException, SQLException {
-    Scenario scenario = Scenario
-        .loadScenario(this.getClass().getResource("/scenarios/ReportCenter.UsageReportTransactions.json"));
-
-    // verify data was written
-    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
-      String ddl = "CREATE TABLE \"ReportCenter.UsageReportTransactions\" (" + "\"usage_account_sid\" VARCHAR, "
-          + "\"date_initiated\" TIMESTAMP DESC ROW_TIMESTAMP, " + "\"transaction_id\" VARCHAR, "
-          + "\"units\" SMALLINT, " + "\"billable_item\" VARCHAR, " + "\"calculated_sid\" VARCHAR, "
-          + "\"sub_account_sid\" VARCHAR, " + "\"phonenumber\" VARCHAR, " + "\"to\" VARCHAR, " + "\"from\" VARCHAR, "
-          + "\"amount\" DECIMAL(22, 6), " + "\"quantity\" DECIMAL(22, 6), "
-          + "PRIMARY KEY (\"usage_account_sid\", \"date_initiated\", \"transaction_id\"))"
-          + "PARTITION BY HASH (\"usage_account_sid\") PARTITIONS 2 NUM_REPLICAS 1";
-      conn.createStatement().execute(ddl);
-
-      String ddl2 = "CREATE MATERIALIZED VIEW \"Cube\" AS SELECT "
-          + "SUM(\"amount\") as \"sum_amount\", SUM(\"quantity\") as \"sum_quantity\", COUNT(*) as \"count_records\""
-          + "FROM \"ReportCenter.UsageReportTransactions\" "
-          + "GROUP BY \"usage_account_sid\", FLOOR(\"date_initiated\" TO DAY), \"billable_item\", \"units\", \"sub_account_sid\"";
-      conn.createStatement().execute(ddl2);
-    }
-
-    // load data
-    new DataLoader(JDBC_URL, scenario).loadData(Optional.empty());
-
     // verify data was written
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement()
           .executeQuery("SELECT COUNT(*) FROM \"ReportCenter.UsageReportTransactions\"");
       assertTrue(rs.next());
-      assertEquals(scenario.getNumRows(), rs.getInt(1));
+      assertEquals(usageReportTransactionScenario.getNumRows(), rs.getInt(1));
       assertFalse(rs.next());
 
       // verify the cube row counts match
       rs = conn.createStatement().executeQuery(
           "SELECT SUM(\"count_records\") FROM " + "\"ReportCenter.UsageReportTransactions-Cube-Day-Aggregation\"");
       assertTrue(rs.next());
-      assertEquals(scenario.getNumRows(), rs.getInt(1));
+      assertEquals(usageReportTransactionScenario.getNumRows(), rs.getInt(1));
       assertFalse(rs.next());
     }
   }
