@@ -181,15 +181,16 @@ public class ScenarioIT {
 
       // force the plan to use KuduNestedJoin
       String hint = "/*+ USE_KUDU_NESTED_JOIN */";
-      String expectedPlan = "EnumerableAggregate(group=[{0}], SUM_QUANTITY=[SUM($1)])\n"
-          + "  EnumerableCalc(expr#0..4=[{inputs}], USAGE_ACCOUNT_SID=[$t2], QUANTITY=[$t4])\n"
-          + "    KuduNestedJoin(condition=[=($2, $1)], joinType=[inner], batchSize=[5])\n"
-          + "      KuduToEnumerableRel\n"
-          + "        KuduFilterRel(ScanToken 1=[organization_sid EQUAL ORGANIZATION_1])\n"
-          + "          KuduQuery(table=[[kudu, OrganizationAccounts]])\n" + "      KuduToEnumerableRel\n"
-          + "        KuduProjectRel(USAGE_ACCOUNT_SID=[$0], DATE_INITIATED=[$1], QUANTITY=[$11])\n"
-          + "          KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1590969600000000, date_initiated LESS 1592179200000000])\n"
-          + "            KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
+      String expectedPlan = "EnumerableAggregate(group=[{0}], SUM_QUANTITY=[SUM($1)])\n" +
+        "  EnumerableCalc(expr#0..4=[{inputs}], USAGE_ACCOUNT_SID=[$t2], QUANTITY=[$t4])\n" +
+        "    KuduNestedJoin(condition=[=($2, $1)], joinType=[inner], batchSize=[100])\n" +
+        "      KuduToEnumerableRel\n" +
+        "        KuduFilterRel(ScanToken 1=[organization_sid EQUAL ORGANIZATION_1])\n" +
+        "          KuduQuery(table=[[kudu, OrganizationAccounts]])\n" +
+        "      KuduToEnumerableRel\n" +
+        "        KuduProjectRel(USAGE_ACCOUNT_SID=[$0], DATE_INITIATED=[$1], QUANTITY=[$11])\n" +
+        "          KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1590969600000000, date_initiated LESS 1592179200000000])\n" +
+        "            KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
       String sql = String.format(sqlFormat, hint);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
