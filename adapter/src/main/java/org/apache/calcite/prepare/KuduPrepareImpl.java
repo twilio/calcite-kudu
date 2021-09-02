@@ -490,14 +490,13 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
   // TODO figure out a better way to set the HintStrategyTable for sql queries
   static {
     try {
-      HintStrategyTable hintStrategyTable = HintStrategyTable.builder().hintStrategy(
-        "USE_KUDU_NESTED_JOIN", HintPredicates.JOIN).build();
-      SqlToRelConverter.Config CONFIG_MODIFIED =
-        ImmutableBeans.create(SqlToRelConverter.Config.class)
+      HintStrategyTable hintStrategyTable = HintStrategyTable.builder()
+          .hintStrategy("USE_KUDU_NESTED_JOIN", HintPredicates.JOIN).build();
+      SqlToRelConverter.Config CONFIG_MODIFIED = ImmutableBeans.create(SqlToRelConverter.Config.class)
           .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
-          .withRelBuilderConfigTransform(c -> c.withPushJoinCondition(true))
-          .withHintStrategyTable(hintStrategyTable);
-      // change SqlToRelConverter.CONFIG to use one that has the above HintStrategyTable
+          .withRelBuilderConfigTransform(c -> c.withPushJoinCondition(true)).withHintStrategyTable(hintStrategyTable);
+      // change SqlToRelConverter.CONFIG to use one that has the above
+      // HintStrategyTable
       setFinalStatic(SqlToRelConverter.class.getDeclaredField("CONFIG"), CONFIG_MODIFIED);
     } catch (Exception e) {
       throw new RuntimeException(e);

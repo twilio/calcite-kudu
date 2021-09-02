@@ -48,7 +48,7 @@ public class SqlUtil {
     List<List<Object>> rows = new ArrayList<>();
     while (rs.next()) {
       List<Object> row = new ArrayList<>(numCols);
-      for (int i=1; i<=numCols; ++i) {
+      for (int i = 1; i <= numCols; ++i) {
         row.add(rs.getObject(i));
       }
       rows.add(row);

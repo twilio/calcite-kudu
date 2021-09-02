@@ -146,55 +146,50 @@ public class ScenarioIT {
   public void testKuduNestedLoopJoin() throws Exception {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"ReportCenter.UsageReportTransactions\" (" + "\"usage_account_sid\" VARCHAR, "
-        + "\"date_initiated\" TIMESTAMP DESC ROW_TIMESTAMP, " + "\"transaction_id\" VARCHAR, "
-        + "\"units\" SMALLINT, " + "\"billable_item\" VARCHAR, " + "\"calculated_sid\" VARCHAR, "
-        + "\"sub_account_sid\" VARCHAR, " + "\"phonenumber\" VARCHAR, " + "\"to\" VARCHAR, " + "\"from\" VARCHAR, "
-        + "\"amount\" DECIMAL(22, 6), " + "\"quantity\" DECIMAL(22, 6), "
-        + "PRIMARY KEY (\"usage_account_sid\", \"date_initiated\", \"transaction_id\"))"
-        + "PARTITION BY HASH (\"usage_account_sid\") PARTITIONS 2 NUM_REPLICAS 1";
+          + "\"date_initiated\" TIMESTAMP DESC ROW_TIMESTAMP, " + "\"transaction_id\" VARCHAR, "
+          + "\"units\" SMALLINT, " + "\"billable_item\" VARCHAR, " + "\"calculated_sid\" VARCHAR, "
+          + "\"sub_account_sid\" VARCHAR, " + "\"phonenumber\" VARCHAR, " + "\"to\" VARCHAR, " + "\"from\" VARCHAR, "
+          + "\"amount\" DECIMAL(22, 6), " + "\"quantity\" DECIMAL(22, 6), "
+          + "PRIMARY KEY (\"usage_account_sid\", \"date_initiated\", \"transaction_id\"))"
+          + "PARTITION BY HASH (\"usage_account_sid\") PARTITIONS 2 NUM_REPLICAS 1";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE TABLE \"OrganizationAccounts\" (" +
-        "\"organization_sid\" VARCHAR, "
-        + "\"account_sid\" VARCHAR, "
-        + "PRIMARY KEY (\"organization_sid\", \"account_sid\"))"
-        + "PARTITION BY HASH (\"organization_sid\") PARTITIONS 2 NUM_REPLICAS 1";
+      String ddl2 = "CREATE TABLE \"OrganizationAccounts\" (" + "\"organization_sid\" VARCHAR, "
+          + "\"account_sid\" VARCHAR, " + "PRIMARY KEY (\"organization_sid\", \"account_sid\"))"
+          + "PARTITION BY HASH (\"organization_sid\") PARTITIONS 2 NUM_REPLICAS 1";
       conn.createStatement().execute(ddl2);
       // create an organization with the two accounts used to load data
-      PreparedStatement stmt = conn
-        .prepareStatement("INSERT INTO \"OrganizationAccounts\" " + "VALUES (?,?)");
+      PreparedStatement stmt = conn.prepareStatement("INSERT INTO \"OrganizationAccounts\" " + "VALUES (?,?)");
       stmt.setString(1, "ORGANIZATION_1");
       stmt.setString(2, "ACCOUNT_1");
-      stmt.execute();stmt.setString(1, "ORGANIZATION_1");
+      stmt.execute();
+      stmt.setString(1, "ORGANIZATION_1");
       stmt.setString(2, "ACCOUNT_2");
       stmt.execute();
       conn.commit();
 
       Scenario scenario = Scenario
-        .loadScenario(this.getClass().getResource("/scenarios/ReportCenter.UsageReportTransactions.json"));
+          .loadScenario(this.getClass().getResource("/scenarios/ReportCenter.UsageReportTransactions.json"));
       // load data
       new DataLoader(JDBC_URL, scenario).loadData(Optional.empty());
 
-      String sqlFormat = "SELECT %s" +
-        "USAGE_ACCOUNT_SID, SUM(\"quantity\") AS \"SUM_QUANTITY\" FROM \"OrganizationAccounts\" " +
-        "JOIN \"ReportCenter.UsageReportTransactions\"  ON \"USAGE_ACCOUNT_SID\"  =  \"OrganizationAccounts\".ACCOUNT_SID" +
-        " WHERE  ORGANIZATION_SID='ORGANIZATION_1'" +
-        " AND \"DATE_INITIATED\" >= TIMESTAMP '2020-06-01 00:00:00'" +
-        " AND \"DATE_INITIATED\" < TIMESTAMP '2020-06-15 00:00:00'" +
-        " GROUP BY USAGE_ACCOUNT_SID";
+      String sqlFormat = "SELECT %s"
+          + "USAGE_ACCOUNT_SID, SUM(\"quantity\") AS \"SUM_QUANTITY\" FROM \"OrganizationAccounts\" "
+          + "JOIN \"ReportCenter.UsageReportTransactions\"  ON \"USAGE_ACCOUNT_SID\"  =  \"OrganizationAccounts\".ACCOUNT_SID"
+          + " WHERE  ORGANIZATION_SID='ORGANIZATION_1'" + " AND \"DATE_INITIATED\" >= TIMESTAMP '2020-06-01 00:00:00'"
+          + " AND \"DATE_INITIATED\" < TIMESTAMP '2020-06-15 00:00:00'" + " GROUP BY USAGE_ACCOUNT_SID";
 
       // force the plan to use KuduNestedJoin
       String hint = "/*+ USE_KUDU_NESTED_JOIN */";
-      String expectedPlan = "EnumerableAggregate(group=[{0}], SUM_QUANTITY=[SUM($1)])\n" +
-        "  EnumerableCalc(expr#0..4=[{inputs}], USAGE_ACCOUNT_SID=[$t2], QUANTITY=[$t4])\n" +
-        "    KuduNestedJoin(condition=[=($2, $1)], joinType=[inner], batchSize=[5])\n" +
-        "      KuduToEnumerableRel\n" +
-        "        KuduFilterRel(ScanToken 1=[organization_sid EQUAL ORGANIZATION_1])\n" +
-        "          KuduQuery(table=[[kudu, OrganizationAccounts]])\n" +
-        "      KuduToEnumerableRel\n" +
-        "        KuduProjectRel(USAGE_ACCOUNT_SID=[$0], DATE_INITIATED=[$1], QUANTITY=[$11])\n" +
-        "          KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1590969600000000, date_initiated LESS 1592179200000000])\n" +
-        "            KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
+      String expectedPlan = "EnumerableAggregate(group=[{0}], SUM_QUANTITY=[SUM($1)])\n"
+          + "  EnumerableCalc(expr#0..4=[{inputs}], USAGE_ACCOUNT_SID=[$t2], QUANTITY=[$t4])\n"
+          + "    KuduNestedJoin(condition=[=($2, $1)], joinType=[inner], batchSize=[5])\n"
+          + "      KuduToEnumerableRel\n"
+          + "        KuduFilterRel(ScanToken 1=[organization_sid EQUAL ORGANIZATION_1])\n"
+          + "          KuduQuery(table=[[kudu, OrganizationAccounts]])\n" + "      KuduToEnumerableRel\n"
+          + "        KuduProjectRel(USAGE_ACCOUNT_SID=[$0], DATE_INITIATED=[$1], QUANTITY=[$11])\n"
+          + "          KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1590969600000000, date_initiated LESS 1592179200000000])\n"
+          + "            KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
       String sql = String.format(sqlFormat, hint);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
@@ -204,16 +199,14 @@ public class ScenarioIT {
 
       // running the query without the hint should use the regular EnumerableHashJoin
       sql = String.format(sqlFormat, "");
-      expectedPlan = "EnumerableAggregate(group=[{0}], SUM_QUANTITY=[SUM($1)])\n" +
-        "  EnumerableCalc(expr#0..4=[{inputs}], USAGE_ACCOUNT_SID=[$t2], QUANTITY=[$t4])\n" +
-        "    EnumerableHashJoin(condition=[=($1, $2)], joinType=[inner])\n" +
-        "      KuduToEnumerableRel\n" +
-        "        KuduFilterRel(ScanToken 1=[organization_sid EQUAL ORGANIZATION_1])\n" +
-        "          KuduQuery(table=[[kudu, OrganizationAccounts]])\n" +
-        "      KuduToEnumerableRel\n" +
-        "        KuduProjectRel(USAGE_ACCOUNT_SID=[$0], DATE_INITIATED=[$1], QUANTITY=[$11])\n" +
-        "          KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1590969600000000, date_initiated LESS 1592179200000000])\n" +
-        "            KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
+      expectedPlan = "EnumerableAggregate(group=[{0}], SUM_QUANTITY=[SUM($1)])\n"
+          + "  EnumerableCalc(expr#0..4=[{inputs}], USAGE_ACCOUNT_SID=[$t2], QUANTITY=[$t4])\n"
+          + "    EnumerableHashJoin(condition=[=($1, $2)], joinType=[inner])\n" + "      KuduToEnumerableRel\n"
+          + "        KuduFilterRel(ScanToken 1=[organization_sid EQUAL ORGANIZATION_1])\n"
+          + "          KuduQuery(table=[[kudu, OrganizationAccounts]])\n" + "      KuduToEnumerableRel\n"
+          + "        KuduProjectRel(USAGE_ACCOUNT_SID=[$0], DATE_INITIATED=[$1], QUANTITY=[$11])\n"
+          + "          KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1590969600000000, date_initiated LESS 1592179200000000])\n"
+          + "            KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
       rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       plan = SqlUtil.getExplainPlan(rs);
       assertEquals("Plan does not match", expectedPlan, plan);

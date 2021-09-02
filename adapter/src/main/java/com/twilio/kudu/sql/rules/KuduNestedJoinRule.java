@@ -56,8 +56,8 @@ public class KuduNestedJoinRule extends RelOptRule {
   public boolean matches(final RelOptRuleCall call) {
     final Join join = call.rel(0);
     // only match this rule if a hint is specified
-    if (!join.getHints().stream().map(h -> h.hintName).anyMatch( s -> s.equalsIgnoreCase(HINT_NAME))
-      || (join.getJoinType() != JoinRelType.INNER && join.getJoinType() != JoinRelType.LEFT)) {
+    if (!join.getHints().stream().map(h -> h.hintName).anyMatch(s -> s.equalsIgnoreCase(HINT_NAME))
+        || (join.getJoinType() != JoinRelType.INNER && join.getJoinType() != JoinRelType.LEFT)) {
       return false;
     }
 
@@ -98,11 +98,7 @@ public class KuduNestedJoinRule extends RelOptRule {
     List<RelNode> newInputs = new ArrayList<>();
     for (RelNode input : join.getInputs()) {
       if (!(input.getConvention() instanceof EnumerableConvention)) {
-        input =
-          convert(
-            input,
-            input.getTraitSet()
-              .replace(EnumerableConvention.INSTANCE));
+        input = convert(input, input.getTraitSet().replace(EnumerableConvention.INSTANCE));
       }
       newInputs.add(input);
     }
@@ -111,8 +107,7 @@ public class KuduNestedJoinRule extends RelOptRule {
 
     final JoinRelType joinType = join.getJoinType();
 
-    final KuduNestedJoin newJoin = KuduNestedJoin.create(left, right,
-      join.getCondition(), joinType, this.batchSize);
+    final KuduNestedJoin newJoin = KuduNestedJoin.create(left, right, join.getCondition(), joinType, this.batchSize);
 
     call.transformTo(newJoin);
   }
