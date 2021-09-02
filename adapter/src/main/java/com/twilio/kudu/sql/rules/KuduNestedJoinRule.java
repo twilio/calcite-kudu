@@ -38,7 +38,7 @@ public class KuduNestedJoinRule extends RelOptRule {
   public final static EnumSet<SqlKind> VALID_CALL_TYPES = EnumSet.of(SqlKind.EQUALS, SqlKind.GREATER_THAN,
       SqlKind.GREATER_THAN_OR_EQUAL, SqlKind.LESS_THAN, SqlKind.LESS_THAN_OR_EQUAL);
 
-  public static final int DEFAULT_BATCH_SIZE = 5;
+  public static final int DEFAULT_BATCH_SIZE = 100;
   private int batchSize;
 
   public static final String HINT_NAME = "USE_KUDU_NESTED_JOIN";
@@ -87,7 +87,9 @@ public class KuduNestedJoinRule extends RelOptRule {
       }
     };
 
-    return condition.accept(validateJoinCondition);
+    final Boolean isValid = condition.accept(validateJoinCondition);
+
+    return isValid != null && isValid;
   }
 
   @Override
