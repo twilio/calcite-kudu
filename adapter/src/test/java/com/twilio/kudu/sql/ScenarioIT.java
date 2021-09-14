@@ -18,6 +18,7 @@ import com.twilio.kudu.dataloader.DataLoader;
 import com.twilio.kudu.dataloader.Scenario;
 import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
 import com.twilio.kudu.sql.schema.KuduSchema;
+import org.apache.calcite.prepare.KuduPrepareImpl;
 import org.apache.kudu.test.KuduTestHarness;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -45,6 +46,7 @@ public class ScenarioIT {
 
   @BeforeClass
   public static void setup() throws SQLException, IOException {
+    KuduPrepareImpl.initializeHints();
     String urlFormat = JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED + ";schema."
         + KuduSchema.CREATE_DUMMY_PARTITION_FLAG + "=false";
     JDBC_URL = String.format(urlFormat, DefaultKuduSchemaFactory.class.getName(),
@@ -223,7 +225,7 @@ public class ScenarioIT {
       rs = conn.createStatement().executeQuery(sql);
       List<List<Object>> hashJoinResult = SqlUtil.getResult(rs);
 
-      assertEquals("Results do no match", hashJoinResult, kuduNestedJoinResult);
+      assertEquals("Results do not match", hashJoinResult, kuduNestedJoinResult);
     }
   }
 

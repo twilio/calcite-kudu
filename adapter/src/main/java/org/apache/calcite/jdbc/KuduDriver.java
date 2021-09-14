@@ -54,7 +54,7 @@ public class KuduDriver extends Driver {
 
   @Override
   protected Function0<CalcitePrepare> createPrepareFactory() {
-    return (Function0<CalcitePrepare>) () -> new KuduPrepareImpl();
+    return () -> new KuduPrepareImpl();
   }
 
 }
