@@ -56,7 +56,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.AsyncKuduScanner;
 import org.apache.kudu.client.KuduScanToken;
-import org.apache.kudu.client.ReplicaSelection;
 import org.apache.kudu.Schema;
 
 // This class resides in this project under the org.apache namespace
@@ -261,7 +260,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
         scanStats.setTotalTimeMs();
         List<ScannerMetrics> scannerMetricsList = scanners.stream().map(scanner -> new ScannerMetrics(scanner))
             .collect(Collectors.toList());
-        scanStats.setScannerMetricsList(scannerMetricsList);
+        scanStats.addScannerMetricsList(scannerMetricsList);
       }
     };
   }
@@ -355,7 +354,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
         scanStats.setTotalTimeMs();
         List<ScannerMetrics> scannerMetricsList = scanners.stream().map(scanner -> new ScannerMetrics(scanner))
             .collect(Collectors.toList());
-        scanStats.setScannerMetricsList(scannerMetricsList);
+        scanStats.addScannerMetricsList(scannerMetricsList);
       }
     };
   }

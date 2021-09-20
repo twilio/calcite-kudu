@@ -14,6 +14,7 @@
  */
 package com.twilio.kudu.sql.rules;
 
+import com.google.common.collect.Sets;
 import com.twilio.kudu.sql.rel.KuduNestedJoin;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptRule;
@@ -21,6 +22,8 @@ import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.hint.HintPredicate;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
@@ -29,10 +32,13 @@ import org.apache.calcite.rex.RexVisitor;
 import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.tools.RelBuilderFactory;
+import org.apache.calcite.util.Util;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class KuduNestedJoinRule extends RelOptRule {
   public final static EnumSet<SqlKind> VALID_CALL_TYPES = EnumSet.of(SqlKind.EQUALS, SqlKind.GREATER_THAN,
@@ -107,7 +113,8 @@ public class KuduNestedJoinRule extends RelOptRule {
 
     final JoinRelType joinType = join.getJoinType();
 
-    final KuduNestedJoin newJoin = KuduNestedJoin.create(left, right, join.getCondition(), joinType, this.batchSize);
+    final KuduNestedJoin newJoin = KuduNestedJoin.create(left, right, join.getCondition(), joinType, this.batchSize,
+        join.getHints());
 
     call.transformTo(newJoin);
   }
