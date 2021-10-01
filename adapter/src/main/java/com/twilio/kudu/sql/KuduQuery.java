@@ -18,6 +18,7 @@ import com.google.common.collect.Sets;
 import com.twilio.kudu.sql.rules.KuduNestedJoinRule;
 import com.twilio.kudu.sql.rules.KuduRules;
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
+import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -104,8 +105,10 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     // KuduFilterIntoJoinRule which expands SArgs
     planner.removeRule(CoreRules.FILTER_INTO_JOIN);
 
-    for (RelOptRule rule : KuduRules.RULES) {
-      planner.addRule(rule);
+    KuduRules.CORE_RULES.stream().forEach(rule -> planner.addRule(rule));
+
+    if (CalciteSystemProperty.ENABLE_ENUMERABLE.value()) {
+      KuduRules.ENUMERABLE_RULES.stream().forEach(r -> planner.addRule(r));
     }
   }
 
