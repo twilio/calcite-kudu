@@ -105,6 +105,8 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     // KuduFilterIntoJoinRule which expands SArgs
     planner.removeRule(CoreRules.FILTER_INTO_JOIN);
 
+    planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_SORT_RULE);
+
     KuduRules.CORE_RULES.stream().forEach(rule -> planner.addRule(rule));
 
     if (CalciteSystemProperty.ENABLE_ENUMERABLE.value()) {
