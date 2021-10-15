@@ -214,6 +214,7 @@ public class KuduDDLIT {
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
     validateColumnSchema(schema, "COUNT_INT32_COL", Type.INT64, false, null);
     validateColumnSchema(schema, "SUM_INT8_COL", Type.INT8, false, null);
+    //add min max checks
     validateColumnSchema(schema, "MIN_INT8_COL", Type.INT8, false, null);
     validateColumnSchema(schema, "MAX_INT32_COL", Type.INT32, false, null);
   }
