@@ -222,7 +222,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         // List of all aggregates -
         // https://calcite.apache.org/docs/reference.html#aggregate-functions
         // TODO: Add aggregates to below list when support for it is added.
-        Set<String> supportedAggregatesSet = Stream.of("SUM", "COUNT").collect(Collectors.toCollection(HashSet::new));
+        Set<String> supportedAggregatesSet = Stream.of("SUM", "COUNT", "MAX", "MIN").collect(Collectors.toCollection(HashSet::new));
 
         SqlCreateMaterializedView createMaterializedViewNode = (SqlCreateMaterializedView) node;
         SqlNode fromNode = (createMaterializedViewNode.query).getFrom();
