@@ -184,11 +184,11 @@ public final class SortedAggregationIT {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
-      final String expectedPlan = "EnumerableLimit(fetch=[1])\n" + "  EnumerableSort(sort0=[$0], dir0=[DESC])\n"
-          + "    EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($1)])\n" + "      KuduToEnumerableRel\n"
-          + "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_LONG_FIELD=[$4])\n"
-          + "          KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n"
-          + "            KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
+      final String expectedPlan = "EnumerableLimitSort(sort0=[$0], dir0=[DESC], fetch=[1])\n"
+          + "  EnumerableAggregate(group=[{0}], EXPR$1=[$SUM0($1)])\n" + "    KuduToEnumerableRel\n"
+          + "      KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_LONG_FIELD=[$4])\n"
+          + "        KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n"
+          + "          KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
 
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
 
@@ -238,13 +238,12 @@ public final class SortedAggregationIT {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
-      final String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], EXPR$1=[$t2], "
-          + "REVERSE_INT_FIELD=[$t1])\n" + "  EnumerableLimit(fetch=[1])\n"
-          + "    EnumerableSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC])\n"
-          + "      EnumerableAggregate(group=[{0, 1}], EXPR$1=[$SUM0($2)])\n" + "        KuduToEnumerableRel\n"
-          + "          KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_INT_FIELD=[$3], " + "REVERSE_LONG_FIELD=[$4])\n"
-          + "            KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n"
-          + "              KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
+      final String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], EXPR$1=[$t2], REVERSE_INT_FIELD=[$t1])\n"
+          + "  EnumerableLimitSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC], fetch=[1])\n"
+          + "    EnumerableAggregate(group=[{0, 1}], EXPR$1=[$SUM0($2)])\n" + "      KuduToEnumerableRel\n"
+          + "        KuduProjectRel(ACCOUNT_SID=[$0], REVERSE_INT_FIELD=[$3], REVERSE_LONG_FIELD=[$4])\n"
+          + "          KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n"
+          + "            KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
 
       assertFalse(String.format("Plan should not contain KuduSortRel. It is\n%s", plan), plan.contains("KuduSortRel"));
       assertEquals("Full SQL plan has changed\n", expectedPlan, plan);

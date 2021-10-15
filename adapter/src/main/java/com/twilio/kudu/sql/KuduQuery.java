@@ -14,7 +14,11 @@
  */
 package com.twilio.kudu.sql;
 
+import com.google.common.collect.Sets;
+import com.twilio.kudu.sql.rules.KuduNestedJoinRule;
 import com.twilio.kudu.sql.rules.KuduRules;
+import org.apache.calcite.adapter.enumerable.EnumerableRules;
+import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -22,16 +26,26 @@ import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.hint.HintPredicate;
+import org.apache.calcite.rel.hint.HintPredicates;
+import org.apache.calcite.rel.hint.HintStrategyTable;
+import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.util.Util;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Relational expression representing a scan of a KuduTable
  */
 public final class KuduQuery extends TableScan implements KuduRelNode {
   final public CalciteKuduTable calciteKuduTable;
+
+  public static HintStrategyTable KUDU_HINT_STRATEGY_TABLE = HintStrategyTable.builder()
+      .hintStrategy(KuduNestedJoinRule.HINT_NAME, HintPredicates.JOIN).build();
 
   /**
    * List of column indices that are stored in reverse order.
@@ -66,6 +80,8 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
 
   @Override
   public void register(RelOptPlanner planner) {
+    getCluster().setHintStrategies(KUDU_HINT_STRATEGY_TABLE);
+
     // since kudu is a columnar store we never want to push an aggregate past a
     // project
     planner.removeRule(CoreRules.AGGREGATE_PROJECT_MERGE);
@@ -80,7 +96,7 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
 
     // After removing the Join Commute Rule, Merge Join is chosen over Hash Join,
     // negating the work down to push the KuduSortRel into the large table.
-    planner.removeRule(org.apache.calcite.adapter.enumerable.EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
+    planner.removeRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
 
     // This rule does not handle SArg filters correctly, which causes filters to not
     // get pushed
@@ -89,8 +105,12 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     // KuduFilterIntoJoinRule which expands SArgs
     planner.removeRule(CoreRules.FILTER_INTO_JOIN);
 
-    for (RelOptRule rule : KuduRules.RULES) {
-      planner.addRule(rule);
+    planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_SORT_RULE);
+
+    KuduRules.CORE_RULES.stream().forEach(rule -> planner.addRule(rule));
+
+    if (CalciteSystemProperty.ENABLE_ENUMERABLE.value()) {
+      KuduRules.ENUMERABLE_RULES.stream().forEach(r -> planner.addRule(r));
     }
   }
 

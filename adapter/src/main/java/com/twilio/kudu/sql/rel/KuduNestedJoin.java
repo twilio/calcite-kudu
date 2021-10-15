@@ -44,6 +44,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.metadata.RelMdCollation;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexBuilder;
@@ -68,26 +69,28 @@ public class KuduNestedJoin extends Join implements EnumerableRel {
 
   final int batchSize;
 
-  protected KuduNestedJoin(final RelOptCluster cluster, final RelTraitSet traits, final RelNode left,
-      final RelNode right, final RexNode condition, final JoinRelType joinType, final int batchSize) {
-    super(cluster, traits, left, right, condition, Collections.emptySet(), joinType);
+  protected KuduNestedJoin(final RelOptCluster cluster, final RelTraitSet traits, List<RelHint> hints,
+      final RelNode left, final RelNode right, final RexNode condition, final JoinRelType joinType,
+      final int batchSize) {
+    super(cluster, traits, hints, left, right, condition, Collections.emptySet(), joinType);
     this.batchSize = batchSize;
   }
 
   public static KuduNestedJoin create(final RelNode left, final RelNode right, final RexNode condition,
-      final JoinRelType joinType, final int batchSize) {
+      final JoinRelType joinType, final int batchSize, List<RelHint> hints) {
     final RelOptCluster cluster = left.getCluster();
     final RelMetadataQuery mq = cluster.getMetadataQuery();
     // Sets Enumerable trait and *IF* left is sorted, preserve that sort.
     final RelTraitSet traitSet = cluster.traitSetOf(EnumerableConvention.INSTANCE).replaceIfs(
         RelCollationTraitDef.INSTANCE, () -> RelMdCollation.enumerableBatchNestedLoopJoin(mq, left, right, joinType));
-    return new KuduNestedJoin(cluster, traitSet, left, right, condition, joinType, batchSize);
+    return new KuduNestedJoin(cluster, traitSet, hints, left, right, condition, joinType, batchSize);
   }
 
   @Override
   public KuduNestedJoin copy(final RelTraitSet traitSet, final RexNode condition, final RelNode left,
       final RelNode right, final JoinRelType joinType, final boolean semiJoinDone) {
-    return new KuduNestedJoin(getCluster(), traitSet, left, right, condition, joinType, this.batchSize);
+    return new KuduNestedJoin(getCluster(), traitSet, this.getHints(), left, right, condition, joinType,
+        this.batchSize);
   }
 
   @Override

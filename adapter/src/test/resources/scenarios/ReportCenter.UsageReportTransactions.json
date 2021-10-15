@@ -7,8 +7,8 @@
       "sidPrefix" : "TX"
     },
     "usage_account_sid" : {
-      "type" : "ConstantValueGenerator",
-      "columnValue" : "AC1231ebbfc4cd2fc2485ed634000001001"
+      "type" : "ValueListGenerator",
+      "values" : ["ACCOUNT_1", "ACCOUNT_2"]
     },
     "date_initiated" : {
       "type" : "UniformLongValueGenerator",
