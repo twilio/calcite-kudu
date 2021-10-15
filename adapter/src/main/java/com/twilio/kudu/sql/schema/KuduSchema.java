@@ -157,6 +157,7 @@ public final class KuduSchema extends AbstractSchema {
           tableMap.put(cubeTableInfo.tableName, calciteKuduTable);
           cubeTableList.add(calciteKuduTable);
         });
+
       }
 
       // create the fact table
