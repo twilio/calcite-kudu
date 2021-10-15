@@ -215,6 +215,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
       } catch (KuduException e) {
         throw new RuntimeException(e);
       }
+
       break;
 
     case CREATE_MATERIALIZED_VIEW:
