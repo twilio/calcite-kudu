@@ -75,7 +75,6 @@ public abstract class KuduSortRule extends RelOptRule {
     }
 
     int pkColumnIndex = 0;
-
     for (final RelFieldCollation sortField : collation.getFieldCollations()) {
       // Reject for descending sorted fields if sort direction is not Descending
       if ((query.calciteKuduTable.isColumnOrderedDesc(sortField.getFieldIndex())
@@ -88,6 +87,8 @@ public abstract class KuduSortRule extends RelOptRule {
         return false;
       }
       // the sort columns must be a prefix of the primary key columns
+      // for eg if a table has three columns A, B and C with a PK(A, B) this rule can
+      // be applied if we sort by (A, B)
       if (sortField.getFieldIndex() >= openedTable.getSchema().getPrimaryKeyColumnCount()
           || sortField.getFieldIndex() != pkColumnIndex) {
         // This field is not in the primary key columns. If there is a condition lets

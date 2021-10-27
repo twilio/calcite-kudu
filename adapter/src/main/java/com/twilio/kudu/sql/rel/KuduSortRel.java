@@ -14,12 +14,14 @@
  */
 package com.twilio.kudu.sql.rel;
 
+import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.KuduRelNode;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.Sort;
@@ -29,6 +31,8 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.trace.CalciteTrace;
 import org.slf4j.Logger;
 
+import java.util.List;
+
 /**
  * This relation sets {@link Implementor#sorted} to true and conditionally sets
  * {@link Implementor#limit} and {@link Implementor#offset}.
@@ -37,29 +41,43 @@ public class KuduSortRel extends Sort implements KuduRelNode {
 
   public static final Logger LOGGER = CalciteTrace.getPlannerTracer();
   public final boolean groupBySorted;
+  // If KuduAggregationLimitRule matched then the columns being sorted are a
+  // prefix of the PK
+  // columns and additional columns as well so we need to sort the returned rows.
+  // sortPrefixColumns contains the PK prefix columns
+  // If any of the subclasses of KuduSortRule matched then the columns being
+  // sorted
+  // are a prefix of the PK columns so we do not need to sort the returned rows
+  // and
+  // sortPrefixColumns is empty.
+  public final List<RelFieldCollation> sortPkPrefixColumns;
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
       RexNode fetch) {
-    this(cluster, traitSet, child, collation, offset, fetch, false);
+    this(cluster, traitSet, child, collation, offset, fetch, false, Lists.newArrayList());
   }
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
-      RexNode fetch, boolean groupBySorted) {
+      RexNode fetch, boolean groupBySorted, List<RelFieldCollation> sortPkPrefixColumns) {
     super(cluster, traitSet, child, collation, offset, fetch);
     assert getConvention() == KuduRelNode.CONVENTION;
     assert getConvention() == child.getConvention();
     this.groupBySorted = groupBySorted;
+    this.sortPkPrefixColumns = sortPkPrefixColumns;
   }
 
   @Override
   public Sort copy(RelTraitSet traitSet, RelNode input, RelCollation newCollation, RexNode offset, RexNode fetch) {
-    return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, groupBySorted);
+    return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, groupBySorted, sortPkPrefixColumns);
   }
 
   @Override
   public RelWriter explainTerms(RelWriter pw) {
     super.explainTerms(pw);
     pw.item("groupBySorted", groupBySorted);
+    if (!sortPkPrefixColumns.isEmpty()) {
+      pw.item("sortPkPrefixColumns", sortPkPrefixColumns);
+    }
     return pw;
   }
 
@@ -90,5 +108,6 @@ public class KuduSortRel extends Sort implements KuduRelNode {
     }
 
     implementor.groupByLimited = groupBySorted;
+    implementor.sortPkPrefixColumns = sortPkPrefixColumns;
   }
 }

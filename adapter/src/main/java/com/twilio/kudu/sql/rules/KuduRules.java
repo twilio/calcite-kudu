@@ -33,5 +33,6 @@ public class KuduRules {
   public static List<RelOptRule> ENUMERABLE_RULES = Arrays.asList(NESTED_JOIN, KuduToEnumerableConverter.INSTANCE);
   public static List<RelOptRule> CORE_RULES = Arrays.asList(FILTER, PROJECT, SORT, FILTER_SORT, LIMIT,
       SORT_OVER_JOIN_TRANSPOSE, KuduSortedAggregationRule.SORTED_AGGREGATION_RULE,
-      KuduSortedAggregationRule.SORTED_AGGREGATION_LIMIT_RULE, KuduFilterIntoJoinRule.KUDU_FILTER_INTO_JOIN);
+      KuduAggregationLimitRule.AGGREGATION_LIMIT_RULE, KuduSortedAggregationRule.SORTED_AGGREGATION_LIMIT_RULE,
+      KuduFilterIntoJoinRule.KUDU_FILTER_INTO_JOIN);
 }

@@ -46,7 +46,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * In recent Calcite Release, I believe this rule can be replaced.
+ * Rule that matches a sort over an aggregation with both sort and aggregation
+ * using the same columns. The columns must be a prefix of the primary key of
+ * the table.
  */
 public abstract class KuduSortedAggregationRule extends KuduSortRule {
 
@@ -75,8 +77,10 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
      * This rule should check that the columns being grouped by are also present in
      * sort.
      *
-     * For a table with PK(A,B) A, B, C, 1, 1, 1, 1, 2, 2, 1, 3, 1, A query that
-     * does GROUP BY A, C ORDER BY A cannot use this rule.
+     * For a table with three columns (A, B, C) with PK(A,B) and rows (1, 1, 1), (1,
+     * 2, 2), (1, 3, 1)
+     *
+     * A query that does GROUP BY A, C ORDER BY A cannot use this rule.
      */
     for (Integer groupedOrdinal : originalAggregate.getGroupSet()) {
       if (groupedOrdinal < query.calciteKuduTable.getKuduTable().getSchema().getPrimaryKeyColumnCount()) {
@@ -125,7 +129,7 @@ public abstract class KuduSortedAggregationRule extends KuduSortRule {
     final KuduSortRel newSort = new KuduSortRel(project.getCluster(), traitSet.replace(KuduRelNode.CONVENTION),
         convert(project, project.getTraitSet().replace(RelCollations.EMPTY)), newCollation,
         originalLimit.isPresent() ? originalLimit.get().offset : originalSort.offset,
-        originalLimit.isPresent() ? originalLimit.get().fetch : originalSort.fetch, true);
+        originalLimit.isPresent() ? originalLimit.get().fetch : originalSort.fetch, true, Lists.newArrayList());
 
     // Copy in the new collation because! this new rel is now coming out Sorted.
     final RelNode newkuduToEnumerableRel = kuduToEnumerableRel
