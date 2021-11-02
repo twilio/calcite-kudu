@@ -122,9 +122,14 @@ public class KuduAggregationLimitRule extends RelOptRule {
         .canonize(RelCollations.permute(originalSort.getCollation(), remappingOrdinals));
     final RelTraitSet traitSet = originalSort.getTraitSet().plus(newCollation).plus(Convention.NONE);
 
+    // TODO is this needed
+    if (traitSet.contains(KuduRelNode.CONVENTION)) {
+      return;
+    }
+
     // Check the new trait set to see if we can apply the sort against this.
-    final List<RelFieldCollation> sortPrefixColumns = getSortPkPrefix(traitSet, query,
-        query.calciteKuduTable.getKuduTable(), Optional.of(filter));
+    final List<RelFieldCollation> sortPrefixColumns = getSortPkPrefix(originalSort.getCollation(), newCollation, query,
+        Optional.of(filter));
     if (sortPrefixColumns.isEmpty()) {
       return;
     }
@@ -161,19 +166,19 @@ public class KuduAggregationLimitRule extends RelOptRule {
     return true;
   }
 
-  public List<RelFieldCollation> getSortPkPrefix(final RelTraitSet sortTraits, final KuduQuery query,
-      final KuduTable openedTable, final Optional<Filter> filter) {
+  public List<RelFieldCollation> getSortPkPrefix(final RelCollation originalCollation, final RelCollation newCollation,
+      final KuduQuery query, final Optional<Filter> filter) {
     // If there is no sort -- i.e. there is only a limit
     // don't pay the cost of returning rows in sorted order.
-    final RelCollation collation = sortTraits.getTrait(RelCollationTraitDef.INSTANCE);
     final List<RelFieldCollation> sortPrefixColumns = Lists.newArrayList();
 
-    if (collation.getFieldCollations().isEmpty() || sortTraits.contains(KuduRelNode.CONVENTION)) {
+    if (newCollation.getFieldCollations().isEmpty()) {
       return sortPrefixColumns;
     }
 
     int pkColumnIndex = 0;
-    for (final RelFieldCollation sortField : collation.getFieldCollations()) {
+    for (int collationIndex = 0; collationIndex < newCollation.getFieldCollations().size(); ++collationIndex) {
+      final RelFieldCollation sortField = newCollation.getFieldCollations().get(collationIndex);
       // the sort columns must contain a prefix of the primary key columns
       // for eg if a table has three columns A, B and C with a PK(A, B) this rule can
       // be applied if we sort by (A, C)
@@ -198,7 +203,8 @@ public class KuduAggregationLimitRule extends RelOptRule {
       if (!checkSortDirection(query, sortField)) {
         break;
       }
-      sortPrefixColumns.add(sortField);
+      // use the originalCollations
+      sortPrefixColumns.add(originalCollation.getFieldCollations().get(collationIndex));
       pkColumnIndex++;
     }
 

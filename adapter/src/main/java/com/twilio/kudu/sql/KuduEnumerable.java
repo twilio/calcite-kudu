@@ -452,9 +452,12 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
           // sorted on the client we have to read all the rows that have the same sorted
           // primary key prefix)
           if (lastSortedKey != null && !sortedKey.equals(lastSortedKey) && uniqueGroupCount > groupFetchLimit) {
+            logger.info("sortedKey {} lastSortedKey {} uniqueGroupCount {} groupFetchLimit {}", sortedKey,
+                lastSortedKey, uniqueGroupCount, groupFetchLimit);
             break;
           }
           lastSortedKey = sortedKey;
+          logger.info("sortedKey {} uniqueGroupCount{}", sortedKey, uniqueGroupCount);
         }
 
         // If there hasn't been a key yet or if there is a new key
@@ -474,7 +477,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
           if (sortedPrefixKeySelector == null && uniqueGroupCount > groupFetchLimit) {
             break;
           }
-
+          logger.info("key {} uniqueGroupCount{}", key, uniqueGroupCount);
           lastKey = key;
         }
 
