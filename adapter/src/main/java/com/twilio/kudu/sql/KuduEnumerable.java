@@ -452,8 +452,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
           // sorted on the client we have to read all the rows that have the same sorted
           // primary key prefix)
           if (lastSortedKey != null && !sortedKey.equals(lastSortedKey) && uniqueGroupCount > groupFetchLimit) {
-            logger.debug("sortedKey {} lastSortedKey {} uniqueGroupCount {} groupFetchLimit {}",
-              sortedKey,
+            logger.debug("sortedKey {} lastSortedKey {} uniqueGroupCount {} groupFetchLimit {}", sortedKey,
                 lastSortedKey, uniqueGroupCount, groupFetchLimit);
             break;
           }
@@ -579,8 +578,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
   }
 
   /**
-   * Return a function that accepts the Left hand sides rows and creates a
-   * newsorted {@code SortableEnumerable} that will match the batch of rows.
+   * Return a function that accepts the Left hand sides rows and creates a new
+   * {@code SortableEnumerable} that will match the batch of rows.
    *
    * @param joinNode The {@link Join} relation for this nest join.
    *

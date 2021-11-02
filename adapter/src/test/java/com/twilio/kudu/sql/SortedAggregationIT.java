@@ -103,7 +103,7 @@ public final class SortedAggregationIT {
       // (5,31) 160
       // (5,30) 1502
       // (4,29) 2000
-      // ACCOUNT_SID1
+      // ACCOUNT_SID2
       // (6,4) 1
       // (6,3) 2
       // (6,2) 3

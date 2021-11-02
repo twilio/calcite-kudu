@@ -71,8 +71,8 @@ public class KuduAggregationLimitRule extends RelOptRule {
 
   @Override
   public void onMatch(final RelOptRuleCall call) {
-//    final EnumerableLimit originalLimit = (EnumerableLimit) call.getRelList().get(0);
     final Sort originalSort = (Sort) call.getRelList().get(0);
+    // if there is no LIMIT just return
     if (originalSort.fetch == null)
       return;
     final Aggregate originalAggregate = (Aggregate) call.getRelList().get(1);
@@ -170,10 +170,8 @@ public class KuduAggregationLimitRule extends RelOptRule {
 
   public List<RelFieldCollation> getSortPkPrefix(final RelCollation originalCollation, final RelCollation newCollation,
       final KuduQuery query, final Optional<Filter> filter) {
-    // If there is no sort -- i.e. there is only a limit
-    // don't pay the cost of returning rows in sorted order.
+    // If there is no sort just return
     final List<RelFieldCollation> sortPrefixColumns = Lists.newArrayList();
-
     if (newCollation.getFieldCollations().isEmpty()) {
       return sortPrefixColumns;
     }
