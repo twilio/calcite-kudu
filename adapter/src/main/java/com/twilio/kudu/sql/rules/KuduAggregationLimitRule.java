@@ -59,9 +59,9 @@ import java.util.stream.Collectors;
  */
 public class KuduAggregationLimitRule extends RelOptRule {
 
-  private static final RelOptRuleOperand OPERAND = operand(EnumerableLimit.class,
-      some(operand(Sort.class, some(operand(Aggregate.class, some(operand(KuduToEnumerableRel.class,
-          some(operand(Project.class, some(operand(Filter.class, some(operand(KuduQuery.class, none())))))))))))));
+  private static final RelOptRuleOperand OPERAND = operand(Sort.class,
+      some(operand(Aggregate.class, some(operand(KuduToEnumerableRel.class,
+          some(operand(Project.class, some(operand(Filter.class, some(operand(KuduQuery.class, none())))))))))));
 
   public static final RelOptRule AGGREGATION_LIMIT_RULE = new KuduAggregationLimitRule(RelFactories.LOGICAL_BUILDER);
 
@@ -71,20 +71,22 @@ public class KuduAggregationLimitRule extends RelOptRule {
 
   @Override
   public void onMatch(final RelOptRuleCall call) {
-    final EnumerableLimit originalLimit = (EnumerableLimit) call.getRelList().get(0);
-    final Sort originalSort = (Sort) call.getRelList().get(1);
-    final Aggregate originalAggregate = (Aggregate) call.getRelList().get(2);
-    final KuduToEnumerableRel kuduToEnumerableRel = (KuduToEnumerableRel) call.getRelList().get(3);
-    final Project project = (Project) call.getRelList().get(4);
-    final Filter filter = (Filter) call.getRelList().get(5);
-    final KuduQuery query = (KuduQuery) call.getRelList().get(6);
+//    final EnumerableLimit originalLimit = (EnumerableLimit) call.getRelList().get(0);
+    final Sort originalSort = (Sort) call.getRelList().get(0);
+    if (originalSort.fetch == null)
+      return;
+    final Aggregate originalAggregate = (Aggregate) call.getRelList().get(1);
+    final KuduToEnumerableRel kuduToEnumerableRel = (KuduToEnumerableRel) call.getRelList().get(2);
+    final Project project = (Project) call.getRelList().get(3);
+    final Filter filter = (Filter) call.getRelList().get(4);
+    final KuduQuery query = (KuduQuery) call.getRelList().get(5);
 
-    perform(call, originalLimit, originalSort, originalAggregate, kuduToEnumerableRel, project, filter, query);
+    perform(call, originalSort, originalAggregate, kuduToEnumerableRel, project, filter, query);
   }
 
-  protected void perform(final RelOptRuleCall call, final EnumerableLimit originalLimit, final Sort originalSort,
-      final Aggregate originalAggregate, final KuduToEnumerableRel kuduToEnumerableRel, final Project project,
-      final Filter filter, final KuduQuery query) {
+  protected void perform(final RelOptRuleCall call, final Sort originalSort, final Aggregate originalAggregate,
+      final KuduToEnumerableRel kuduToEnumerableRel, final Project project, final Filter filter,
+      final KuduQuery query) {
 
     // Check that the columns being grouped are a prefix of the pk columns
     int pkColumnIndex = 0;
@@ -138,7 +140,7 @@ public class KuduAggregationLimitRule extends RelOptRule {
     // that EnumerableSort is used to sort the results
     final KuduSortRel kuduSort = new KuduSortRel(project.getCluster(),
         originalSort.getTraitSet().replace(KuduRelNode.CONVENTION), project, originalSort.getCollation(),
-        originalLimit.offset, originalLimit.fetch, true, sortPrefixColumns);
+        originalSort.offset, originalSort.fetch, true, sortPrefixColumns);
 
     final RelNode newKuduToEnumerableRel = kuduToEnumerableRel.copy(kuduToEnumerableRel.getTraitSet(),
         Lists.newArrayList(kuduSort));
@@ -147,7 +149,7 @@ public class KuduAggregationLimitRule extends RelOptRule {
         Collections.singletonList(newKuduToEnumerableRel));
 
     final RelNode limitSort = EnumerableLimitSort.create(newAggregation, originalSort.getCollation(),
-        originalLimit.offset, originalLimit.fetch);
+        originalSort.offset, originalSort.fetch);
 
     call.transformTo(limitSort);
   }
