@@ -78,6 +78,10 @@ public class KuduAggregationLimitRule extends RelOptRule {
     final Aggregate originalAggregate = (Aggregate) call.getRelList().get(1);
     final KuduToEnumerableRel kuduToEnumerableRel = (KuduToEnumerableRel) call.getRelList().get(2);
     final Project project = (Project) call.getRelList().get(3);
+    boolean containsExpression =
+      project.getProjects().stream().filter( n -> !(n instanceof RexInputRef)).findAny().isPresent();
+    if (containsExpression)
+      return;
     final Filter filter = (Filter) call.getRelList().get(4);
     final KuduQuery query = (KuduQuery) call.getRelList().get(5);
 
