@@ -271,6 +271,30 @@ public final class SortedAggregationIT {
   }
 
   @Test
+  public void testAggregationSortByPKExpression() throws Exception {
+    // TODO see if KuduAggregationLimitRule can be modified to support this type of
+    // query
+    String sql = String.format(
+        "SELECT 6-FIELD1, FIELD2, SUM(FIELD4) " + "FROM %s WHERE account_sid = '%s' GROUP BY "
+            + "(FIELD2, 6-FIELD1) ORDER BY 6-FIELD1 DESC, SUM(FIELD4) DESC LIMIT 2 OFFSET 1",
+        descendingSortTableName, ACCOUNT_SID1);
+
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs);
+
+      String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], EXPR$0=[$t1], FIELD2=[$t0], EXPR$2=[$t2])\n"
+          + "  EnumerableLimitSort(sort0=[$1], sort1=[$2], dir0=[DESC], dir1=[DESC], offset=[1], fetch=[2])\n"
+          + "    EnumerableAggregate(group=[{0, 1}], EXPR$2=[$SUM0($2)])\n" + "      KuduToEnumerableRel\n"
+          + "        KuduProjectRel(FIELD2=[$2], EXPR$0=[-(6, $1)], FIELD4=[$4])\n"
+          + "          KuduFilterRel(ScanToken 1=[ACCOUNT_SID EQUAL ACCOUNT1])\n"
+          + "            KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
+
+      assertEquals("Unexpected plan", expectedPlan, plan);
+    }
+  }
+
+  @Test
   public void aggregateSortedResultsByAccountAndField1() throws Exception {
     final String sql = String.format("SELECT account_sid, sum(cast(FIELD4 as bigint)) \"FIELD4\" FROM %s WHERE "
         + "resource_type = 'message-body' GROUP BY FIELD1, account_sid ORDER BY account_sid ASC, FIELD1 DESC limit 2",
@@ -413,4 +437,5 @@ public final class SortedAggregationIT {
 
     }
   }
+
 }
