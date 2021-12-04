@@ -52,4 +52,7 @@ public class EnvironmentVariableGenerator<T> extends SingleColumnValueGenerator<
     return value;
   }
 
+  @Override
+  public void initialize() {
+  }
 }

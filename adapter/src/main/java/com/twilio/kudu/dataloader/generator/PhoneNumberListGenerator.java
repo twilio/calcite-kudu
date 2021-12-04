@@ -43,11 +43,15 @@ public class PhoneNumberListGenerator extends SingleColumnValueGenerator<String>
   }
 
   @Override
-  public synchronized String getColumnValue() {
+  public String getColumnValue() {
+    return values.get(random.nextInt(values.size()));
+  }
+
+  @Override
+  public void initialize() {
     if (values.isEmpty()) {
       IntStream.range(0, numValues).forEach(index -> values.add(generatePhoneNumber()));
     }
-    return values.get(random.nextInt(values.size()));
   }
 
 }

@@ -21,6 +21,10 @@ public class ConstantValueGenerator<T> extends SingleColumnValueGenerator {
   private ConstantValueGenerator() {
   }
 
+  @Override
+  public void initialize() {
+  }
+
   public ConstantValueGenerator(final T columnValue) {
     this.columnValue = columnValue;
   }

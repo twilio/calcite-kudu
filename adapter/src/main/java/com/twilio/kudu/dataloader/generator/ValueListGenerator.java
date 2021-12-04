@@ -34,4 +34,7 @@ public class ValueListGenerator extends SingleColumnValueGenerator<String> {
     return values.get(rand.nextInt(values.size()));
   }
 
+  @Override
+  public void initialize() {
+  }
 }

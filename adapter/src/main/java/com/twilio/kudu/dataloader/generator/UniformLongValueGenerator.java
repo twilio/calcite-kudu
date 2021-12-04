@@ -25,6 +25,10 @@ public class UniformLongValueGenerator extends SingleColumnValueGenerator<Long> 
   protected UniformLongValueGenerator() {
   }
 
+  @Override
+  public void initialize() {
+  }
+
   public UniformLongValueGenerator(final long minVal, final long maxVal) {
     this.minValue = minVal;
     this.maxValue = maxVal;
@@ -34,7 +38,8 @@ public class UniformLongValueGenerator extends SingleColumnValueGenerator<Long> 
    * Generates a long value between [minValue, maxValue)
    */
   @Override
-  public synchronized Long getColumnValue() {
-    return minValue + (long) (rand.nextDouble() * ((maxValue - 1) - minValue));
+  public Long getColumnValue() {
+    return minValue + (long) (rand.nextDouble() * (maxValue - minValue));
   }
+
 }

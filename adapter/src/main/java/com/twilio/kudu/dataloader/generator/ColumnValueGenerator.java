@@ -24,4 +24,9 @@ public abstract class ColumnValueGenerator {
 
   public abstract Object getColumnValue(String columnName);
 
+  // needed because while reading from json the default constructor is used
+  // without member
+  // variables being initialized first
+  public abstract void initialize();
+
 }

@@ -15,10 +15,14 @@
 package com.twilio.kudu.dataloader.generator;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.util.Random;
 
 public class UniformBigDecimalValueGenerator extends SingleColumnValueGenerator<BigDecimal> {
 
+  public int precision = 22;
+  public int scale = 6;
   public double maxValue;
   private final Random random = new Random();
 
@@ -29,9 +33,16 @@ public class UniformBigDecimalValueGenerator extends SingleColumnValueGenerator<
     this.maxValue = maxValue;
   }
 
+  /**
+   * Generates a double value between [0, maxValue)
+   */
   @Override
   public synchronized BigDecimal getColumnValue() {
-    return new BigDecimal(String.valueOf(Math.round(random.nextDouble() * maxValue) / maxValue));
+    BigDecimal d = new BigDecimal(random.nextDouble() * maxValue, new MathContext(precision));
+    return d.setScale(scale, RoundingMode.HALF_UP);
   }
 
+  @Override
+  public void initialize() {
+  }
 }

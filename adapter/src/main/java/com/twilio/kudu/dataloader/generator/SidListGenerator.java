@@ -38,9 +38,13 @@ public class SidListGenerator extends RandomSidGenerator {
 
   @Override
   public String getColumnValue() {
+    return values.get(rand.nextInt(values.size()));
+  }
+
+  @Override
+  public void initialize() {
     if (values.isEmpty()) {
       IntStream.range(0, numValues).forEach(index -> values.add(randomSid()));
     }
-    return values.get(rand.nextInt(values.size()));
   }
 }

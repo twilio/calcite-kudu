@@ -26,6 +26,7 @@ import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduException;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.client.PartialRow;
+import org.apache.kudu.client.Partition;
 import org.apache.kudu.client.PartitionSchema;
 import org.apache.kudu.test.KuduTestHarness;
 import org.junit.Assert;

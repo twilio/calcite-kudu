@@ -30,9 +30,15 @@ public class UniformIntegerValueGenerator extends SingleColumnValueGenerator<Int
     this.maxValue = maxVal;
   }
 
+  /**
+   * Generates a int value between [minValue, maxValue)
+   */
   @Override
-  public synchronized Integer getColumnValue() {
+  public Integer getColumnValue() {
     return minValue + (int) (random.nextDouble() * (maxValue - minValue));
   }
 
+  @Override
+  public void initialize() {
+  }
 }
