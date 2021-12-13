@@ -1,0 +1,26 @@
+Configuration:
+  status: info
+  name: CalciteKuduTest
+  thresholdFilter:
+    level: debug
+  appenders:
+    Console:
+      name: STDOUT
+      target: SYSTEM_OUT
+      PatternLayout:
+        Pattern: "%m%n"
+ 
+  Loggers:
+    logger:
+      -
+        name: org.apache.calcite.plan.RelOptPlanner
+        level: warn
+        AppenderRef:
+          ref: STDOUT
+      -
+        name: org.apache.calcite.plan.hep.HepPlanner
+        level: warn
+    Root:
+      level: info
+      AppenderRef:
+        ref: STDOUT
