@@ -22,8 +22,13 @@ import org.apache.kudu.Type;
 
 import java.math.BigDecimal;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class SqlUtil {
   public static String getExplainPlan(ResultSet rs) throws SQLException {
@@ -36,6 +41,19 @@ public class SqlUtil {
       buf.setLength(buf.length() - 1);
     }
     return buf.toString();
+  }
+
+  public static List<List<Object>> getResult(ResultSet rs) throws SQLException {
+    int numCols = rs.getMetaData().getColumnCount();
+    List<List<Object>> rows = new ArrayList<>();
+    while (rs.next()) {
+      List<Object> row = new ArrayList<>(numCols);
+      for (int i = 1; i <= numCols; ++i) {
+        row.add(rs.getObject(i));
+      }
+      rows.add(row);
+    }
+    return rows;
   }
 
   /**

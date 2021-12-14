@@ -20,6 +20,7 @@ import com.twilio.kudu.sql.rules.KuduPredicatePushDownVisitor;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.EnumerableDefaults;
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.kudu.client.KuduScanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +57,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.AsyncKuduScanner;
 import org.apache.kudu.client.KuduScanToken;
-import org.apache.kudu.client.ReplicaSelection;
 import org.apache.kudu.Schema;
 
 // This class resides in this project under the org.apache namespace
@@ -79,6 +79,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
 
   public final boolean sort;
   public final boolean groupBySorted;
+  public final Function1<Object, Object> sortedPrefixKeySelector;
   public final long limit;
   public final long offset;
   public final KuduScanStats scanStats;
@@ -95,35 +96,41 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
   /**
    * A KuduEnumerable is an {@link Enumerable} for Kudu that can be configured to
    * be sorted.
-   *
-   * @param predicates       list of the filters for each disjoint Kudu Scan
-   * @param columnIndices    the column indexes to fetch from the table
-   * @param client           Kudu client that will execute the scans
-   * @param calciteKuduTable table metadata for the scan
-   * @param limit            the number of rows this should return. -1 indicates
-   *                         no limit
-   * @param offset           the number of rows from kudu to skip prior to
-   *                         returning rows
-   * @param sort             whether or not have Kudu RPCs come back in sorted by
-   *                         primary key
-   * @param groupBySorted    when sorted, and
-   *                         {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)}
-   * @param scanStats        a container of scan stats that should be updated as
-   *                         the scan executes.
-   * @param cancelFlag       boolean indicating the end process has asked the
-   *                         query to finish.
-   * @param projection       function to translate
-   *                         {@link org.apache.kudu.client.RowResult} into Calcite
-   * @param filterFunction   filter applied to every
-   *                         {@link org.apache.kudu.client.RowResult}
-   * @param isSingleObject   whether or not Calcite object is an Object or an
-   *                         Object[]
+   * 
+   * @param predicates              list of the filters for each disjoint Kudu
+   *                                Scan
+   * @param columnIndices           the column indexes to fetch from the table
+   * @param client                  Kudu client that will execute the scans
+   * @param calciteKuduTable        table metadata for the scan
+   * @param limit                   the number of rows this should return. -1
+   *                                indicates no limit
+   * @param offset                  the number of rows from kudu to skip prior to
+   *                                returning rows
+   * @param sort                    whether or not have Kudu RPCs come back in
+   *                                sorted by primary key
+   * @param groupBySorted           when sorted, and
+   *                                {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)}
+   * @param scanStats               a container of scan stats that should be
+   *                                updated as the scan executes.
+   * @param cancelFlag              boolean indicating the end process has asked
+   *                                the query to finish.
+   * @param projection              function to translate
+   *                                {@link org.apache.kudu.client.RowResult} into
+   *                                Calcite
+   * @param filterFunction          filter applied to every
+   *                                {@link org.apache.kudu.client.RowResult}
+   * @param isSingleObject          whether or not Calcite object is an Object or
+   *                                an
+   * @param sortedPrefixKeySelector the subset of columns being sorted by that are
+   *                                a prefix of the primary key of the table, or
+   *                                an empty list if the group by and order by
+   *                                columns are the same
    */
   public KuduEnumerable(final List<List<CalciteKuduPredicate>> predicates, final List<Integer> columnIndices,
       final AsyncKuduClient client, final CalciteKuduTable calciteKuduTable, final long limit, final long offset,
       final boolean sort, final boolean groupBySorted, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
-      final Function1<Object, Object> projection, final Predicate1<Object> filterFunction,
-      final boolean isSingleObject) {
+      final Function1<Object, Object> projection, final Predicate1<Object> filterFunction, final boolean isSingleObject,
+      final Function1<Object, Object> sortedPrefixKeySelector) {
     this.scansShouldStop = new AtomicBoolean(false);
     this.cancelFlag = cancelFlag;
     this.limit = limit;
@@ -137,6 +144,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       throw new IllegalArgumentException("If groupBySorted is true the results must need to be " + "sorted");
     }
     this.groupBySorted = groupBySorted;
+    this.sortedPrefixKeySelector = sortedPrefixKeySelector;
     this.scanStats = scanStats;
 
     this.predicates = predicates;
@@ -261,7 +269,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
         scanStats.setTotalTimeMs();
         List<ScannerMetrics> scannerMetricsList = scanners.stream().map(scanner -> new ScannerMetrics(scanner))
             .collect(Collectors.toList());
-        scanStats.setScannerMetricsList(scannerMetricsList);
+        scanStats.addScannerMetricsList(scannerMetricsList);
       }
     };
   }
@@ -355,7 +363,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
         scanStats.setTotalTimeMs();
         List<ScannerMetrics> scannerMetricsList = scanners.stream().map(scanner -> new ScannerMetrics(scanner))
             .collect(Collectors.toList());
-        scanStats.setScannerMetricsList(scannerMetricsList);
+        scanStats.addScannerMetricsList(scannerMetricsList);
       }
     };
   }
@@ -413,10 +421,11 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
 
     int uniqueGroupCount = 0;
     TKey lastKey = null;
+    Object lastSortedKey = null;
 
     // groupFetchLimit calculates it's size based on offset. When offset is present,
     // it needs to
-    // skip an equalivent number of unique group keys
+    // skip an equivalent number of unique group keys
     long groupFetchLimit = Long.MAX_VALUE;
     if (offset > 0 && limit > 0) {
       groupFetchLimit = limit + offset;
@@ -434,6 +443,23 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
         Object o = objectEnumeration.current();
         final TKey key = keySelector.apply(o);
 
+        if (sortedPrefixKeySelector != null) {
+          final Object sortedKey = sortedPrefixKeySelector.apply(o);
+          // If sortedPrefixKeySelector is not null, we can only stop reading rows when
+          // the
+          // sorted key prefix changes and we have enough unique groups since the rows
+          // have to be
+          // sorted on the client we have to read all the rows that have the same sorted
+          // primary key prefix)
+          if (lastSortedKey != null && !sortedKey.equals(lastSortedKey) && uniqueGroupCount > groupFetchLimit) {
+            logger.debug("sortedKey {} lastSortedKey {} uniqueGroupCount {} groupFetchLimit {}", sortedKey,
+                lastSortedKey, uniqueGroupCount, groupFetchLimit);
+            break;
+          }
+          lastSortedKey = sortedKey;
+          logger.debug("sortedKey {} uniqueGroupCount{}", sortedKey, uniqueGroupCount);
+        }
+
         // If there hasn't been a key yet or if there is a new key
         if (lastKey == null || !key.equals(lastKey)) {
           // If there is an accumulator, save the results into the queue and reset
@@ -442,20 +468,24 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
             sortedResults.offer(resultSelector.apply(lastKey, accumulator));
             accumulator = null;
           }
-
           uniqueGroupCount++;
 
+          // sortedPrefixKeySelector is null means we don't have to sort results on the
+          // client
           // When we have seen limit + 1 unique group by keys, exit.
           // or in the case of an offset, limit + offset + 1 unique group by keys.
-          if (uniqueGroupCount > groupFetchLimit) {
+          if (sortedPrefixKeySelector == null && uniqueGroupCount > groupFetchLimit) {
             break;
           }
-
+          logger.debug("key {} uniqueGroupCount{}", key, uniqueGroupCount);
           lastKey = key;
         }
 
-        // When we are still skipping group by keys.
-        if (offset > 0 && uniqueGroupCount <= offset) {
+        // We can only skip rows if we don't need to sort the returned rows on the
+        // client
+        // (sortedPrefixKeySelector is null)
+        if (sortedPrefixKeySelector == null && offset > 0 && uniqueGroupCount <= offset) {
+          // We are still skipping group by keys.
           continue;
         }
 
@@ -544,7 +574,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     final List<List<CalciteKuduPredicate>> merged = KuduPredicatePushDownVisitor.mergePredicateLists(SqlKind.AND,
         this.predicates, conjunctions);
     return new KuduEnumerable(merged, columnIndices, client, calciteKuduTable, limit, offset, sort, groupBySorted,
-        scanStats, cancelFlag, projection, filterFunction, isSingleObject);
+        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector);
   }
 
   /**

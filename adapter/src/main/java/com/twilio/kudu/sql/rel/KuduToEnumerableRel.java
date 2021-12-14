@@ -27,7 +27,6 @@ import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.adapter.enumerable.JavaRowFormat;
 import org.apache.calcite.adapter.enumerable.PhysType;
 import org.apache.calcite.adapter.enumerable.PhysTypeImpl;
-import org.apache.calcite.adapter.enumerable.RexImpTable;
 import org.apache.calcite.adapter.enumerable.RexToLixTranslator;
 import org.apache.calcite.adapter.enumerable.RexToLixTranslator.InputGetter;
 import com.twilio.kudu.sql.CalciteKuduTable;
@@ -218,10 +217,18 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
     // If the output type has a Single column, inform the ScannerCallback.
     final Expression isSingleObject = Expressions.constant(physType.getRowType().getFieldCount() == 1);
 
+    final Expression sortedPrefixKeySelector;
+    if (!kuduImplementor.sortPkPrefixColumns.isEmpty()) {
+      sortedPrefixKeySelector = physType.generateCollationKey(kuduImplementor.sortPkPrefixColumns).left;
+    } else {
+      sortedPrefixKeySelector = Expressions.constant(null, Function1.class);
+    }
+    Expressions.list(list.append("keySelector", sortedPrefixKeySelector));
+
     final Expression enumerable = list.append("enumerable",
         Expressions.call(table, KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit, offset, sorted,
             Expressions.constant(kuduImplementor.groupByLimited), scanStats, cancelBoolean, mapFunction, filterFunction,
-            isSingleObject));
+            isSingleObject, sortedPrefixKeySelector));
 
     Hook.QUERY_PLAN.run(predicates);
     list.add(Expressions.return_(null, enumerable));

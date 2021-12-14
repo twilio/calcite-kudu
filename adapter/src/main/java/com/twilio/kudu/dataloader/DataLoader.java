@@ -26,6 +26,8 @@ import org.apache.calcite.jdbc.KuduCalciteConnectionImpl;
 import org.apache.calcite.jdbc.KuduMetaImpl;
 import org.apache.calcite.runtime.SqlFunctions;
 import org.apache.kudu.ColumnSchema;
+import org.apache.kudu.Schema;
+import org.apache.kudu.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,8 +79,9 @@ public class DataLoader {
         .orElseThrow(() -> new RuntimeException("Table not found " + scenario.getTableName()));
     this.url = url;
 
-    // we assume the second column is the timestamp column
-    String timestampColumnName = calciteKuduTable.getKuduTable().getSchema().getColumnByIndex(1).getName();
+    // we assume there is one UNIXTIME_MICROS column in a table
+    String timestampColumnName = calciteKuduTable.getKuduTable().getSchema()
+        .getColumnByIndex(calciteKuduTable.getTimestampColumnIndex()).getName();
     UniformLongValueGenerator timestampGenerator = (UniformLongValueGenerator) scenario.getColumnNameToValueGenerator()
         .get(timestampColumnName);
     // initialize minValue and maxValue if the generator is a TimestampGenerator

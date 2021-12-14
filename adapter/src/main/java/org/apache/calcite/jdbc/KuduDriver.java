@@ -14,7 +14,7 @@
  */
 package org.apache.calcite.jdbc;
 
-import com.twilio.kudu.sql.KuduPrepareImpl;
+import org.apache.calcite.prepare.KuduPrepareImpl;
 import org.apache.calcite.avatica.AvaticaConnection;
 import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.linq4j.function.Function0;
@@ -54,7 +54,7 @@ public class KuduDriver extends Driver {
 
   @Override
   protected Function0<CalcitePrepare> createPrepareFactory() {
-    return (Function0<CalcitePrepare>) () -> new KuduPrepareImpl();
+    return () -> new KuduPrepareImpl();
   }
 
 }

@@ -33,4 +33,4 @@ jobs:
       with:
         java-version: 11
     - name: Execute all tests
-      run: mvn verify
+      run: mvn -B verify
