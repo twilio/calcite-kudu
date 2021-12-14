@@ -518,9 +518,16 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     List<AsyncKuduScanner> scanners = predicates.stream().map(subScan -> {
       KuduScanToken.KuduScanTokenBuilder tokenBuilder = client.syncClient()
           .newScanTokenBuilder(calciteKuduTable.getKuduTable());
-      // Allows for consistent row order in reads as it puts in ORDERED by Pk when
-      // faultTolerant is set to true
-      tokenBuilder.setFaultTolerant(true);
+      if (sort) {
+        // Allows for consistent row order in reads as it puts in ORDERED by Pk when
+        // faultTolerant is set to true
+        //setFaultTolerant to true sets the ReadMode to READ_AT_SNAPSHOT which
+        tokenBuilder.setFaultTolerant(true);
+      }else{
+        //READ_YOUR_WRITES minimizes latency caused by waiting for outstanding write
+        //transactions to complete.
+        tokenBuilder.readMode(AsyncKuduScanner.ReadMode.READ_YOUR_WRITES);
+      }
       if (!columnIndices.isEmpty()) {
         tokenBuilder.setProjectedColumnIndexes(columnIndices);
       }
