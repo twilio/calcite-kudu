@@ -521,7 +521,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       if (sort) {
         // Allows for consistent row order in reads as it puts in ORDERED by Pk when
         // faultTolerant is set to true
-        //setFaultTolerant to true sets the ReadMode to READ_AT_SNAPSHOT which
+        //setFaultTolerant to true sets the ReadMode to READ_AT_SNAPSHOT
         tokenBuilder.setFaultTolerant(true);
       }else{
         //READ_YOUR_WRITES minimizes latency caused by waiting for outstanding write
