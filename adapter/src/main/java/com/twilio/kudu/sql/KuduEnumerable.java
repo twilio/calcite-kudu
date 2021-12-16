@@ -22,6 +22,7 @@ import org.apache.calcite.linq4j.EnumerableDefaults;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.kudu.client.KuduScanner;
+import org.apache.kudu.client.ReplicaSelection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -518,16 +519,13 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     List<AsyncKuduScanner> scanners = predicates.stream().map(subScan -> {
       KuduScanToken.KuduScanTokenBuilder tokenBuilder = client.syncClient()
           .newScanTokenBuilder(calciteKuduTable.getKuduTable());
-      if (sort) {
-        // Allows for consistent row order in reads as it puts in ORDERED by Pk when
-        // faultTolerant is set to true
-        //setFaultTolerant to true sets the ReadMode to READ_AT_SNAPSHOT
-        tokenBuilder.setFaultTolerant(true);
-      }else{
-        //READ_YOUR_WRITES minimizes latency caused by waiting for outstanding write
-        //transactions to complete.
-        tokenBuilder.readMode(AsyncKuduScanner.ReadMode.READ_YOUR_WRITES);
-      }
+      // Allows for consistent row order in reads as it puts in ORDERED by Pk when
+      // faultTolerant is set to true
+      // setFaultTolerant to true sets the ReadMode to READ_AT_SNAPSHOT
+      tokenBuilder.snapshotTimestampMicros(System.currentTimeMillis() * 1000 - 5000);
+      tokenBuilder.setFaultTolerant(true);
+      tokenBuilder.replicaSelection(ReplicaSelection.CLOSEST_REPLICA);
+
       if (!columnIndices.isEmpty()) {
         tokenBuilder.setProjectedColumnIndexes(columnIndices);
       }
