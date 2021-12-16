@@ -15,9 +15,11 @@
 package com.twilio.kudu.sql;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataType;
 
@@ -75,6 +77,9 @@ public interface KuduRelNode extends RelNode {
     public long offset = -1;
     public boolean sorted = false;
     public boolean groupByLimited = false;
+    // if groupByLimited is true and sortPkPrefixColumns is empty
+    // that means we are sorting by the same columns as we are grouping by
+    public List<RelFieldCollation> sortPkPrefixColumns = Collections.emptyList();
 
     // information required for executing an update
     public List<Integer> columnIndexes;

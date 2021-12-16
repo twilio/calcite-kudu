@@ -253,6 +253,51 @@ public final class JDBCQueryIT {
   }
 
   @Test
+  public void testTopNQuery() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+
+      String sqlFormat = "SELECT sid FROM \"ReportCenter.DeliveredMessages\" "
+          + "WHERE account_sid = '%s' ORDER BY date_created desc, sid desc LIMIT 5";
+      String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
+      String expectedPlan = "EnumerableLimitSort(sort0=[$1], sort1=[$0], dir0=[DESC], dir1=[DESC], fetch=[5])\n"
+          + "  KuduToEnumerableRel\n" + "    KuduProjectRel(SID=[$2], DATE_CREATED=[$1])\n"
+          + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
+          + "        KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", expectedPlan, plan);
+
+      rs = conn.createStatement().executeQuery(sql);
+      assertTrue(rs.next());
+      assertEquals(THIRD_SID, rs.getString(1));
+      assertTrue(rs.next());
+      assertEquals(SECOND_SID, rs.getString(1));
+      assertTrue(rs.next());
+      assertEquals(FIRST_SID, rs.getString(1));
+      assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testLimit() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String sqlFormat = "SELECT * FROM \"ReportCenter.DeliveredMessages\" WHERE account_sid = " + "'%s' LIMIT 2";
+      String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
+      String expectedPlan = "KuduToEnumerableRel\n" + "  KuduLimitRel(limit=[2])\n"
+          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
+          + "      KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", expectedPlan, plan);
+
+      rs = conn.createStatement().executeQuery(sql);
+      assertTrue(rs.next());
+      assertTrue(rs.next());
+      assertFalse(rs.next());
+    }
+  }
+
+  @Test
   public void testSortOnAllGroupByColumnsWithLimit() throws Exception {
     helpTestSortedAggregation(true);
   }
@@ -300,11 +345,13 @@ public final class JDBCQueryIT {
       String sqlFormat = "SELECT account_sid, error_code , count(*) FROM \"ReportCenter.DeliveredMessages\" "
           + "WHERE account_sid = '%s' GROUP BY account_sid, error_code ORDER BY " + "account_sid  LIMIT 51";
       String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
-      String expectedPlan = "EnumerableLimit(fetch=[51])\n" + "  EnumerableSort(sort0=[$0], dir0=[ASC])\n"
-          + "    EnumerableAggregate(group=[{0, 1}], EXPR$2=[COUNT()])\n" + "      KuduToEnumerableRel\n"
-          + "        KuduProjectRel(ACCOUNT_SID=[$0], ERROR_CODE=[$5])\n"
-          + "          KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
-          + "            KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+      // the limit should be able to be pushed down because of
+      // KuduAggregationLimitRule
+      String expectedPlan = "EnumerableLimitSort(sort0=[$0], dir0=[ASC], fetch=[51])\n"
+          + "  EnumerableAggregate(group=[{0, 1}], EXPR$2=[COUNT()])\n" + "    KuduToEnumerableRel\n"
+          + "      KuduProjectRel(ACCOUNT_SID=[$0], ERROR_CODE=[$5])\n"
+          + "        KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
+          + "          KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       assertEquals("Unexpected plan ", expectedPlan, plan);

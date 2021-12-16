@@ -3,7 +3,7 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <version>1.0.33-SNAPSHOT</version>
+    <version>1.0.46-SNAPSHOT</version>
     <groupId>com.twilio</groupId>
     <artifactId>kudu-sql</artifactId>
     <name>SQL parsing, optimization and execution for Apache Kudu</name>
@@ -55,10 +55,11 @@
 
     <properties>
         <calcite.version>1.26.0</calcite.version>
-        <kudu.version>1.14.0</kudu.version>
+        <kudu.version>1.15.0</kudu.version>
         <guava.version>30.1.1-jre</guava.version>
         <junit.version>4.13.1</junit.version>
         <slf4j.version>1.7.21</slf4j.version>
+		<log4j.version>2.15.0</log4j.version>
         <mockito.version>3.7.7</mockito.version>
         <jackson.version>2.11.1</jackson.version>
         <spotless.version>2.0.1</spotless.version>
@@ -102,6 +103,7 @@
                             <serverId>ossrh</serverId>
                             <nexusUrl>https://oss.sonatype.org/</nexusUrl>
                             <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                            <stagingProgressTimeoutMinutes>10</stagingProgressTimeoutMinutes>
                         </configuration>
                     </plugin>
                     <plugin>
@@ -138,6 +140,21 @@
                 <artifactId>calcite-core</artifactId>
                 <version>${calcite.version}</version>
             </dependency>
+			<!-- This is a dependency of calcite-core that pulls in log4j1.x
+				 This is just copy and pasta from over 8 years ago and at that time log4j 
+				 was assumed for runtime dependency. 
+				 It is *NOT* used during compliation or runtime by this library -->
+			<dependency>
+			  <groupId>com.google.uzaygezen</groupId>
+			  <artifactId>uzaygezen-core</artifactId>
+			  <version>0.2</version>
+			  <exclusions>
+				<exclusion>
+					<groupId>log4j</groupId>
+					<artifactId>log4j</artifactId>
+				</exclusion>
+			  </exclusions>
+			</dependency>
 
             <dependency>
                 <groupId>com.google.guava</groupId>
@@ -178,12 +195,12 @@
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
             </dependency>
-            <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-log4j12</artifactId>
-                <scope>test</scope>
-                <version>${slf4j.version}</version>
-            </dependency>
+			<dependency>
+			  <groupId>org.apache.logging.log4j</groupId>
+			  <artifactId>log4j-slf4j-impl</artifactId>
+			  <version>${log4j.version}</version>
+			  <scope>test</scope>
+			</dependency>
             <dependency>
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>

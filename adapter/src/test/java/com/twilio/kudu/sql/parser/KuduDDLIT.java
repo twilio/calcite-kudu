@@ -171,8 +171,8 @@ public class KuduDDLIT {
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName1\" "
-          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL), SUM(INT8_COL) " + "FROM \"MY_TABLE_24\" "
-          + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO YEAR)";
+          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL), SUM(INT8_COL), MIN(INT8_COL), MAX(INT32_COL) "
+          + "FROM \"MY_TABLE_24\" " + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO YEAR)";
       conn.createStatement().execute(ddl2);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE_24-CubeName1-Year-Aggregation\"");
@@ -214,6 +214,8 @@ public class KuduDDLIT {
     validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
     validateColumnSchema(schema, "COUNT_INT32_COL", Type.INT64, false, null);
     validateColumnSchema(schema, "SUM_INT8_COL", Type.INT8, false, null);
+    validateColumnSchema(schema, "MIN_INT8_COL", Type.INT8, false, null);
+    validateColumnSchema(schema, "MAX_INT32_COL", Type.INT32, false, null);
   }
 
   @Test

@@ -14,6 +14,8 @@
  */
 package com.twilio.kudu.sql;
 
+import com.google.common.collect.Lists;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -21,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * A single KuduScanStats object is created per query that is executed and is
  * accessed from all the {@link ScannerCallback}s created for each scanner as
- * well as the {@link KuduEnumerable}
+ * well as the {@link KuduEnumerable}.
  */
 public final class KuduScanStats {
 
@@ -40,7 +42,7 @@ public final class KuduScanStats {
 
   private long scannerCount = 0L;
 
-  private List<ScannerMetrics> scannerMetricsList = Collections.emptyList();
+  private List<ScannerMetrics> scannerMetricsList = Lists.newArrayList();
 
   public KuduScanStats() {
     this.startTime = System.currentTimeMillis();
@@ -55,16 +57,24 @@ public final class KuduScanStats {
   }
 
   public void setTimeToFirstRowMs() {
-    this.timeToFirstRowMs = System.currentTimeMillis() - this.startTime;
+    if (this.timeToFirstRowMs != -1) {
+      this.timeToFirstRowMs = System.currentTimeMillis() - this.startTime;
+    }
   }
 
   public void setTotalTimeMs() {
     this.totalTimeMs = System.currentTimeMillis() - this.startTime;
   }
 
-  public void setScannerMetricsList(List<ScannerMetrics> scannerMetricsList) {
-    this.scannerCount = scannerMetricsList.size();
-    this.scannerMetricsList = scannerMetricsList;
+  /**
+   * Increments the scanner count and adds to the scanner metrics to the
+   * scannerMetricsList
+   * 
+   * @param scannerMetricsList scannerMetricsList
+   */
+  public void addScannerMetricsList(List<ScannerMetrics> scannerMetricsList) {
+    this.scannerCount += scannerMetricsList.size();
+    this.scannerMetricsList.addAll(scannerMetricsList);
   }
 
   public List<ScannerMetrics> getScannerMetricsList() {
