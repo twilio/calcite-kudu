@@ -32,16 +32,22 @@ public class CalciteKuduTableBuilder {
 
   private CubeTableInfo.EventTimeAggregationType eventTimeAggregationType = null;
 
-  private final boolean enableInserts;
-
-  public CalciteKuduTableBuilder(KuduTable kuduTable, AsyncKuduClient client, boolean enableInserts) {
-    this.kuduTable = kuduTable;
-    this.client = client;
-    this.enableInserts = enableInserts;
-  }
+  private boolean enableInserts;
+  private boolean disableCubeAggregation;
 
   public CalciteKuduTableBuilder(KuduTable kuduTable, AsyncKuduClient client) {
-    this(kuduTable, client, false);
+    this.kuduTable = kuduTable;
+    this.client = client;
+  }
+
+  public CalciteKuduTableBuilder setEnableInserts(boolean enableInserts) {
+    this.enableInserts = enableInserts;
+    return this;
+  }
+
+  public CalciteKuduTableBuilder setDisableCubeAggregation(boolean disableCubeAggregation) {
+    this.disableCubeAggregation = disableCubeAggregation;
+    return this;
   }
 
   public CalciteKuduTableBuilder setDescendingOrderedFieldIndices(List<Integer> descendingOrderedColumnIndices) {
@@ -73,7 +79,7 @@ public class CalciteKuduTableBuilder {
   public CalciteKuduTable build() {
     if (enableInserts) {
       return new CalciteModifiableKuduTable(kuduTable, client, descendingOrderedFieldIndices, timestampColumnIndex,
-          cubeTabes, tableType, eventTimeAggregationType);
+          cubeTabes, tableType, eventTimeAggregationType, disableCubeAggregation);
     }
     return new CalciteKuduTable(kuduTable, client, descendingOrderedFieldIndices, timestampColumnIndex, cubeTabes,
         tableType, eventTimeAggregationType);

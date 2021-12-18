@@ -18,8 +18,8 @@ import com.twilio.kudu.sql.metadata.CubeTableInfo;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import com.twilio.kudu.sql.CalciteKuduTable;
 import org.apache.calcite.runtime.SqlFunctions;
-import org.apache.calcite.util.Pair;
 import org.apache.kudu.Schema;
+import org.apache.kudu.util.Pair;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -93,14 +93,14 @@ public class CubeMaintainer {
    * to the cube rollup time
    * 
    * @param colIndexToValueMap map from fact table column index to column value
-   * @return pair of ( map from cube table pk column index to column value, array
-   *         of non-pk column values)
+   * @return pair of array of pk column values and array of non-pk column values
    */
-  public Pair<Map<Integer, Object>, Object[]> generateCubeDelta(Map<Integer, Object> colIndexToValueMap) {
-    Map<Integer, Object> pkColumnValuesMap = new HashMap<>();
+  public Pair<Object[], Object[]> generateCubeDelta(Map<Integer, Object> colIndexToValueMap) {
+    Object[] pkColumnValues = new Object[pkColIndexMap.size()];
     Object[] nonPkColumnValues = new Object[nonPkColIndexMap.size()];
 
     // set column values for dimensions
+    int index = 0;
     for (Map.Entry<Integer, Integer> entry : pkColIndexMap.entrySet()) {
       int cubeColIndex = entry.getKey();
       int factColIndex = entry.getValue();
@@ -111,20 +111,19 @@ public class CubeMaintainer {
         if (timestampOrderedDesc) {
           Long timestamp = CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - (Long) columnValue / 1000;
           Long truncatedTimestamp = SqlFunctions.floor(timestamp, getFloorMod());
-          pkColumnValuesMap.put(cubeColIndex,
-              CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - truncatedTimestamp * 1000);
+          pkColumnValues[index++] = CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MICROSECONDS - truncatedTimestamp * 1000;
         } else {
           Long timestamp = (Long) columnValue / 1000;
           Long truncatedTimestamp = SqlFunctions.floor(timestamp, getFloorMod());
-          pkColumnValuesMap.put(cubeColIndex, truncatedTimestamp * 1000);
+          pkColumnValues[index++] = truncatedTimestamp * 1000;
         }
       } else {
-        pkColumnValuesMap.put(cubeColIndex, columnValue);
+        pkColumnValues[index++] = columnValue;
       }
     }
 
     // set column values for measures
-    int index = 0;
+    index = 0;
     for (Map.Entry<Integer, Integer> entry : nonPkColIndexMap.entrySet()) {
       int cubeColIndex = entry.getKey();
       int factColIndex = entry.getValue();
@@ -135,11 +134,15 @@ public class CubeMaintainer {
         nonPkColumnValues[index++] = colIndexToValueMap.get(factColIndex);
       }
     }
-    return new Pair<>(pkColumnValuesMap, nonPkColumnValues);
+    return new Pair<>(pkColumnValues, nonPkColumnValues);
   }
 
   public Iterator<Integer> getNonPKColumnIndexes() {
     return nonPkColIndexMap.keySet().iterator();
+  }
+
+  public Iterator<Integer> gePKColumnIndexes() {
+    return pkColIndexMap.keySet().iterator();
   }
 
 }

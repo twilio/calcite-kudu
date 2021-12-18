@@ -33,11 +33,15 @@ public class TimestampGenerator extends UniformLongValueGenerator {
 
   @Override
   public synchronized Long getColumnValue() {
+    return super.getColumnValue();
+  }
+
+  @Override
+  public void initialize() {
     if (minValue == 0 && maxValue == 0) {
       minValue = System.currentTimeMillis() - numDaysBefore * DateTimeUtils.MILLIS_PER_DAY;
       maxValue = System.currentTimeMillis();
     }
-    return super.getColumnValue();
   }
 
 }

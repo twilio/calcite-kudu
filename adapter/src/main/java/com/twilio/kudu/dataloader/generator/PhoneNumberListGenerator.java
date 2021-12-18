@@ -16,12 +16,10 @@ package com.twilio.kudu.dataloader.generator;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.IntStream;
 
 public class PhoneNumberListGenerator extends SingleColumnValueGenerator<String> {
-
-  private final Random random = new Random();
 
   public int numValues;
   private List<String> values = new ArrayList<>();
@@ -37,17 +35,21 @@ public class PhoneNumberListGenerator extends SingleColumnValueGenerator<String>
     int leftLimit = 48; // 0
     int rightLimit = 57; // 9
     int targetStringLength = 10;
-    String phoneNumber = random.ints(leftLimit, rightLimit + 1).limit(targetStringLength)
+    String phoneNumber = ThreadLocalRandom.current().ints(leftLimit, rightLimit + 1).limit(targetStringLength)
         .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).toString();
     return "+1" + phoneNumber;
   }
 
   @Override
-  public synchronized String getColumnValue() {
+  public String getColumnValue() {
+    return values.get(ThreadLocalRandom.current().nextInt(values.size()));
+  }
+
+  @Override
+  public void initialize() {
     if (values.isEmpty()) {
       IntStream.range(0, numValues).forEach(index -> values.add(generatePhoneNumber()));
     }
-    return values.get(random.nextInt(values.size()));
   }
 
 }

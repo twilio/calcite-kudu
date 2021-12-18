@@ -19,6 +19,8 @@ import java.net.UnknownHostException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.SecureRandom;
+import java.util.stream.IntStream;
+
 import org.apache.commons.codec.digest.DigestUtils;
 
 public class RandomSidGenerator extends SingleColumnValueGenerator<String> {
@@ -67,5 +69,9 @@ public class RandomSidGenerator extends SingleColumnValueGenerator<String> {
     final String random = new String(bytes);
 
     return sidPrefix + DigestUtils.md5Hex(ADDR + random + System.currentTimeMillis());
+  }
+
+  @Override
+  public void initialize() {
   }
 }
