@@ -28,7 +28,7 @@ public class TimestampGenerator extends UniformLongValueGenerator {
   }
 
   public TimestampGenerator(final long numDaysBefore) {
-    this.numDaysBefore = numDaysBefore;
+    super(System.currentTimeMillis() - numDaysBefore * DateTimeUtils.MILLIS_PER_DAY, System.currentTimeMillis());
   }
 
   @Override

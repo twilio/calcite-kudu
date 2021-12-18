@@ -16,12 +16,11 @@ package com.twilio.kudu.dataloader.generator;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.IntStream;
 
 public class SidListGenerator extends RandomSidGenerator {
 
-  private final Random rand = new Random();
   private final List<String> values = new ArrayList<>();
 
   public int numValues;
@@ -38,7 +37,7 @@ public class SidListGenerator extends RandomSidGenerator {
 
   @Override
   public String getColumnValue() {
-    return values.get(rand.nextInt(values.size()));
+    return values.get(ThreadLocalRandom.current().nextInt(values.size()));
   }
 
   @Override

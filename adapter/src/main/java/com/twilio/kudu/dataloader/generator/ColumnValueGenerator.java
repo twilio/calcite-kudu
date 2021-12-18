@@ -24,9 +24,10 @@ public abstract class ColumnValueGenerator {
 
   public abstract Object getColumnValue(String columnName);
 
-  /** 
-    * Initialize the {@code ColumnValueGenerator} from JSON or other files. Used as a alternative constructor
-    */
+  /**
+   * Initialize the {@code ColumnValueGenerator} from JSON or other files. Used as
+   * a alternative constructor
+   */
   public abstract void initialize();
 
 }

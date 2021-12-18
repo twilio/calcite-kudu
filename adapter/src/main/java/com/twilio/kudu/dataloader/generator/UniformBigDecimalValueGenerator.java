@@ -17,14 +17,13 @@ package com.twilio.kudu.dataloader.generator;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class UniformBigDecimalValueGenerator extends SingleColumnValueGenerator<BigDecimal> {
 
   public int precision = 22;
   public int scale = 6;
   public double maxValue;
-  private final Random random = new Random();
 
   private UniformBigDecimalValueGenerator() {
   }
@@ -38,7 +37,7 @@ public class UniformBigDecimalValueGenerator extends SingleColumnValueGenerator<
    */
   @Override
   public synchronized BigDecimal getColumnValue() {
-    BigDecimal d = new BigDecimal(random.nextDouble() * maxValue, new MathContext(precision));
+    BigDecimal d = new BigDecimal(ThreadLocalRandom.current().nextDouble() * maxValue, new MathContext(precision));
     return d.setScale(scale, RoundingMode.HALF_UP);
   }
 

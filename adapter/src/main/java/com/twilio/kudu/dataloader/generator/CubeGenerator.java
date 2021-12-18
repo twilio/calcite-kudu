@@ -14,6 +14,10 @@
  */
 package com.twilio.kudu.dataloader.generator;
 
+import com.twilio.kudu.dataloader.DataLoader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -54,6 +58,8 @@ public class CubeGenerator extends MultipleColumnValueGenerator {
   // map from column name to single column value generator (from Scenario)
   private Map<String, SingleColumnValueGenerator> columnNameToValueGenerator;
 
+  private static final Logger logger = LoggerFactory.getLogger(CubeGenerator.class);
+
   @Override
   public List<String> getColumnNames() {
     return groupedColumns;
@@ -81,7 +87,7 @@ public class CubeGenerator extends MultipleColumnValueGenerator {
 
   @Override
   public void initialize() {
-    System.out.println("Reading from " + groupedColumnCountsResource);
+    logger.info("Reading from {}", groupedColumnCountsResource);
     final InputStream fileStream = this.getClass().getResourceAsStream(groupedColumnCountsResource);
     BufferedReader reader = new BufferedReader(new InputStreamReader(fileStream));
     try {

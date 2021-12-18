@@ -14,11 +14,10 @@
  */
 package com.twilio.kudu.dataloader.generator;
 
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class UniformLongValueGenerator extends SingleColumnValueGenerator<Long> {
 
-  private final Random rand = new Random();
   public long minValue;
   public long maxValue;
 
@@ -39,7 +38,7 @@ public class UniformLongValueGenerator extends SingleColumnValueGenerator<Long> 
    */
   @Override
   public Long getColumnValue() {
-    return minValue + (long) (rand.nextDouble() * (maxValue - minValue));
+    return minValue + (long) (ThreadLocalRandom.current().nextDouble() * (maxValue - minValue));
   }
 
 }
