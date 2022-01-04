@@ -15,11 +15,10 @@
 package com.twilio.kudu.dataloader.generator;
 
 import java.util.List;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class ValueListGenerator extends SingleColumnValueGenerator<String> {
 
-  private final Random rand = new Random();
   public List<String> values;
 
   private ValueListGenerator() {
@@ -31,7 +30,10 @@ public class ValueListGenerator extends SingleColumnValueGenerator<String> {
 
   @Override
   public synchronized String getColumnValue() {
-    return values.get(rand.nextInt(values.size()));
+    return values.get(ThreadLocalRandom.current().nextInt(values.size()));
   }
 
+  @Override
+  public void initialize() {
+  }
 }

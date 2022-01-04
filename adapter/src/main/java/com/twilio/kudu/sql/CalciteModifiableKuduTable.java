@@ -35,6 +35,8 @@ public class CalciteModifiableKuduTable extends CalciteKuduTable implements Modi
   // table
   private CubeMaintainer cubeMaintainer;
 
+  private final boolean disableCubeAggregations;
+
   /**
    * Create the {@code CalciteKuduTable} for a physical scan over the
    * provided{@link KuduTable}. {@code KuduTable} must exist and be opened.
@@ -54,9 +56,10 @@ public class CalciteModifiableKuduTable extends CalciteKuduTable implements Modi
   CalciteModifiableKuduTable(final KuduTable kuduTable, final AsyncKuduClient client,
       final List<Integer> descendingOrderColumnIndexes, final int timestampColumnIndex,
       final List<CalciteKuduTable> cubeTables, final TableType tableType,
-      final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType) {
+      final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType, final boolean disableCubeAggregations) {
     super(kuduTable, client, descendingOrderColumnIndexes, timestampColumnIndex, cubeTables, tableType,
         eventTimeAggregationType);
+    this.disableCubeAggregations = disableCubeAggregations;
   }
 
   @Override
@@ -87,4 +90,7 @@ public class CalciteModifiableKuduTable extends CalciteKuduTable implements Modi
     return cubeMaintainer;
   }
 
+  public boolean isDisableCubeAggregations() {
+    return disableCubeAggregations;
+  }
 }

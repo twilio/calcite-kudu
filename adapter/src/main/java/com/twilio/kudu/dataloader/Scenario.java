@@ -17,6 +17,7 @@ package com.twilio.kudu.dataloader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.NamedType;
 import com.google.common.collect.ImmutableMap;
+import com.twilio.kudu.dataloader.generator.CubeGenerator;
 import com.twilio.kudu.dataloader.generator.MultipleColumnValueGenerator;
 import com.twilio.kudu.dataloader.generator.SingleColumnValueGenerator;
 import com.twilio.kudu.dataloader.generator.ConstantValueGenerator;
@@ -41,7 +42,7 @@ public class Scenario {
 
   private String tableName;
   // number of rows to be written to the fact table
-  private int numRows;
+  private long numRows;
   // map from column name to single column value generator
   private Map<String, SingleColumnValueGenerator> columnNameToValueGenerator;
 
@@ -60,7 +61,8 @@ public class Scenario {
         new NamedType(PhoneNumberListGenerator.class, "PhoneNumberListGenerator"),
         new NamedType(UniformBigDecimalValueGenerator.class, "UniformBigDecimalValueGenerator"),
         new NamedType(EnvironmentVariableGenerator.class, "EnvironmentVariableGenerator"),
-        new NamedType(TimestampGenerator.class, "TimestampGenerator"));
+        new NamedType(TimestampGenerator.class, "TimestampGenerator"),
+        new NamedType(CubeGenerator.class, "CubeGenerator"));
   }
 
   private Scenario() {
@@ -92,18 +94,33 @@ public class Scenario {
     return multipleColumnValueGenerators;
   }
 
-  public int getNumRows() {
+  public long getNumRows() {
     return numRows;
   }
 
   public static Scenario loadScenario(final File file) throws IOException {
     Scenario scenario = mapper.reader(Scenario.class).readValue(file);
+    scenario.initialize();
     return scenario;
   }
 
   public static Scenario loadScenario(final URL url) throws IOException {
     Scenario scenario = mapper.reader(Scenario.class).readValue(url);
+    scenario.initialize();
     return scenario;
+  }
+
+  private void initialize() {
+    for (SingleColumnValueGenerator generator : columnNameToValueGenerator.values()) {
+      generator.initialize();
+    }
+
+    for (MultipleColumnValueGenerator generator : getMultipleColumnValueGenerators()) {
+      if (generator instanceof CubeGenerator) {
+        ((CubeGenerator) generator).setColumnNameToValueGenerator(columnNameToValueGenerator);
+      }
+      generator.initialize();
+    }
   }
 
   public static class ScenarioBuilder {

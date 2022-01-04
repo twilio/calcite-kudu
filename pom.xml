@@ -3,7 +3,7 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <version>1.0.46-SNAPSHOT</version>
+    <version>1.0.48-SNAPSHOT</version>
     <groupId>com.twilio</groupId>
     <artifactId>kudu-sql</artifactId>
     <name>SQL parsing, optimization and execution for Apache Kudu</name>
@@ -103,7 +103,7 @@
                             <serverId>ossrh</serverId>
                             <nexusUrl>https://oss.sonatype.org/</nexusUrl>
                             <autoReleaseAfterClose>true</autoReleaseAfterClose>
-                            <stagingProgressTimeoutMinutes>10</stagingProgressTimeoutMinutes>
+                            <stagingProgressTimeoutMinutes>20</stagingProgressTimeoutMinutes>
                         </configuration>
                     </plugin>
                     <plugin>

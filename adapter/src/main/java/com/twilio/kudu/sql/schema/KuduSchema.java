@@ -48,9 +48,11 @@ public final class KuduSchema extends AbstractSchema {
   // properties
   public static String KUDU_CONNECTION_STRING = "connect";
   public static String ENABLE_INSERTS_FLAG = "enableInserts";
+  public static String DISABLE_CUBE_AGGREGATIONS = "disableCubeAggregation";
   public static String CREATE_DUMMY_PARTITION_FLAG = "createDummyPartition";
 
   public final boolean enableInserts;
+  public final boolean disableCubeAggregation;
   public final boolean createDummyPartition;
 
   public KuduSchema(final String connectString, final Map<String, KuduTableMetadata> kuduTableMetadataMap,
@@ -58,8 +60,12 @@ public final class KuduSchema extends AbstractSchema {
     this.client = new AsyncKuduClient.AsyncKuduClientBuilder(connectString).build();
     this.kuduTableMetadataMap = kuduTableMetadataMap;
     // We disable inserts by default as this feature has not been thoroughly tested
-
     this.enableInserts = Boolean.valueOf((String) propertyMap.getOrDefault(ENABLE_INSERTS_FLAG, "false"));
+    // If set to true CubeMutationState does not compute aggregations in order to
+    // speed up the
+    // DataLoader (useful only for performance testing)
+    this.disableCubeAggregation = Boolean
+        .valueOf((String) propertyMap.getOrDefault(DISABLE_CUBE_AGGREGATIONS, "false"));
     this.createDummyPartition = Boolean.valueOf((String) propertyMap.getOrDefault(CREATE_DUMMY_PARTITION_FLAG, "true"));
   }
 
@@ -161,7 +167,8 @@ public final class KuduSchema extends AbstractSchema {
       for (CubeTableInfo cubeTableInfo : kuduTableMetadata.getCubeTableInfo()) {
         Optional<KuduTable> cubeTableOptional = openKuduTable(cubeTableInfo.tableName);
         cubeTableOptional.ifPresent(kuduTable -> {
-          final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client, enableInserts)
+          final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client)
+              .setEnableInserts(enableInserts).setDisableCubeAggregation(disableCubeAggregation)
               .setTableType(com.twilio.kudu.sql.TableType.CUBE)
               .setEventTimeAggregationType(cubeTableInfo.eventTimeAggregationType);
           setDescendingFieldIndices(builder, descendingOrderedColumnNames, kuduTable);
@@ -176,7 +183,8 @@ public final class KuduSchema extends AbstractSchema {
       String factTableName = entry.getKey();
       Optional<KuduTable> factTableOptional = openKuduTable(factTableName);
       factTableOptional.ifPresent(kuduTable -> {
-        final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client, enableInserts)
+        final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client)
+            .setEnableInserts(enableInserts).setDisableCubeAggregation(disableCubeAggregation)
             .setTableType(com.twilio.kudu.sql.TableType.FACT).setCubeTables(cubeTableList);
         setDescendingFieldIndices(builder, descendingOrderedColumnNames, kuduTable);
         setTimestampColumnIndex(builder, kuduTableMetadata.getTimestampColumnName(), kuduTable);
@@ -217,8 +225,8 @@ public final class KuduSchema extends AbstractSchema {
 
   private void createCalciteTable(HashMap<String, Table> tableMap, KuduTable kuduTable,
       com.twilio.kudu.sql.TableType tableType) {
-    final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client, enableInserts)
-        .setTableType(tableType);
+    final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client)
+        .setEnableInserts(enableInserts).setTableType(tableType);
     CalciteKuduTable calciteKuduTable = builder.build();
     tableMap.put(kuduTable.getName(), calciteKuduTable);
   }
