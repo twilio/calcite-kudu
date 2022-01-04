@@ -14,11 +14,10 @@
  */
 package com.twilio.kudu.dataloader.generator;
 
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class UniformIntegerValueGenerator extends SingleColumnValueGenerator<Integer> {
 
-  private final Random random = new Random();
   public int minValue;
   public int maxValue;
 
@@ -30,9 +29,15 @@ public class UniformIntegerValueGenerator extends SingleColumnValueGenerator<Int
     this.maxValue = maxVal;
   }
 
+  /**
+   * Generates a int value between [minValue, maxValue)
+   */
   @Override
-  public synchronized Integer getColumnValue() {
-    return minValue + (int) (random.nextDouble() * (maxValue - minValue));
+  public Integer getColumnValue() {
+    return minValue + (int) (ThreadLocalRandom.current().nextDouble() * (maxValue - minValue));
   }
 
+  @Override
+  public void initialize() {
+  }
 }

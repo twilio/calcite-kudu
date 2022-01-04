@@ -147,12 +147,14 @@ public class DataLoader {
   }
 
   private ColumnValueGenerator getColumnValueGenerator(String columnName) {
-    if (!scenario.getColumnNameToValueGenerator().containsKey(columnName)) {
-      for (MultipleColumnValueGenerator generator : scenario.getMultipleColumnValueGenerators()) {
-        if (generator.getColumnNames().contains(columnName)) {
-          return generator;
-        }
+    // first check if there is a MultipleColumnValueGenerator that contains the
+    // column
+    for (MultipleColumnValueGenerator generator : scenario.getMultipleColumnValueGenerators()) {
+      if (generator.getColumnNames().contains(columnName)) {
+        return generator;
       }
+    }
+    if (!scenario.getColumnNameToValueGenerator().containsKey(columnName)) {
       throw new IllegalStateException("No generator found for column " + columnName);
     }
     return scenario.getColumnNameToValueGenerator().get(columnName);
@@ -278,7 +280,7 @@ public class DataLoader {
     }
   }
 
-  public void loadData(final Optional<Integer> numRowsOverrideOption) {
+  public void loadData(final Optional<Long> numRowsOverrideOption) {
     logger.info("scenario start timestamp {} end timestamp {}", new Date(scenarioStartTimestamp),
         new Date(scenarioEndTimestamp));
     long startTime = System.currentTimeMillis();
@@ -286,7 +288,7 @@ public class DataLoader {
     long prevThreadEndTimestamp = scenarioStartTimestamp;
     long rangePerThread = (scenarioEndTimestamp - scenarioStartTimestamp) / threadPoolSize;
     long threadDelta = Math.max(rangePerThread, cubeGranularityFloorMod);
-    int numRows = numRowsOverrideOption.orElseGet(scenario::getNumRows);
+    long numRows = numRowsOverrideOption.orElseGet(scenario::getNumRows);
     for (int t = 0; t < threadPoolSize; ++t) {
       // for each thread the start time stamp is the previous threads end timestamp
       // (except the first thread for which we set it to the scenario min timestamp)
@@ -311,13 +313,13 @@ public class DataLoader {
       Callable<Void> callableObj = () -> {
         logger.info("thread{} start timestamp {}", threadIndex, new Date(threadStartTimestamp));
         logger.info("thread{} end timestamp {}", threadIndex, new Date(threadEndTimestamp));
-        int numRowsPerThread = numRows / threadPoolSize;
+        long numRowsPerThread = numRows / threadPoolSize;
         if (lastThread) {
           // let the last thread write any remaining rows
           numRowsPerThread += numRows % threadPoolSize;
         }
-        int maxBatchesPerThread = (int) Math.ceil((float) (numRowsPerThread) / CUBE_MUTATION_SIZE);
-        int numCubeMutationBatches = Math.min(numTasksPerThread, maxBatchesPerThread);
+        long maxBatchesPerThread = (int) Math.ceil((float) (numRowsPerThread) / CUBE_MUTATION_SIZE);
+        long numCubeMutationBatches = Math.min(numTasksPerThread, maxBatchesPerThread);
         logger.info("Number of mutation batches per thread {}", numCubeMutationBatches);
         long threadStartTime = System.currentTimeMillis();
         try (Connection conn = DriverManager.getConnection(url)) {
@@ -325,10 +327,10 @@ public class DataLoader {
           String sql = buildSql();
           PreparedStatement stmt = conn.prepareStatement(sql);
           // populate table with data
-          int rowCount = 0;
+          long rowCount = 0;
           long batchStartTimestamp;
           long batchEndTimestamp = threadStartTimestamp;
-          for (int i = 1; i <= numCubeMutationBatches; ++i) {
+          for (long i = 1; i <= numCubeMutationBatches; ++i) {
             long rangePerBatch = (threadEndTimestamp - threadStartTimestamp) / numCubeMutationBatches;
             long cubeDelta = Math.max(rangePerBatch, cubeGranularityFloorMod);
             batchStartTimestamp = batchEndTimestamp;
@@ -340,12 +342,12 @@ public class DataLoader {
             // subset of time ranges
             UniformLongValueGenerator subsetTimestampGenerator = new UniformLongValueGenerator(batchStartTimestamp,
                 batchEndTimestamp);
-            int numRowsInBatch = numRowsPerThread / numCubeMutationBatches;
+            long numRowsInBatch = numRowsPerThread / numCubeMutationBatches;
             // add any remaining rows to the last batch
             if (i == numCubeMutationBatches) {
               numRowsInBatch += numRowsPerThread % numCubeMutationBatches;
             }
-            for (int j = 1; j <= numRowsInBatch; ++j) {
+            for (long j = 1; j <= numRowsInBatch; ++j) {
               bindValues(stmt, subsetTimestampGenerator);
               stmt.execute();
               if (++rowCount % COMMIT_BATCH_SIZE == 0) {
