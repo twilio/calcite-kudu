@@ -525,7 +525,6 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       // setting snapshot time to 1ms before currentTimestamp to avoid latency issues.
       tokenBuilder.snapshotTimestampMicros(System.currentTimeMillis() * 1000 - 1000);
       tokenBuilder.setFaultTolerant(true);
-      tokenBuilder.replicaSelection(ReplicaSelection.CLOSEST_REPLICA);
 
       if (!columnIndices.isEmpty()) {
         tokenBuilder.setProjectedColumnIndexes(columnIndices);
