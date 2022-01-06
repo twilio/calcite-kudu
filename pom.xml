@@ -59,12 +59,14 @@
         <guava.version>30.1.1-jre</guava.version>
         <junit.version>4.13.1</junit.version>
         <slf4j.version>1.7.21</slf4j.version>
-		<log4j.version>2.15.0</log4j.version>
+        <log4j.version>2.17.1</log4j.version>
         <mockito.version>3.7.7</mockito.version>
         <jackson.version>2.11.1</jackson.version>
         <spotless.version>2.0.1</spotless.version>
         <freemarker-version>2.3.30</freemarker-version>
         <json-version>20200518</json-version>
+        <httpcomponents.version>4.5.13</httpcomponents.version>
+        <json-smart.version>2.4.7</json-smart.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -140,21 +142,21 @@
                 <artifactId>calcite-core</artifactId>
                 <version>${calcite.version}</version>
             </dependency>
-			<!-- This is a dependency of calcite-core that pulls in log4j1.x
-				 This is just copy and pasta from over 8 years ago and at that time log4j 
-				 was assumed for runtime dependency. 
-				 It is *NOT* used during compliation or runtime by this library -->
-			<dependency>
-			  <groupId>com.google.uzaygezen</groupId>
-			  <artifactId>uzaygezen-core</artifactId>
-			  <version>0.2</version>
-			  <exclusions>
-				<exclusion>
-					<groupId>log4j</groupId>
-					<artifactId>log4j</artifactId>
-				</exclusion>
-			  </exclusions>
-			</dependency>
+            <!-- This is a dependency of calcite-core that pulls in log4j1.x
+                 This is just copy and pasta from over 8 years ago and at that time log4j 
+                 was assumed for runtime dependency. 
+                 It is *NOT* used during compliation or runtime by this library -->
+            <dependency>
+              <groupId>com.google.uzaygezen</groupId>
+              <artifactId>uzaygezen-core</artifactId>
+              <version>0.2</version>
+              <exclusions>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+              </exclusions>
+            </dependency>
 
             <dependency>
                 <groupId>com.google.guava</groupId>
@@ -195,12 +197,12 @@
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
             </dependency>
-			<dependency>
-			  <groupId>org.apache.logging.log4j</groupId>
-			  <artifactId>log4j-slf4j-impl</artifactId>
-			  <version>${log4j.version}</version>
-			  <scope>test</scope>
-			</dependency>
+            <dependency>
+              <groupId>org.apache.logging.log4j</groupId>
+              <artifactId>log4j-slf4j-impl</artifactId>
+              <version>${log4j.version}</version>
+              <scope>test</scope>
+            </dependency>
             <dependency>
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>
@@ -216,6 +218,37 @@
                 <groupId>org.json</groupId>
                 <artifactId>json</artifactId>
                 <version>${json-version}</version>
+            </dependency>
+
+            <!-- https://ossindex.sonatype.org/vulnerability/c0ed9602-d5c5-4c45-af48-c757161879ee -->
+            <dependency>
+              <groupId>org.apache.httpcomponents</groupId>
+              <artifactId>httpclient</artifactId>
+              <version>${httpcomponents.version}</version>
+            </dependency>
+
+            <!-- https://ossindex.sonatype.org/vulnerability/2f4d58e2-444b-4231-bec2-2a2c2135b9d7 -->
+            <dependency>
+              <groupId>net.minidev</groupId>
+              <artifactId>json-smart</artifactId>
+              <version>${json-smart.version}</version>
+            </dependency>
+
+            <!-- https://ossindex.sonatype.org/vulnerability/f582b4ea-ef28-4d6e-93ad-15034025df21 -->
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-core</artifactId>
+              <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+              <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+              <groupId>com.fasterxml.jackson.dataformat</groupId>
+              <artifactId>jackson-dataformat-yaml</artifactId>
+              <version>${jackson.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -344,7 +377,7 @@
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>3.0.0-M3</version>
                 <configuration>
-                    <skipTests>false</skipTests>
+                  <skipTests>false</skipTests>
                 </configuration>
                 <executions>
                     <execution>
@@ -367,9 +400,9 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>3.0.0-M3</version>
-		<configuration>
-	          <skipTests>${skipTests}</skipTests>
-        	</configuration>
+                <configuration>
+                  <skipTests>${skipTests}</skipTests>
+                </configuration>
             </plugin>
         </plugins>
     </build>
