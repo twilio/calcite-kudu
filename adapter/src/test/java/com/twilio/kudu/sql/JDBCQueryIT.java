@@ -349,9 +349,10 @@ public final class JDBCQueryIT {
       // KuduAggregationLimitRule
       String expectedPlan = "EnumerableLimitSort(sort0=[$0], dir0=[ASC], fetch=[51])\n"
           + "  EnumerableAggregate(group=[{0, 1}], EXPR$2=[COUNT()])\n" + "    KuduToEnumerableRel\n"
-          + "      KuduProjectRel(ACCOUNT_SID=[$0], ERROR_CODE=[$5])\n"
-          + "        KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
-          + "          KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+          + "      KuduSortRel(sort0=[$0], dir0=[ASC], fetch=[51], groupBySorted=[true], sortPkPrefixColumns=[[0]])\n"
+          + "        KuduProjectRel(ACCOUNT_SID=[$0], ERROR_CODE=[$5])\n"
+          + "          KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
+          + "            KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       assertEquals("Unexpected plan ", expectedPlan, plan);

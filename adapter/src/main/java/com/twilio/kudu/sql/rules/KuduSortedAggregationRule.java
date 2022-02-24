@@ -48,7 +48,7 @@ import java.util.Optional;
 /**
  * Rule that matches a sort over an aggregation with both sort and aggregation
  * using the same columns. The columns must be a prefix of the primary key of
- * the table.
+ * the table. This rule eliminates the need for sorting on the client.
  */
 public class KuduSortedAggregationRule extends KuduSortRule {
 
