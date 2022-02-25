@@ -165,8 +165,6 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     // skip an equivalent number of unique group keys
     if (offset > 0 && limit > 0) {
       groupFetchLimit = limit + offset;
-    } else if (offset > 0) {
-      groupFetchLimit = offset;
     } else if (limit > 0) {
       groupFetchLimit = limit;
     } else {
