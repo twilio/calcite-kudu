@@ -167,8 +167,6 @@ public final class JDBCQueryIT {
       String sqlFormat = "SELECT mcc||mnc, mcc, mnc, mnc||mcc FROM \"ReportCenter"
           + ".DeliveredMessages\" WHERE account_sid = '%s'";
       String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
-      // TODO figure out if costs can be tweaked so that the two KuduProjectRel are
-      // merged
       final String expectedPlan = "KuduToEnumerableRel\n"
           + "  KuduProjectRel(EXPR$0=[||($3, $4)], MCC=[$3], MNC=[$4], EXPR$3=[||($4, $3)])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
@@ -370,6 +368,33 @@ public final class JDBCQueryIT {
       // the rows will not be returned in any order so just assert that we see all the
       // expected rows
       assertEquals(expectedCounts, actualCounts);
+    }
+  }
+
+  @Test
+  public void testSortByCount() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String sqlFormat = "SELECT account_sid, count(*) as cnt FROM \"ReportCenter.DeliveredMessages\" "
+          + "WHERE date_created > TIMESTAMP'2020-01-01' GROUP BY account_sid ORDER BY cnt DESC LIMIT 10";
+      String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
+      // the limit should be able to be pushed down because of
+      // KuduAggregationLimitRule
+      String expectedPlan = "EnumerableLimitSort(sort0=[$1], dir0=[DESC], fetch=[10])\n"
+          + "  EnumerableAggregate(group=[{0}], CNT=[COUNT()])\n" + "    KuduToEnumerableRel\n"
+          + "      KuduProjectRel(ACCOUNT_SID=[$0])\n"
+          + "        KuduFilterRel(ScanToken 1=[date_created GREATER 1577836800000000])\n"
+          + "          KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", expectedPlan, plan);
+
+      Map<Integer, Integer> expectedCounts = ImmutableMap.<Integer, Integer>builder().put(1, 2).put(2, 1).build();
+      Map<Integer, Integer> actualCounts = new HashMap<>(2);
+      rs = conn.createStatement().executeQuery(sql);
+      assertTrue(rs.next());
+      assertEquals(ACCOUNT_SID, rs.getString(1));
+      assertEquals(3, rs.getInt(2));
+      assertFalse(rs.next());
     }
   }
 

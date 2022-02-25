@@ -160,8 +160,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     this.filterFunction = filterFunction;
     this.isSingleObject = isSingleObject;
 
-    // groupFetchLimit calculates it's size based on offset. When offset is present,
-    // it needs to
+    // groupFetchLimit calculates it's size based on offset.
+    // When offset is present, it needs to
     // skip an equivalent number of unique group keys
     if (offset > 0 && limit > 0) {
       groupFetchLimit = limit + offset;

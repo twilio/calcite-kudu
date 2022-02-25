@@ -52,10 +52,16 @@ import java.util.stream.Collectors;
 
 /**
  * Rule to match a limit over a sort over aggregation. There must be a common
- * prefix between the sort columns and the primary key columns of the table. If
- * a table has three columns A, B and C with a PK(A, B) this rule can be applied
- * if sorting by (A, SUM(C)) and grouping by (A, B). This rule limits the number
- * of rows read from kudu, but rows still need to be sorted on the client.
+ * prefix between the sort columns and the primary key columns of the table.
+ *
+ * If a table has three columns A, B and C with a PK(A, B) this rule can be
+ * applied if sorting by (A, SUM(C)) and grouping by (A, B) with a limit. For
+ * eg: (A,B,C) (1, 1, 4), (1, 2, 2), (2, 1, 1). If we query with a limit of 2,
+ * then we can stop reading rows when we process the 3rd row as we will have 2
+ * groups (1,1) and (1,2).
+ * 
+ * This rule limits the number of rows read from kudu, but rows still need to be
+ * sorted on the client.
  */
 public class KuduAggregationLimitRule extends RelOptRule {
 
