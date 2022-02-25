@@ -27,8 +27,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Field;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.PriorityQueue;
 import java.util.Queue;
 
 import org.apache.calcite.linq4j.Enumerator;
@@ -83,6 +87,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
   public final Function1<Object, Object> sortedPrefixKeySelector;
   public final long limit;
   public final long offset;
+  public final long groupFetchLimit;
   public final KuduScanStats scanStats;
 
   private final List<List<CalciteKuduPredicate>> predicates;
@@ -154,6 +159,17 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     this.calciteKuduTable = calciteKuduTable;
     this.filterFunction = filterFunction;
     this.isSingleObject = isSingleObject;
+
+    // groupFetchLimit calculates it's size based on offset.
+    // When offset is present, it needs to
+    // skip an equivalent number of unique group keys
+    if (offset > 0 && limit > 0) {
+      groupFetchLimit = limit + offset;
+    } else if (limit > 0) {
+      groupFetchLimit = limit;
+    } else {
+      groupFetchLimit = Long.MAX_VALUE;
+    }
   }
 
   @VisibleForTesting
@@ -278,9 +294,23 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
   public Enumerator<Object> sortedEnumerator(final List<AsyncKuduScanner> scanners,
       final List<Enumerator<CalciteRow>> subEnumerables) {
 
+    class EnumerableComparator implements Comparator<Enumerator<CalciteRow>> {
+      @Override
+      public int compare(Enumerator<CalciteRow> o1, Enumerator<CalciteRow> o2) {
+        // assumes that moveNext has been called on the enumerators and that they havent
+        // reached
+        // the end of their respective collections
+        return o1.current().compareTo(o2.current());
+      }
+    }
+
     return new Enumerator<Object>() {
       private Object next = null;
-      private List<Boolean> enumerablesWithRows = new ArrayList<>(subEnumerables.size());
+      // use a min heap to keep track of the smallest record from each of the
+      // subEnumerables
+      // (which returned rows sorted)
+      private PriorityQueue<Enumerator<CalciteRow>> minQueue = new PriorityQueue<>(subEnumerables.size(),
+          new EnumerableComparator());
       private int totalMoves = 0;
 
       private void moveToOffset() {
@@ -299,46 +329,29 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
           return false;
         }
 
-        if (enumerablesWithRows.isEmpty()) {
+        if (minQueue.isEmpty()) {
           for (int idx = 0; idx < subEnumerables.size(); idx++) {
-            enumerablesWithRows.add(subEnumerables.get(idx).moveNext());
+            if (subEnumerables.get(idx).moveNext()) {
+              minQueue.add(subEnumerables.get(idx));
+            }
           }
           moveToOffset();
-          logger.debug("Setup scanners {}", enumerablesWithRows);
+          logger.trace("Setup enumerables for {} scanners", subEnumerables.size());
         }
-        CalciteRow smallest = null;
-        int chosenEnumerable = -1;
-        for (int idx = 0; idx < subEnumerables.size(); idx++) {
-          if (enumerablesWithRows.get(idx)) {
-            final CalciteRow enumerablesNext = subEnumerables.get(idx).current();
-            if (smallest == null) {
-              logger.trace("smallest isn't set setting to {}", enumerablesNext.getRowData());
-              smallest = enumerablesNext;
-              chosenEnumerable = idx;
-            } else if (enumerablesNext.compareTo(smallest) < 0) {
-              logger.trace("{} is smaller then {}", enumerablesNext.getRowData(), smallest.getRowData());
-              smallest = enumerablesNext;
-              chosenEnumerable = idx;
-            } else {
-              logger.trace("{} is larger then {}", enumerablesNext.getRowData(), smallest.getRowData());
-            }
-          } else {
-            logger.trace("{} index doesn't have next", idx);
-          }
-        }
-        if (smallest == null) {
+        if (minQueue.isEmpty()) {
           return false;
         }
+        Enumerator<CalciteRow> smallestEnumerator = minQueue.poll();
         // Indicates this is the first move.
         if (next == null) {
           scanStats.setTimeToFirstRowMs();
         }
-        next = smallest.getRowData();
+        next = smallestEnumerator.current().getRowData();
 
-        // Move the chosen one forward. The others have their smallest
-        // already in the front of their queues.
-        logger.trace("Chosen idx {} to move next", chosenEnumerable);
-        enumerablesWithRows.set(chosenEnumerable, subEnumerables.get(chosenEnumerable).moveNext());
+        // Move the chosen one forward.
+        if (smallestEnumerator.moveNext()) {
+          minQueue.add(smallestEnumerator);
+        }
         totalMoves++;
         boolean limitReached = checkLimitReached(totalMoves);
 
@@ -407,10 +420,96 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     return unsortedEnumerator(scanners, messages);
   }
 
+  // Copied from Calcite as that class is private
+  /**
+   * Reads a populated map, applying a selector function.
+   *
+   * @param <TResult>     result type
+   * @param <TKey>        key type
+   * @param <TAccumulate> accumulator type
+   */
+  private static class LookupResultEnumerable<TResult, TKey, TAccumulate> extends AbstractEnumerable2<TResult> {
+    private final Map<TKey, TAccumulate> map;
+    private final Function2<TKey, TAccumulate, TResult> resultSelector;
+
+    LookupResultEnumerable(Map<TKey, TAccumulate> map, Function2<TKey, TAccumulate, TResult> resultSelector) {
+      this.map = map;
+      this.resultSelector = resultSelector;
+    }
+
+    @Override
+    public Iterator<TResult> iterator() {
+      final Iterator<Map.Entry<TKey, TAccumulate>> iterator = map.entrySet().iterator();
+      return new Iterator<TResult>() {
+        @Override
+        public boolean hasNext() {
+          return iterator.hasNext();
+        }
+
+        @Override
+        public TResult next() {
+          final Map.Entry<TKey, TAccumulate> entry = iterator.next();
+          return resultSelector.apply(entry.getKey(), entry.getValue());
+        }
+
+        @Override
+        public void remove() {
+          throw new UnsupportedOperationException();
+        }
+      };
+    }
+  }
+
+  // modified from Calcite to stop reading rows once we have enough unique groups
+  private <TSource, TKey, TAccumulate, TResult> Enumerable<TResult> groupBy_(final Map<TKey, TAccumulate> map,
+      Enumerable<TSource> enumerable, Function1<TSource, TKey> keySelector,
+      Function0<TAccumulate> accumulatorInitializer, Function2<TAccumulate, TSource, TAccumulate> accumulatorAdder,
+      final Function2<TKey, TAccumulate, TResult> resultSelector) {
+    Object lastSortedKey = null;
+    try (Enumerator<TSource> os = enumerable.enumerator()) {
+      while (os.moveNext()) {
+        TSource o = os.current();
+        TKey key = keySelector.apply(o);
+        @SuppressWarnings("argument.type.incompatible")
+        TAccumulate accumulator = map.get(key);
+        final Object sortedKey = sortedPrefixKeySelector.apply(o);
+        // If sortedPrefixKeySelector is not null, we can only stop reading rows when
+        // the sorted
+        // key prefix changes and we have enough unique groups since the rows have to be
+        // sorted
+        // on the client we have to read all the rows that have the same sorted primary
+        // key prefix)
+        if (lastSortedKey != null && !sortedKey.equals(lastSortedKey) && map.size() > groupFetchLimit) {
+          logger.debug("sortedKey {} lastSortedKey {} uniqueGroupCount {} groupFetchLimit {}", sortedKey, lastSortedKey,
+              map.size(), groupFetchLimit);
+          break;
+        }
+        lastSortedKey = sortedKey;
+        logger.debug("sortedKey {} uniqueGroupCount{}", sortedKey, map.size());
+        if (accumulator == null) {
+          accumulator = accumulatorInitializer.apply();
+          accumulator = accumulatorAdder.apply(accumulator, o);
+          map.put(key, accumulator);
+        } else {
+          TAccumulate accumulator0 = accumulator;
+          accumulator = accumulatorAdder.apply(accumulator, o);
+          if (accumulator != accumulator0) {
+            map.put(key, accumulator);
+          }
+        }
+      }
+    }
+    return new LookupResultEnumerable<>(map, resultSelector);
+  }
+
   @Override
   public <TKey, TAccumulate, TResult> Enumerable<TResult> groupBy(Function1<Object, TKey> keySelector,
       Function0<TAccumulate> accumulatorInitializer, Function2<TAccumulate, Object, TAccumulate> accumulatorAdder,
       Function2<TKey, TAccumulate, TResult> resultSelector) {
+    if (sortedPrefixKeySelector != null) {
+      return groupBy_(new HashMap<>(), getThis(), keySelector, accumulatorInitializer, accumulatorAdder,
+          resultSelector);
+    }
     // When Grouping rows but the aggregation is not sorted by primary key direction
     // or there is no
     // limit to the grouping, read every single matching row for this query.
@@ -422,44 +521,13 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
 
     int uniqueGroupCount = 0;
     TKey lastKey = null;
-    Object lastSortedKey = null;
-
-    // groupFetchLimit calculates it's size based on offset. When offset is present,
-    // it needs to
-    // skip an equivalent number of unique group keys
-    long groupFetchLimit = Long.MAX_VALUE;
-    if (offset > 0 && limit > 0) {
-      groupFetchLimit = limit + offset;
-    } else if (offset > 0) {
-      groupFetchLimit = offset;
-    } else if (limit > 0) {
-      groupFetchLimit = limit;
-    }
     final Queue<TResult> sortedResults = new LinkedList<TResult>();
-
     try (Enumerator<Object> objectEnumeration = getThis().enumerator()) {
       TAccumulate accumulator = null;
 
       while (objectEnumeration.moveNext()) {
         Object o = objectEnumeration.current();
         final TKey key = keySelector.apply(o);
-
-        if (sortedPrefixKeySelector != null) {
-          final Object sortedKey = sortedPrefixKeySelector.apply(o);
-          // If sortedPrefixKeySelector is not null, we can only stop reading rows when
-          // the
-          // sorted key prefix changes and we have enough unique groups since the rows
-          // have to be
-          // sorted on the client we have to read all the rows that have the same sorted
-          // primary key prefix)
-          if (lastSortedKey != null && !sortedKey.equals(lastSortedKey) && uniqueGroupCount > groupFetchLimit) {
-            logger.debug("sortedKey {} lastSortedKey {} uniqueGroupCount {} groupFetchLimit {}", sortedKey,
-                lastSortedKey, uniqueGroupCount, groupFetchLimit);
-            break;
-          }
-          lastSortedKey = sortedKey;
-          logger.debug("sortedKey {} uniqueGroupCount{}", sortedKey, uniqueGroupCount);
-        }
 
         // If there hasn't been a key yet or if there is a new key
         if (lastKey == null || !key.equals(lastKey)) {
@@ -471,21 +539,16 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
           }
           uniqueGroupCount++;
 
-          // sortedPrefixKeySelector is null means we don't have to sort results on the
-          // client
           // When we have seen limit + 1 unique group by keys, exit.
           // or in the case of an offset, limit + offset + 1 unique group by keys.
-          if (sortedPrefixKeySelector == null && uniqueGroupCount > groupFetchLimit) {
+          if (uniqueGroupCount > groupFetchLimit) {
             break;
           }
           logger.debug("key {} uniqueGroupCount{}", key, uniqueGroupCount);
           lastKey = key;
         }
 
-        // We can only skip rows if we don't need to sort the returned rows on the
-        // client
-        // (sortedPrefixKeySelector is null)
-        if (sortedPrefixKeySelector == null && offset > 0 && uniqueGroupCount <= offset) {
+        if (offset > 0 && uniqueGroupCount <= offset) {
           // We are still skipping group by keys.
           continue;
         }
