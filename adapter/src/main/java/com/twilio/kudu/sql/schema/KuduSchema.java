@@ -65,7 +65,7 @@ public final class KuduSchema extends AbstractSchema {
     // speed up the
     // DataLoader (useful only for performance testing)
     this.disableCubeAggregation = Boolean
-        .valueOf((String) propertyMap.getOrDefault(DISABLE_CUBE_AGGREGATIONS, "false"));
+        .valueOf((String) propertyMap.getOrDefault(DISABLE_CUBE_AGGREGATIONS, "true"));
     this.createDummyPartition = Boolean.valueOf((String) propertyMap.getOrDefault(CREATE_DUMMY_PARTITION_FLAG, "true"));
   }
 
