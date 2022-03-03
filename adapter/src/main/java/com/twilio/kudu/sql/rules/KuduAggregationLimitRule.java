@@ -52,10 +52,16 @@ import java.util.stream.Collectors;
 
 /**
  * Rule to match a limit over a sort over aggregation. There must be a common
- * prefix between the sort columns and the primary key columns of the table. The
- * aggregation columns should be a a prefix of the primary key columns. For eg
- * if a table has three columns A, B and C with a PK(A, B) this rule can be
- * applied if sorting by (A, C) and grouping by (A, B).
+ * prefix between the sort columns and the primary key columns of the table.
+ *
+ * If a table has three columns A, B and C with a PK(A, B) this rule can be
+ * applied if sorting by (A, SUM(C)) and grouping by (A, B) with a limit. For
+ * eg: (A,B,C) (1, 1, 4), (1, 2, 2), (2, 1, 1). If we query with a limit of 2,
+ * then we can stop reading rows when we process the 3rd row as we will have 2
+ * groups (1,1) and (1,2).
+ * 
+ * This rule limits the number of rows read from kudu, but rows still need to be
+ * sorted on the client.
  */
 public class KuduAggregationLimitRule extends RelOptRule {
 
@@ -98,28 +104,14 @@ public class KuduAggregationLimitRule extends RelOptRule {
         .map(groupedOrdinal -> ((RexInputRef) project.getProjects().get(groupedOrdinal)).getIndex())
         // sort so that we can check if the group by columns match a prefix
         .sorted().collect(Collectors.toList());
-    for (Integer remappedGroupOrdinal : remappedGroupOrdinals) {
-      // the group by columns must be a prefix of the primary key columns
-      if (remappedGroupOrdinal != pkColumnIndex) {
-        // This field is not in the primary key columns. If there is a condition lets
-        // see if it is there
-        final RexBuilder rexBuilder = filter.getCluster().getRexBuilder();
-        final RexNode originalCondition = RexUtil.expandSearch(rexBuilder, null, filter.getCondition());
-        while (pkColumnIndex < remappedGroupOrdinal) {
-          final KuduSortRule.KuduFilterVisitor visitor = new KuduSortRule.KuduFilterVisitor(pkColumnIndex);
-          final Boolean foundFieldInCondition = originalCondition.accept(visitor);
-          if (foundFieldInCondition.equals(Boolean.FALSE)) {
-            return;
-          }
-          pkColumnIndex++;
-        }
-      }
-      pkColumnIndex++;
-    }
 
     final Map<Integer, Integer> remappingOrdinals = new HashMap<>();
     for (RelFieldCollation fieldCollation : originalSort.getCollation().getFieldCollations()) {
       int projectOrdinal = fieldCollation.getFieldIndex();
+      // return if not sorting by a projected column
+      if (projectOrdinal > project.getProjects().size() - 1) {
+        return;
+      }
       int kuduColumnIndex = ((RexInputRef) project.getProjects().get(projectOrdinal)).getIndex();
       remappingOrdinals.put(fieldCollation.getFieldIndex(), kuduColumnIndex);
     }

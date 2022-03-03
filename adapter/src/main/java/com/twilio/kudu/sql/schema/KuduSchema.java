@@ -65,7 +65,7 @@ public final class KuduSchema extends AbstractSchema {
     // speed up the
     // DataLoader (useful only for performance testing)
     this.disableCubeAggregation = Boolean
-        .valueOf((String) propertyMap.getOrDefault(DISABLE_CUBE_AGGREGATIONS, "true"));
+        .valueOf((String) propertyMap.getOrDefault(DISABLE_CUBE_AGGREGATIONS, "false"));
     this.createDummyPartition = Boolean.valueOf((String) propertyMap.getOrDefault(CREATE_DUMMY_PARTITION_FLAG, "true"));
   }
 
@@ -101,14 +101,6 @@ public final class KuduSchema extends AbstractSchema {
           factToCubeListMap.put(factTableName, new ArrayList<>());
         }
         factToCubeListMap.get(factTableName).add(cubeTableInfo);
-        logger.info("Added cubetable info to factToCubeListMap " + "Cubetablename: " + cubeTableInfo.tableName
-            + "EventAggregationType: " + cubeTableInfo.eventTimeAggregationType + "FactTableName: " + factTableName);
-
-        logger.error("Added cubetable info to factToCubeListMap " + "Cubetablename: " + cubeTableInfo.tableName
-            + "EventAggregationType: " + cubeTableInfo.eventTimeAggregationType + "FactTableName: " + factTableName);
-
-        System.out.println("Added cubetable info to factToCubeListMap " + "Cubetablename: " + cubeTableInfo.tableName
-            + "EventAggregationType: " + cubeTableInfo.eventTimeAggregationType + "FactTableName: " + factTableName);
       }
     }
 
@@ -121,9 +113,6 @@ public final class KuduSchema extends AbstractSchema {
         try {
           KuduTable kuduTable = this.client.openTable(tableName).join();
           for (ColumnSchema columnSchema : kuduTable.getSchema().getColumns()) {
-            logger.info("populating kudutableMetadatMap for fact tables created with DDLS:  " + columnSchema.getName());
-            logger
-                .error("populating kudutableMetadatMap for fact tables created with DDLS:  " + columnSchema.getName());
             String comment = columnSchema.getComment();
             JSONObject jsonObject = getJsonObject(comment);
             if (!comment.isEmpty() && jsonObject != null) {
