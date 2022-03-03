@@ -31,8 +31,6 @@ import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Filter;
-import org.apache.calcite.rel.core.Join;
-import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rex.RexBuilder;
@@ -42,9 +40,7 @@ import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexLocalRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexUtil;
-import org.apache.calcite.rex.RexVisitor;
 import org.apache.calcite.rex.RexVisitorImpl;
-import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.kudu.client.KuduTable;
 
@@ -62,10 +58,7 @@ public abstract class KuduSortRule extends RelOptRule {
 
   public KuduSortRule(RelOptRuleOperand operand, RelBuilderFactory factory, String description) {
     super(operand, factory, description);
-
   }
-
-
 
   public boolean canApply(final RelTraitSet sortTraits, final KuduQuery query, final KuduTable openedTable,
       final Optional<Filter> filter) {
@@ -132,8 +125,6 @@ public abstract class KuduSortRule extends RelOptRule {
       call.transformTo(newNode);
     }
   }
-
-
 
   /**
    * Rule to match a Sort above {@link KuduQuery}. Applies only if sort matches

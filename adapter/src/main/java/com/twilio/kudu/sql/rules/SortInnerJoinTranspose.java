@@ -97,7 +97,8 @@ public final class SortInnerJoinTranspose extends RelOptRule {
         return;
       }
       newLeftInput = join.getLeft();
-      newRightInput = sort.copy(sort.getTraitSet().replace(rightCollation), join.getRight(), rightCollation, null, null);
+      newRightInput = sort.copy(sort.getTraitSet().replace(rightCollation), join.getRight(), rightCollation, null,
+          null);
 
     } else {
       // Can't push the sort on either side.
@@ -106,8 +107,6 @@ public final class SortInnerJoinTranspose extends RelOptRule {
 
     final RelNode joinCopy = join.copy(join.getTraitSet(), join.getCondition(), newLeftInput, newRightInput,
         join.getJoinType(), join.isSemiJoinDone());
-
-    call.transformTo(joinCopy);
 
     if (sort.fetch != null || sort.offset != null) {
       // Because INNER join is just like a FILTER, we cannot enforce a limit. This
