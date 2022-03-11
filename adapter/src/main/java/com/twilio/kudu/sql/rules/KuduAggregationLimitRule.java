@@ -41,6 +41,7 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.tools.RelBuilderFactory;
+import org.apache.calcite.util.Pair;
 import org.apache.kudu.client.KuduTable;
 
 import java.util.Collections;
@@ -126,9 +127,9 @@ public class KuduAggregationLimitRule extends RelOptRule {
     }
 
     // Check the new trait set to see if we can apply the sort against this.
-    final List<RelFieldCollation> sortPrefixColumns = getSortPkPrefix(originalSort.getCollation(), newCollation, query,
-        Optional.of(filter));
-    if (sortPrefixColumns.isEmpty()) {
+    final Pair<List<RelFieldCollation>, List<String>> pair = getSortPkPrefix(originalSort.getCollation(), newCollation,
+        query, Optional.of(filter));
+    if (pair.left.isEmpty()) {
       return;
     }
 
@@ -136,7 +137,7 @@ public class KuduAggregationLimitRule extends RelOptRule {
     // that EnumerableSort is used to sort the results
     final KuduSortRel kuduSort = new KuduSortRel(project.getCluster(),
         originalSort.getTraitSet().replace(KuduRelNode.CONVENTION), project, originalSort.getCollation(),
-        originalSort.offset, originalSort.fetch, true, sortPrefixColumns);
+        originalSort.offset, originalSort.fetch, true, pair.left, pair.right);
 
     final RelNode newKuduToEnumerableRel = kuduToEnumerableRel.copy(kuduToEnumerableRel.getTraitSet(),
         Lists.newArrayList(kuduSort));
@@ -164,17 +165,23 @@ public class KuduAggregationLimitRule extends RelOptRule {
     return true;
   }
 
-  public List<RelFieldCollation> getSortPkPrefix(final RelCollation originalCollation, final RelCollation newCollation,
-      final KuduQuery query, final Optional<Filter> filter) {
-    // If there is no sort just return
+  public Pair<List<RelFieldCollation>, List<String>> getSortPkPrefix(final RelCollation originalCollation,
+      final RelCollation newCollation, final KuduQuery query, final Optional<Filter> filter) {
+    final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
     final List<RelFieldCollation> sortPrefixColumns = Lists.newArrayList();
+    final List<String> sortPkColumns = Lists.newArrayList();
+    final Pair<List<RelFieldCollation>, List<String>> pair = new Pair<>(sortPrefixColumns, sortPkColumns);
+    // If there is no sort just return
     if (newCollation.getFieldCollations().isEmpty()) {
-      return sortPrefixColumns;
+      return pair;
     }
 
     int pkColumnIndex = 0;
     for (int collationIndex = 0; collationIndex < newCollation.getFieldCollations().size(); ++collationIndex) {
       final RelFieldCollation sortField = newCollation.getFieldCollations().get(collationIndex);
+      if (!checkSortDirection(query, sortField)) {
+        break;
+      }
       // the sort columns must contain a prefix of the primary key columns
       // for eg if a table has three columns A, B and C with a PK(A, B) this rule can
       // be applied if we sort by (A, C)
@@ -188,7 +195,7 @@ public class KuduAggregationLimitRule extends RelOptRule {
             final KuduSortRule.KuduFilterVisitor visitor = new KuduSortRule.KuduFilterVisitor(pkColumnIndex);
             final Boolean foundFieldInCondition = originalCondition.accept(visitor);
             if (foundFieldInCondition.equals(Boolean.FALSE)) {
-              return sortPrefixColumns;
+              return pair;
             }
             pkColumnIndex++;
           }
@@ -196,15 +203,15 @@ public class KuduAggregationLimitRule extends RelOptRule {
           break;
         }
       }
-      if (!checkSortDirection(query, sortField)) {
-        break;
-      }
+
       // use the originalCollations
       sortPrefixColumns.add(originalCollation.getFieldCollations().get(collationIndex));
+      String pkColumnName = openedTable.getSchema().getColumnByIndex(pkColumnIndex).getName();
+      sortPkColumns.add(pkColumnName);
       pkColumnIndex++;
     }
 
-    return sortPrefixColumns;
+    return pair;
   }
 
 }

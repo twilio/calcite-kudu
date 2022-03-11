@@ -58,7 +58,7 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
       @Override
       public boolean moveNext() {
         if (finished) {
-          logger.info("returning finished");
+          logger.debug("returning finished");
           return false;
         }
         CalciteScannerMessage<CalciteRow> iterationNext;
@@ -73,7 +73,7 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
           if (iterationNext != null) {
             switch (iterationNext.type) {
             case CLOSE:
-              logger.info("Closing scanner");
+              logger.debug("Closing scanner");
               break;
             case ERROR:
               final Optional<Exception> failure = iterationNext.failure;
@@ -95,7 +95,7 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
             case BATCH_COMPLETED:
               final Optional<ScannerCallback> maybeScannerCallback = iterationNext.callback;
               if (maybeScannerCallback.isPresent()) {
-                logger.info("Batch completed for a scanner. Getting next batch");
+                logger.debug("Batch completed for a scanner. Getting next batch");
                 maybeScannerCallback.get().nextBatch();
               } else {
                 logger.error(
@@ -109,7 +109,7 @@ public final class CalciteKuduEnumerable extends AbstractEnumerable<CalciteRow> 
             || (!iterationNext.isTerminal() && iterationNext.type != CalciteScannerMessage.MessageType.ROW));
 
         if (iterationNext.isTerminal()) {
-          logger.info("No more results in queue, exiting");
+          logger.debug("No more results in queue, exiting");
           finished = true;
           return false;
         }

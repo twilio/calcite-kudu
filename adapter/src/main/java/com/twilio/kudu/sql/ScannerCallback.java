@@ -63,7 +63,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
       final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults, final AtomicBoolean scansShouldStop,
       final AtomicBoolean cancelFlag, final Schema projectedSchema, final KuduScanStats scanStats,
       final boolean isScannerSorted, final Function1<Object, Object> projectionMapper,
-      final Predicate1<Object> filterFunction, final boolean isSingleObject) {
+      final Predicate1<Object> filterFunction, final boolean isSingleObject, final List<String> sortPkColumnNames) {
 
     this.scanner = scanner;
     this.rowResults = rowResults;
@@ -72,7 +72,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
     // multiple
     // scanners (by picking the smallest row order by primary key key columns)
     this.primaryKeyColumnsInProjection = isScannerSorted
-        ? calciteKuduTable.getPrimaryKeyColumnsInProjection(projectedSchema)
+        ? calciteKuduTable.getPrimaryKeyColumnsInProjection(sortPkColumnNames, projectedSchema)
         : Collections.emptyList();
     this.descendingSortedFieldIndices = calciteKuduTable.getDescendingColumnsIndicesInProjection(projectedSchema);
     this.scanStats = scanStats;

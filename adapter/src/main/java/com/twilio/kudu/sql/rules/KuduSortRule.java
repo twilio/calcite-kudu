@@ -14,8 +14,10 @@
  */
 package com.twilio.kudu.sql.rules;
 
+import java.util.List;
 import java.util.Optional;
 
+import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.KuduQuery;
 import com.twilio.kudu.sql.KuduRelNode;
 import com.twilio.kudu.sql.rel.KuduSortRel;
@@ -45,7 +47,9 @@ import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.kudu.client.KuduTable;
 
 /**
- * Two Sort Rules that look to push the Sort into the Kudu RPC.
+ * Two Sort Rules that look to push the Sort into the Kudu RPC. Rule that pushes
+ * down the sort into kudu if we are sorting by columns that are a prefix of the
+ * primary key columns in the table. This rule eliminates sorting on the client.
  */
 public abstract class KuduSortRule extends RelOptRule {
 
@@ -55,6 +59,8 @@ public abstract class KuduSortRule extends RelOptRule {
 
   public static final RelOptRule SIMPLE_SORT_RULE = new KuduSortWithoutFilter(RelFactories.LOGICAL_BUILDER);
   public static final RelOptRule FILTER_SORT_RULE = new KuduSortWithFilter(RelFactories.LOGICAL_BUILDER);
+
+  protected List<String> pkSortColumns = Lists.newArrayList();
 
   public KuduSortRule(RelOptRuleOperand operand, RelBuilderFactory factory, String description) {
     super(operand, factory, description);
@@ -75,6 +81,7 @@ public abstract class KuduSortRule extends RelOptRule {
     }
 
     int pkColumnIndex = 0;
+    pkSortColumns.clear();
     for (final RelFieldCollation sortField : collation.getFieldCollations()) {
       // Reject for descending sorted fields if sort direction is not Descending
       if ((query.calciteKuduTable.isColumnOrderedDesc(sortField.getFieldIndex())
@@ -108,6 +115,8 @@ public abstract class KuduSortRule extends RelOptRule {
           return false;
         }
       }
+      String pkColumnName = openedTable.getSchema().getColumnByIndex(pkColumnIndex).getName();
+      pkSortColumns.add(pkColumnName);
       pkColumnIndex++;
     }
     return true;
@@ -121,7 +130,7 @@ public abstract class KuduSortRule extends RelOptRule {
           .replace(originalSort.getCollation());
       final RelNode newNode = new KuduSortRel(input.getCluster(), traitSet,
           convert(input, traitSet.replace(RelCollations.EMPTY)), originalSort.getCollation(), originalSort.offset,
-          originalSort.fetch);
+          originalSort.fetch, pkSortColumns);
       call.transformTo(newNode);
     }
   }
@@ -206,9 +215,12 @@ public abstract class KuduSortRule extends RelOptRule {
         }
         return Boolean.FALSE;
       case OR:
-        // @TODO: figure this one out. It is very tricky, if each
-        // operand has the exact same value for mustHave then
-        // this should match.
+        for (final RexNode operand : call.operands) {
+          if (!operand.accept(this).equals(Boolean.TRUE)) {
+            return Boolean.FALSE;
+          }
+        }
+        return Boolean.TRUE;
       }
       return Boolean.FALSE;
     }

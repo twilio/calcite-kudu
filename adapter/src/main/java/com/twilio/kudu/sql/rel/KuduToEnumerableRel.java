@@ -225,10 +225,13 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
     }
     Expressions.list(list.append("keySelector", sortedPrefixKeySelector));
 
+    final Expression sortPkColumns = list.append("sortPkColumns",
+        implementor.stash(kuduImplementor.sortPkColumns, List.class));
+
     final Expression enumerable = list.append("enumerable",
         Expressions.call(table, KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit, offset, sorted,
             Expressions.constant(kuduImplementor.groupByLimited), scanStats, cancelBoolean, mapFunction, filterFunction,
-            isSingleObject, sortedPrefixKeySelector));
+            isSingleObject, sortedPrefixKeySelector, sortPkColumns));
 
     Hook.QUERY_PLAN.run(predicates);
     list.add(Expressions.return_(null, enumerable));
