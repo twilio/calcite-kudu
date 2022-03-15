@@ -14,6 +14,7 @@
  */
 package com.twilio.kudu.sql;
 
+import com.google.common.collect.Lists;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.Type;
@@ -32,17 +33,17 @@ public final class SortedTest {
     final ColumnSchema dateColumn = new ColumnSchema.ColumnSchemaBuilder("date", Type.UNIXTIME_MICROS).key(true)
         .build();
     final ColumnSchema foreignKey = new ColumnSchema.ColumnSchemaBuilder("key_to_other_table", Type.STRING).build();
-    final Schema tableSchema = new Schema(Arrays.asList(accountIdColumn, dateColumn,
-        new ColumnSchema.ColumnSchemaBuilder("event_type", Type.STRING).key(true).build(), foreignKey));
 
-    assertEquals("Expected to find just account_id from projection", Arrays.asList(1), CalciteKuduTable
-        .getPrimaryKeyColumnsInProjection(tableSchema, new Schema(Arrays.asList(foreignKey, accountIdColumn))));
+    assertEquals("Expected to find just account_id from projection", Arrays.asList(1),
+        CalciteKuduTable.getPrimaryKeyColumnsInProjection(Lists.newArrayList("account_id"),
+            new Schema(Arrays.asList(foreignKey, accountIdColumn))));
 
     assertEquals("Expected to find account_id and date from projection", Arrays.asList(2, 1),
-        CalciteKuduTable.getPrimaryKeyColumnsInProjection(tableSchema,
+        CalciteKuduTable.getPrimaryKeyColumnsInProjection(Lists.newArrayList("account_id", "date"),
             new Schema(Arrays.asList(foreignKey, dateColumn, accountIdColumn))));
 
-    assertEquals("Expected to find dateColumn from projection", Arrays.asList(1), CalciteKuduTable
-        .getPrimaryKeyColumnsInProjection(tableSchema, new Schema(Arrays.asList(foreignKey, dateColumn))));
+    assertEquals("Expected to find dateColumn from projection", Arrays.asList(1),
+        CalciteKuduTable.getPrimaryKeyColumnsInProjection(Lists.newArrayList("date"),
+            new Schema(Arrays.asList(foreignKey, dateColumn))));
   }
 }

@@ -31,7 +31,7 @@ import org.apache.calcite.rel.core.Join;
 public enum KuduMethod {
   KUDU_QUERY_METHOD(CalciteKuduTable.KuduQueryable.class, "query", List.class, List.class, int.class, int.class,
       boolean.class, boolean.class, KuduScanStats.class, AtomicBoolean.class, Function1.class, Predicate1.class,
-      boolean.class, Function1.class),
+      boolean.class, Function1.class, List.class),
   KUDU_MUTATE_TUPLES_METHOD(CalciteKuduTable.KuduQueryable.class, "mutateTuples", List.class, List.class),
   KUDU_MUTATE_ROW_METHOD(CalciteKuduTable.KuduQueryable.class, "mutateRow", List.class, List.class),
   NESTED_JOIN_PREDICATES(KuduEnumerable.class, "nestedJoinPredicates", Join.class);

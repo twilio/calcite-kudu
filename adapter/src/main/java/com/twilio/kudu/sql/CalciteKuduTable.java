@@ -228,6 +228,8 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    *                                a prefix of the primary key of the table, or
    *                                an empty list if the group by and order by
    *                                columns are the same
+   * @param sortPkColumnNames       the names of the primary key columns that are
+   *                                present in the ORDER BY clause
    * @return Enumeration on the objects, Fields conform to
    *         {@link CalciteKuduTable#getRowType}.
    */
@@ -235,9 +237,9 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
       final List<Integer> columnIndices, final long limit, final long offset, final boolean sorted,
       final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
       final Function1<Object, Object> projection, final Predicate1<Object> filterFunction, final boolean isSingleObject,
-      final Function1<Object, Object> sortedPrefixKeySelector) {
+      final Function1<Object, Object> sortedPrefixKeySelector, final List<String> sortPkColumnNames) {
     return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset, sorted, groupByLimited,
-        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector);
+        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumnNames);
   }
 
   @Override
@@ -278,7 +280,7 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
       // noinspection unchecked
       final Enumerable<T> enumerable = (Enumerable<T>) getTable().executeQuery(Collections.emptyList(),
           Collections.emptyList(), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false), null, null,
-          false, null);
+          false, null, null);
       return enumerable.enumerator();
     }
 
@@ -317,15 +319,18 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
      *                                a prefix of the primary key of the table, or
      *                                an empty list if the group by and order by
      *                                columns are the same
+     * @param sortPkColumnNames       the names of the primary key columns that are
+     *                                present in the ORDER BY clause
      * @return Enumerable for the query
      */
     public Enumerable<Object> query(final List<List<CalciteKuduPredicate>> predicates,
         final List<Integer> fieldsIndices, final long limit, final long offset, final boolean sorted,
         final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
         final Function1<Object, Object> projection, final Predicate1<Object> filterFunction,
-        final boolean isSingleObject, final Function1<Object, Object> sortedPrefixKeySelector) {
+        final boolean isSingleObject, final Function1<Object, Object> sortedPrefixKeySelector,
+        final List<String> sortPkColumnNames) {
       return getTable().executeQuery(predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats,
-          cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector);
+          cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumnNames);
     }
 
     /**
@@ -373,17 +378,16 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    * The returned index list is used by the sorted {@link KuduEnumerable} to merge
    * the results from multiple scanners.
    *
-   * @param projectedSchema the Kudu Schema used in RPC requests
+   * @param projectedSchema   the Kudu Schema used in RPC requests
+   * @param sortPkColumnNames the names of the primary key columns that are
+   *                          present in the ORDER BY clause
    *
    * @return List of column indexes that part of the primary key in the Kudu
    *         Sorted order
    */
-  public List<Integer> getPrimaryKeyColumnsInProjection(final Schema projectedSchema) {
-    return getPrimaryKeyColumnsInProjection(kuduTable.getSchema(), projectedSchema);
-  }
-
   @VisibleForTesting
-  public static List<Integer> getPrimaryKeyColumnsInProjection(final Schema schema, final Schema projectedSchema) {
+  public static List<Integer> getPrimaryKeyColumnsInProjection(final List<String> sortPkColumnNames,
+      final Schema projectedSchema) {
     final List<Integer> primaryKeyColumnsInProjection = new ArrayList<>();
     final List<ColumnSchema> columnSchemas = projectedSchema.getColumns();
 
@@ -391,27 +395,18 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
     // filtered and
     // are set to a constant literal, or if the columns being sorted are a
     // prefix of the primary key columns.
-    for (ColumnSchema primaryColumnSchema : schema.getPrimaryKeyColumns()) {
+    for (String sortPkColumnName : sortPkColumnNames) {
       boolean found = false;
       for (int columnIdx = 0; columnIdx < projectedSchema.getColumnCount(); columnIdx++) {
-        if (columnSchemas.get(columnIdx).getName().equals(primaryColumnSchema.getName())) {
+        if (columnSchemas.get(columnIdx).getName().equals(sortPkColumnName)) {
           primaryKeyColumnsInProjection.add(columnIdx);
           found = true;
-          break;
         }
       }
-      // If it isn't found, this means this primary key column is not
-      // present in the projection. We keep the existing primary key columns
-      // that were present in the projection in our list.
-      // The list is the order in which rows will be sorted.
-      if (!primaryKeyColumnsInProjection.isEmpty() && !found) {
-        // Once we have matched at least one primary key column, all the remaining
-        // primary key columns that are present in the projection are being sorted on
-        break;
+      if (!found) {
+        throw new IllegalStateException(
+            "Unable to find primary key " + "column " + sortPkColumnName + " in the projection.");
       }
-    }
-    if (primaryKeyColumnsInProjection.isEmpty()) {
-      throw new IllegalStateException("There should be at least one primary key column in the" + " projection");
     }
     return primaryKeyColumnsInProjection;
   }

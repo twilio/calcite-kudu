@@ -51,24 +51,27 @@ public class KuduSortRel extends Sort implements KuduRelNode {
   // and
   // sortPrefixColumns is empty.
   public final List<RelFieldCollation> sortPkPrefixColumns;
+  public final List<String> sortPkColumns;
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
-      RexNode fetch) {
-    this(cluster, traitSet, child, collation, offset, fetch, false, Lists.newArrayList());
+      RexNode fetch, List<String> sortPkColumns) {
+    this(cluster, traitSet, child, collation, offset, fetch, false, Lists.newArrayList(), sortPkColumns);
   }
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
-      RexNode fetch, boolean groupBySorted, List<RelFieldCollation> sortPkPrefixColumns) {
+      RexNode fetch, boolean groupBySorted, List<RelFieldCollation> sortPkPrefixColumns, List<String> sortPkColumns) {
     super(cluster, traitSet, child, collation, offset, fetch);
     assert getConvention() == KuduRelNode.CONVENTION;
     assert getConvention() == child.getConvention();
     this.groupBySorted = groupBySorted;
     this.sortPkPrefixColumns = sortPkPrefixColumns;
+    this.sortPkColumns = sortPkColumns;
   }
 
   @Override
   public Sort copy(RelTraitSet traitSet, RelNode input, RelCollation newCollation, RexNode offset, RexNode fetch) {
-    return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, groupBySorted, sortPkPrefixColumns);
+    return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, groupBySorted, sortPkPrefixColumns,
+        sortPkColumns);
   }
 
   @Override
@@ -109,5 +112,6 @@ public class KuduSortRel extends Sort implements KuduRelNode {
 
     implementor.groupByLimited = groupBySorted;
     implementor.sortPkPrefixColumns = sortPkPrefixColumns;
+    implementor.sortPkColumns = sortPkColumns;
   }
 }

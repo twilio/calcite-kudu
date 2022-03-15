@@ -47,13 +47,14 @@ public class KuduFilterRule extends RelOptRule {
       // expand row value expression into a series of OR-AND expressions
       RowValueExpressionConverter visitor = new RowValueExpressionConverter(rexBuilder, kuduQuery.calciteKuduTable);
       final RexNode condition = filter.getCondition().accept(visitor);
-      final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor(rexBuilder);
+      int primaryKeyColumnCount = kuduQuery.calciteKuduTable.getKuduTable().getSchema().getPrimaryKeyColumnCount();
+      final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor(rexBuilder,
+          primaryKeyColumnCount);
 
       List<List<CalciteKuduPredicate>> predicates = condition.accept(predicateParser, null);
       if (predicates.isEmpty()) {
         // if we could not handle any of the filters in Kudu, just return and let
-        // Calcite
-        // handle filtering
+        // Calcite handle filtering
         return;
       }
       final RelNode converted = new KuduFilterRel(filter.getCluster(),
