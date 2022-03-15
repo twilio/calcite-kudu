@@ -180,8 +180,7 @@ public abstract class KuduSortRule extends RelOptRule {
 
   /**
    * Searches {@link RexNode} to see if the Kudu column index -- stored as
-   * {@link mustHave} is present in the {@code RexNode} and is required. Currently
-   * does not handle OR clauses.
+   * {@link mustHave} is present in the {@code RexNode} and is required.
    */
   public static class KuduFilterVisitor extends RexVisitorImpl<Boolean> {
     public final int mustHave;
@@ -208,6 +207,9 @@ public abstract class KuduSortRule extends RelOptRule {
       case EQUALS:
         return call.operands.get(0).accept(this);
       case AND:
+        // if any of the operands of the AND clause contain the mustHave column then we
+        // can
+        // return true
         for (final RexNode operand : call.operands) {
           if (operand.accept(this).equals(Boolean.TRUE)) {
             return Boolean.TRUE;
@@ -215,6 +217,9 @@ public abstract class KuduSortRule extends RelOptRule {
         }
         return Boolean.FALSE;
       case OR:
+        // if all of the operands of the OR clause contain the mustHave column then we
+        // can
+        // return true
         for (final RexNode operand : call.operands) {
           if (!operand.accept(this).equals(Boolean.TRUE)) {
             return Boolean.FALSE;
