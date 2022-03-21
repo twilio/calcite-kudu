@@ -46,7 +46,7 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
   final public CalciteKuduTable calciteKuduTable;
 
   public static HintStrategyTable KUDU_HINT_STRATEGY_TABLE = HintStrategyTable.builder()
-      .hintStrategy(KuduNestedJoinRule.HINT_NAME, HintPredicates.JOIN).hintStrategy(KuduFilterRule.HINT_NAME, HintPredicates.SET_VAR).build();
+      .hintStrategy(KuduNestedJoinRule.HINT_NAME, HintPredicates.JOIN).hintStrategy(KuduFilterRule.HINT_NAME, HintPredicates.SET_VAR).hintStrategy(KuduFilterRule.HINT_NAME, HintPredicates.TABLE_SCAN).build();
 
   /**
    * List of column indices that are stored in reverse order.

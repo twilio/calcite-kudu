@@ -20,6 +20,9 @@ import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.metadata.KuduTableMetadata;
 import com.twilio.kudu.sql.schema.BaseKuduSchemaFactory;
 import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
+import org.apache.calcite.rel.core.RelFactories;
+import org.apache.calcite.sql2rel.SqlToRelConverter;
+import org.apache.calcite.util.ImmutableBeans;
 import org.apache.calcite.util.TimestampString;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.ColumnTypeAttributes;
@@ -49,6 +52,17 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -95,6 +109,7 @@ public class PaginationIT {
 
   @BeforeClass
   public static void setup() throws Exception {
+    initializeHints();
     KuduClient client = testHarness.getClient();
 
     createTable(client, "TABLE_ASC", false);
@@ -117,6 +132,31 @@ public class PaginationIT {
       super(kuduTableConfigMap);
     }
   }
+
+  public static void initializeHints() {
+    try {
+      SqlToRelConverter.Config CONFIG_MODIFIED = ImmutableBeans.create(SqlToRelConverter.Config.class)
+              .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+              .withRelBuilderConfigTransform(c -> c.withPushJoinCondition(true))
+              .withHintStrategyTable(KuduQuery.KUDU_HINT_STRATEGY_TABLE);
+      // change SqlToRelConverter.CONFIG to use one that has the above
+      // HintStrategyTable
+      setFinalStatic(SqlToRelConverter.class.getDeclaredField("CONFIG"), CONFIG_MODIFIED);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static void setFinalStatic(Field field, Object newValue) throws Exception {
+    field.setAccessible(true);
+
+    Field modifiersField = Field.class.getDeclaredField("modifiers");
+    modifiersField.setAccessible(true);
+    modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+
+    field.set(null, newValue);
+  }
+
 
   private static Timestamp normalizeTimestamp(boolean descending, long ts) {
     return new Timestamp(descending ? CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - ts : ts);
