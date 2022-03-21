@@ -102,41 +102,6 @@ public class PaginationIT {
 
     JDBC_URL = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, KuduSchemaFactory.class.getName(),
         testHarness.getMasterAddressesAsString());
-    createOrganizationAccounts(client);
-  }
-
-  public static void createOrganizationAccounts(KuduClient kuduClient) throws Exception {
-    try (Connection conn = DriverManager.getConnection(JDBC_URL);
-         Statement stmt = conn.createStatement()) {
-      String ddl =
-              "CREATE TABLE \"OrganizationAccounts\" ("
-                      + "\"organization_sid\" VARCHAR, "
-                      + "\"account_sid\" VARCHAR, "
-                      + "PRIMARY KEY (\"organization_sid\", \"account_sid\"))"
-                      + "PARTITION BY HASH (\"organization_sid\") PARTITIONS 2 NUM_REPLICAS 1";
-      stmt.execute(ddl);
-    }
-    kuduTable = kuduClient.openTable("OrganizationAccounts");
-    KuduSession insertSession = kuduClient.newSession();
-    for (String account : ACCOUNTS) {
-      insertOrgRow(insertSession, account, TEST_ORGANIZATION_SID);
-    }
-    insertSession.close();
-  }
-
-  private static void insertOrgRow(
-          KuduSession insertSession, String usageAccountSid, String organizationSid)
-  {
-    try {
-      Upsert upsert = kuduTable.newUpsert();
-      PartialRow row = upsert.getRow();
-      row.addString("account_sid", usageAccountSid);
-      row.addString("organization_sid", organizationSid);
-      insertSession.apply(upsert);
-      System.out.println("Minakshi inserted row in org table " + usageAccountSid + " orgsid: " + organizationSid);
-    }catch(Exception ex){
-      System.out.println("Minakshi caught exception while inserting row" + ex);
-    }
   }
 
   public static class KuduSchemaFactory extends BaseKuduSchemaFactory {
@@ -341,55 +306,6 @@ public class PaginationIT {
     }
   }
 
-  @Test
-  public void testSortWithOrg() throws Exception {
-    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
-      String firstBatchSqlFormat = "SELECT * FROM %s " + "WHERE account_sid = '%s' "
-              + "ORDER BY account_sid, date_initiated %s, transaction_id " + "LIMIT 6 OFFSET 7";
-      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, ACCOUNT1, descending ? "DESC" : "ASC");
-
-      // verify plan
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
-      String plan = SqlUtil.getExplainPlan(rs);
-      String expectedPlanFormat = "KuduToEnumerableRel\n"
-              + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], "
-              + "dir2=[ASC], offset=[7], fetch=[6], groupBySorted=[false])\n"
-              + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
-      String expectedPlan = String.format(expectedPlanFormat, descending ? "DESC" : "ASC", ACCOUNT1, tableName);
-      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
-      rs = conn.createStatement().executeQuery(firstBatchSql);
-
-      if (descending) {
-        assertTrue(rs.next());
-        validateRow(rs, T3, "TXN7", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T3, "TXN8", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T3, "TXN9", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T2, "TXN0", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T2, "TXN1", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T2, "TXN2", ACCOUNT1);
-        assertFalse(rs.next());
-      } else {
-        assertTrue(rs.next());
-        validateRow(rs, T1, "TXN7", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T1, "TXN8", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T1, "TXN9", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T2, "TXN0", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T2, "TXN1", ACCOUNT1);
-        assertTrue(rs.next());
-        validateRow(rs, T2, "TXN2", ACCOUNT1);
-        assertFalse(rs.next());
-      }
-    }
-  }
 
   @Test
   public void testSortWithFilterAndLimitAndOffset() throws Exception {
