@@ -599,8 +599,6 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       // Allows for consistent row order in reads as it puts in ORDERED by Pk when
       // faultTolerant is set to true
       // setFaultTolerant to true sets the ReadMode to READ_AT_SNAPSHOT
-      // setting snapshot time to 1ms before currentTimestamp to avoid latency issues
-      // for tests.
       // setting snapshot time to time set through constructor or else default to
       // 0ms/current time.
       tokenBuilder.snapshotTimestampMicros((System.currentTimeMillis() * 1000) - (snapshotDiffFromCurrentTime * 1000));
