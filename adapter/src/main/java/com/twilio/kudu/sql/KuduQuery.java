@@ -15,6 +15,7 @@
 package com.twilio.kudu.sql;
 
 import com.google.common.collect.Sets;
+import com.twilio.kudu.sql.rules.KuduFilterRule;
 import com.twilio.kudu.sql.rules.KuduNestedJoinRule;
 import com.twilio.kudu.sql.rules.KuduRules;
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
@@ -45,7 +46,7 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
   final public CalciteKuduTable calciteKuduTable;
 
   public static HintStrategyTable KUDU_HINT_STRATEGY_TABLE = HintStrategyTable.builder()
-      .hintStrategy(KuduNestedJoinRule.HINT_NAME, HintPredicates.JOIN).build();
+      .hintStrategy(KuduNestedJoinRule.HINT_NAME, HintPredicates.JOIN).hintStrategy(KuduFilterRule.HINT_NAME, HintPredicates.SET_VAR).build();
 
   /**
    * List of column indices that are stored in reverse order.

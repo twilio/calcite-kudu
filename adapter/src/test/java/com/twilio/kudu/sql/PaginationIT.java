@@ -768,10 +768,13 @@ public class PaginationIT {
       TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
       TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
       String dateInitiatedOrder = descending ? "DESC" : "ASC";
-      String firstBatchSqlFormat = "SELECT * FROM %s WHERE account_sid IN ('ACCOUNT1','ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
+      String hint = "/*+ USE_OR_CLAUSE */";
+      String firstBatchSqlFormat = "SELECT %s * FROM %s WHERE account_sid IN ('ACCOUNT1','ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
               + "ORDER BY account_sid, date_initiated %s, transaction_id " + "LIMIT 7";
-      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, lowerBoundDateInitiated,
+
+      String firstBatchSql = String.format(firstBatchSqlFormat, hint, tableName, lowerBoundDateInitiated,
               upperBoundDateInitiated, dateInitiatedOrder);
+     // String sql = String.format(firstBatchSql, hint);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
       String plan = SqlUtil.getExplainPlan(rs);
 
