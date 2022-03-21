@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.metadata.KuduTableMetadata;
 import com.twilio.kudu.sql.schema.BaseKuduSchemaFactory;
+import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
 import org.apache.calcite.util.TimestampString;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.ColumnTypeAttributes;
@@ -42,6 +43,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
@@ -71,8 +73,10 @@ public class PaginationIT {
   public static final long T3 = 3000;
   public static final long T4 = 4000;
   public static final String[] ACCOUNTS = new String[] { ACCOUNT1, ACCOUNT2 };
+  public static final String TEST_ORGANIZATION_SID = "ORcaba0759581b24aad1915c70c866f1bb";
   public static final long[] TIMESTAMP_PARTITIONS = new long[] { T1, T2, T3 };
   public static final int NUM_ROWS_PER_PARTITION = 10;
+  public static KuduTable kuduTable;
 
   private final boolean descending;
   private final String tableName;
@@ -98,6 +102,41 @@ public class PaginationIT {
 
     JDBC_URL = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, KuduSchemaFactory.class.getName(),
         testHarness.getMasterAddressesAsString());
+    createOrganizationAccounts(client);
+  }
+
+  public static void createOrganizationAccounts(KuduClient kuduClient) throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL);
+         Statement stmt = conn.createStatement()) {
+      String ddl =
+              "CREATE TABLE \"OrganizationAccounts\" ("
+                      + "\"organization_sid\" VARCHAR, "
+                      + "\"account_sid\" VARCHAR, "
+                      + "PRIMARY KEY (\"organization_sid\", \"account_sid\"))"
+                      + "PARTITION BY HASH (\"organization_sid\") PARTITIONS 2 NUM_REPLICAS 1";
+      stmt.execute(ddl);
+    }
+    kuduTable = kuduClient.openTable("OrganizationAccounts");
+    KuduSession insertSession = kuduClient.newSession();
+    for (String account : ACCOUNTS) {
+      insertOrgRow(insertSession, account, TEST_ORGANIZATION_SID);
+    }
+    insertSession.close();
+  }
+
+  private static void insertOrgRow(
+          KuduSession insertSession, String usageAccountSid, String organizationSid)
+  {
+    try {
+      Upsert upsert = kuduTable.newUpsert();
+      PartialRow row = upsert.getRow();
+      row.addString("account_sid", usageAccountSid);
+      row.addString("organization_sid", organizationSid);
+      insertSession.apply(upsert);
+      System.out.println("Minakshi inserted row in org table " + usageAccountSid + " orgsid: " + organizationSid);
+    }catch(Exception ex){
+      System.out.println("Minakshi caught exception while inserting row" + ex);
+    }
   }
 
   public static class KuduSchemaFactory extends BaseKuduSchemaFactory {
@@ -299,6 +338,56 @@ public class PaginationIT {
         assertEquals(rs.getString("PHONENUMBER"), "512-123-1230");
       }
       assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testSortWithOrg() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String firstBatchSqlFormat = "SELECT * FROM %s " + "WHERE account_sid = '%s' "
+              + "ORDER BY account_sid, date_initiated %s, transaction_id " + "LIMIT 6 OFFSET 7";
+      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, ACCOUNT1, descending ? "DESC" : "ASC");
+
+      // verify plan
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      String expectedPlanFormat = "KuduToEnumerableRel\n"
+              + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], "
+              + "dir2=[ASC], offset=[7], fetch=[6], groupBySorted=[false])\n"
+              + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, descending ? "DESC" : "ASC", ACCOUNT1, tableName);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(firstBatchSql);
+
+      if (descending) {
+        assertTrue(rs.next());
+        validateRow(rs, T3, "TXN7", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T3, "TXN8", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T3, "TXN9", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T2, "TXN0", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T2, "TXN1", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T2, "TXN2", ACCOUNT1);
+        assertFalse(rs.next());
+      } else {
+        assertTrue(rs.next());
+        validateRow(rs, T1, "TXN7", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T1, "TXN8", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T1, "TXN9", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T2, "TXN0", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T2, "TXN1", ACCOUNT1);
+        assertTrue(rs.next());
+        validateRow(rs, T2, "TXN2", ACCOUNT1);
+        assertFalse(rs.next());
+      }
     }
   }
 
@@ -670,6 +759,122 @@ public class PaginationIT {
         }
         assertFalse(rs.next());
       }
+    }
+  }
+
+  @Test
+  public void testPaginationMultipleAccountsOrderedByAccountSidUsingIN() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
+      TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
+      String dateInitiatedOrder = descending ? "DESC" : "ASC";
+      String firstBatchSqlFormat = "SELECT * FROM %s WHERE account_sid IN ('ACCOUNT1','ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
+              + "ORDER BY account_sid, date_initiated %s, transaction_id " + "LIMIT 7";
+      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, lowerBoundDateInitiated,
+              upperBoundDateInitiated, dateInitiatedOrder);
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+
+      String expectedPlanFormat = "KuduToEnumerableRel\n"
+              + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], "
+              + "fetch=[7], groupBySorted=[false])\n"
+              + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, "
+              + "date_initiated LESS %d], ScanToken 2=[account_sid EQUAL %s, date_initiated "
+              + "GREATER_EQUAL %d, date_initiated LESS %d])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
+      String expectedPlan = String.format(expectedPlanFormat, dateInitiatedOrder, ACCOUNT1, T1 * 1000, T4 * 1000,
+              ACCOUNT2, T1 * 1000, T4 * 1000, tableName);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
+
+      // Since there are 60 rows in total we will read 8 batches of 7 rows,
+      // the last batch will have 4 rows. We cannot validate the ACCOUNT_SID since
+      // rows can be
+      // returned for either account if they have the same timestamp and sid
+      // Rows for ACCOUNT1 will be returned first and then ACCOUNT2
+
+      // read the first batch of 7 rows
+      int rowNum = 0;
+      int timestampPartitionIndex = descending ? 2 : 0;
+      rs = conn.createStatement().executeQuery(firstBatchSql);
+
+      Object[] lastRow = null;
+      String expectedAccountSid = ACCOUNT1;
+      for (int i = 0; i < 7; ++i) {
+        assertTrue(rs.next());
+        lastRow = validateRow(rs, TIMESTAMP_PARTITIONS[timestampPartitionIndex], "TXN" + rowNum++, expectedAccountSid);
+      }
+      assertFalse(rs.next());
+
+      String nextBatchSqlFormat = "SELECT * FROM %s "
+              + "WHERE ((account_sid = 'ACCOUNT1' OR account_sid = 'ACCOUNT2') AND (account_sid, "
+              + "date_initiated, transaction_id) > ('%s', TIMESTAMP'%s', '%s'))"
+              + "AND date_initiated >= TIMESTAMP'%s' AND " + "date_initiated < TIMESTAMP'%s' "
+              + "ORDER BY account_sid, date_initiated %s, transaction_id LIMIT 7";
+
+//      // keep reading batches of rows until we have processes rows for all the
+//      // partitions
+//      for (int i = 0; i < 8; ++i) {
+//        String nextBatchSql = String.format(nextBatchSqlFormat, tableName, expectedAccountSid,
+//                TimestampString.fromMillisSinceEpoch((long) lastRow[1]), lastRow[2], lowerBoundDateInitiated,
+//                upperBoundDateInitiated, dateInitiatedOrder);
+//
+//        // verify plan
+//        rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + nextBatchSql);
+//        plan = SqlUtil.getExplainPlan(rs);
+//        // The plan is of the form
+//        // KuduToEnumerableRel
+//        // KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[ASC],
+//        // dir2=[ASC], fetch=[7], groupBySorted=[false])
+//        // KuduFilterRel(
+//        // ScanToken 1=[account_sid EQUAL ACCOUNT1, account_sid GREATER ACCOUNT1,
+//        // date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000],
+//        // ScanToken 2=[account_sid EQUAL ACCOUNT1, account_sid EQUAL ACCOUNT1,
+//        // date_initiated GREATER 1001000, date_initiated GREATER_EQUAL 1000000,
+//        // date_initiated LESS 4000000],
+//        // ScanToken 3=[account_sid EQUAL ACCOUNT1, account_sid EQUAL ACCOUNT1,
+//        // date_initiated EQUAL 1001000, transaction_id GREATER TXN6, date_initiated
+//        // GREATER_EQUAL 1000000, date_initiated LESS 4000000], ScanToken 4=[account_sid
+//        // EQUAL ACCOUNT2, account_sid GREATER ACCOUNT1, date_initiated GREATER_EQUAL
+//        // 1000000, date_initiated LESS 4000000],
+//        // ScanToken 5=[account_sid EQUAL ACCOUNT2, account_sid EQUAL ACCOUNT1,
+//        // date_initiated GREATER 1001000, date_initiated GREATER_EQUAL 1000000,
+//        // date_initiated LESS 4000000],
+//        // ScanToken 6=[account_sid EQUAL ACCOUNT2, account_sid EQUAL ACCOUNT1,
+//        // date_initiated EQUAL 1001000, transaction_id GREATER TXN6, date_initiated
+//        // GREATER_EQUAL 1000000, date_initiated LESS 4000000])
+//        // KuduQuery(table=[[kudu, TABLE_ASC]])
+//
+//        // assert that the sort is pushed down
+//        assertTrue(plan.contains("KuduSortRel"));
+//
+//        rs = conn.createStatement().executeQuery(nextBatchSql);
+//        // the last batch has only two rows
+//        int jEnd = i == 7 ? 4 : 7;
+//        for (int j = 0; j < jEnd; ++j) {
+//          assertTrue("Mismatch in row " + j + " of batch " + i, rs.next());
+//          lastRow = validateRow(rs, TIMESTAMP_PARTITIONS[timestampPartitionIndex], "TXN" + rowNum++,
+//                  expectedAccountSid);
+//          // if we are reading the last row from the partition
+//          if (rowNum == 10) {
+//            rowNum = 0;
+//            if (descending) {
+//              timestampPartitionIndex--;
+//              // if we read all rows from ACCOUNT1
+//              if (timestampPartitionIndex == -1) {
+//                timestampPartitionIndex = 2;
+//                expectedAccountSid = ACCOUNT2;
+//              }
+//            } else {
+//              timestampPartitionIndex++;
+//              // if we read all rows from ACCOUNT1
+//              if (timestampPartitionIndex == 3) {
+//                timestampPartitionIndex = 0;
+//                expectedAccountSid = ACCOUNT2;
+//              }
+//            }
+//          }
+//        }
+//        assertFalse(rs.next());
+//      }
     }
   }
 

@@ -30,6 +30,8 @@ import org.apache.calcite.tools.RelBuilderFactory;
 import java.util.List;
 
 public class KuduFilterRule extends RelOptRule {
+
+  public static final String HINT_NAME = "USE_OR_CLAUSE";
   public KuduFilterRule(RelBuilderFactory relBuilderFactory) {
     super(operand(LogicalFilter.class, operand(KuduQuery.class, none())), relBuilderFactory, "KuduPushDownFilters");
   }
@@ -48,8 +50,15 @@ public class KuduFilterRule extends RelOptRule {
       RowValueExpressionConverter visitor = new RowValueExpressionConverter(rexBuilder, kuduQuery.calciteKuduTable);
       final RexNode condition = filter.getCondition().accept(visitor);
       int primaryKeyColumnCount = kuduQuery.calciteKuduTable.getKuduTable().getSchema().getPrimaryKeyColumnCount();
-      final KuduPredicatePushDownVisitor predicateParser = new KuduPredicatePushDownVisitor(rexBuilder,
-          primaryKeyColumnCount);
+      final KuduPredicatePushDownVisitor predicateParser;
+      if(kuduQuery.getHints().stream().map(h -> h.hintName).anyMatch(s -> s.equalsIgnoreCase(HINT_NAME))){
+        predicateParser = new KuduPredicatePushDownVisitor(rexBuilder,
+                primaryKeyColumnCount, true);
+      }else{
+        predicateParser = new KuduPredicatePushDownVisitor(rexBuilder,
+                primaryKeyColumnCount, false);
+      }
+
 
       List<List<CalciteKuduPredicate>> predicates = condition.accept(predicateParser, null);
       if (predicates.isEmpty()) {

@@ -90,10 +90,12 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
 
   private final RexBuilder rexBuilder;
   private final int primaryKeyColumnCount;
+  private final boolean useOrClause;
 
-  public KuduPredicatePushDownVisitor(RexBuilder rexBuilder, int primaryKeyColumnCount) {
+  public KuduPredicatePushDownVisitor(RexBuilder rexBuilder, int primaryKeyColumnCount, boolean useOrClause) {
     this.rexBuilder = rexBuilder;
     this.primaryKeyColumnCount = primaryKeyColumnCount;
+    this.useOrClause = useOrClause;
   }
 
   /**
@@ -191,7 +193,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     // TODO see if there is a way to only force using an OR clause when sorting by
     // part of the
     // primary key
-    if (columnIndex > primaryKeyColumnCount && sarg.isPoints()) {
+    if (columnIndex > primaryKeyColumnCount && sarg.isPoints() && useOrClause) {
       final List<RexNode> inNodes = sarg.rangeSet.asRanges().stream()
           .map(range -> rexBuilder.makeLiteral(range.lowerEndpoint(), literal.getType(), true, true))
           .collect(Collectors.toList());
