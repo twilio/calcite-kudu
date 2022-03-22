@@ -31,6 +31,7 @@ import org.apache.calcite.rel.hint.HintStrategyTable;
 import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.hint.RelHint;
 
 import java.util.List;
 
@@ -53,7 +54,7 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
    * @param cluster          Cluster
    * @param traitSet         Traits
    * @param table            Table
-   * @param hints            List<RelHint>
+   * @param hints            {@code RelHint} list
    * @param calciteKuduTable Kudu table
    * @param projectRowType   Fields and types to project; null to project raw row
    */
