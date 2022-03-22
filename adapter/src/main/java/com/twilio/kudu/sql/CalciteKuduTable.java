@@ -195,7 +195,7 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
   public RelNode toRel(final RelOptTable.ToRelContext context, final RelOptTable relOptTable) {
 
     final RelOptCluster cluster = context.getCluster();
-    return new KuduQuery(cluster, cluster.traitSetOf(KuduRelNode.CONVENTION), relOptTable, this,
+    return new KuduQuery(cluster, cluster.traitSetOf(KuduRelNode.CONVENTION), relOptTable, context.getTableHints(), this,
         this.getRowType(context.getCluster().getTypeFactory()));
   }
 

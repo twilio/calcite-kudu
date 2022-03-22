@@ -719,18 +719,17 @@ public class PaginationIT {
   }
 
   @Test
-  public void testPaginationMultipleAccountsOrderedByAccountSidUsingIN() throws Exception {
+  public void testPaginationMultipleAccountsOrderedByAccountSidUsingINWithHint() throws Exception {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
       TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
       String dateInitiatedOrder = descending ? "DESC" : "ASC";
       String hint = "/*+ USE_OR_CLAUSE */";
-      String firstBatchSqlFormat = "SELECT %s * FROM %s WHERE account_sid IN ('ACCOUNT1','ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
+      String firstBatchSqlFormat = "SELECT * FROM %s %s WHERE account_sid IN ('ACCOUNT1','ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
               + "ORDER BY account_sid, date_initiated %s, transaction_id " + "LIMIT 7";
 
-      String firstBatchSql = String.format(firstBatchSqlFormat, hint, tableName, lowerBoundDateInitiated,
+      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, hint, lowerBoundDateInitiated,
               upperBoundDateInitiated, dateInitiatedOrder);
-     // String sql = String.format(firstBatchSql, hint);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
       String plan = SqlUtil.getExplainPlan(rs);
 
@@ -743,97 +742,30 @@ public class PaginationIT {
       String expectedPlan = String.format(expectedPlanFormat, dateInitiatedOrder, ACCOUNT1, T1 * 1000, T4 * 1000,
               ACCOUNT2, T1 * 1000, T4 * 1000, tableName);
       assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
+    }
+  }
 
-      // Since there are 60 rows in total we will read 8 batches of 7 rows,
-      // the last batch will have 4 rows. We cannot validate the ACCOUNT_SID since
-      // rows can be
-      // returned for either account if they have the same timestamp and sid
-      // Rows for ACCOUNT1 will be returned first and then ACCOUNT2
+  @Test
+  public void testPaginationMultipleAccountsOrderedByAccountSidUsingINWithoutHint() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
+      TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
+      String dateInitiatedOrder = descending ? "DESC" : "ASC";
+      String firstBatchSqlFormat = "SELECT * FROM %s WHERE account_sid IN ('ACCOUNT1','ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
+              + "ORDER BY account_sid, date_initiated %s, transaction_id " + "LIMIT 7";
 
-      // read the first batch of 7 rows
-      int rowNum = 0;
-      int timestampPartitionIndex = descending ? 2 : 0;
-      rs = conn.createStatement().executeQuery(firstBatchSql);
+      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, lowerBoundDateInitiated,
+              upperBoundDateInitiated, dateInitiatedOrder);
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
+      String plan = SqlUtil.getExplainPlan(rs);
 
-      Object[] lastRow = null;
-      String expectedAccountSid = ACCOUNT1;
-      for (int i = 0; i < 7; ++i) {
-        assertTrue(rs.next());
-        lastRow = validateRow(rs, TIMESTAMP_PARTITIONS[timestampPartitionIndex], "TXN" + rowNum++, expectedAccountSid);
-      }
-      assertFalse(rs.next());
+      String expectedPlanFormat = "KuduToEnumerableRel\n" +
+              "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], fetch=[7], groupBySorted=[false])\n" +
+              "    KuduFilterRel(ScanToken 1=[account_sid IN [ACCOUNT1, ACCOUNT2], date_initiated EQUAL 1000000])\n" +
+              "      KuduQuery(table=[[kudu, %s]])\n";
 
-      String nextBatchSqlFormat = "SELECT * FROM %s "
-              + "WHERE ((account_sid = 'ACCOUNT1' OR account_sid = 'ACCOUNT2') AND (account_sid, "
-              + "date_initiated, transaction_id) > ('%s', TIMESTAMP'%s', '%s'))"
-              + "AND date_initiated >= TIMESTAMP'%s' AND " + "date_initiated < TIMESTAMP'%s' "
-              + "ORDER BY account_sid, date_initiated %s, transaction_id LIMIT 7";
-
-//      // keep reading batches of rows until we have processes rows for all the
-//      // partitions
-//      for (int i = 0; i < 8; ++i) {
-//        String nextBatchSql = String.format(nextBatchSqlFormat, tableName, expectedAccountSid,
-//                TimestampString.fromMillisSinceEpoch((long) lastRow[1]), lastRow[2], lowerBoundDateInitiated,
-//                upperBoundDateInitiated, dateInitiatedOrder);
-//
-//        // verify plan
-//        rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + nextBatchSql);
-//        plan = SqlUtil.getExplainPlan(rs);
-//        // The plan is of the form
-//        // KuduToEnumerableRel
-//        // KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[ASC],
-//        // dir2=[ASC], fetch=[7], groupBySorted=[false])
-//        // KuduFilterRel(
-//        // ScanToken 1=[account_sid EQUAL ACCOUNT1, account_sid GREATER ACCOUNT1,
-//        // date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000],
-//        // ScanToken 2=[account_sid EQUAL ACCOUNT1, account_sid EQUAL ACCOUNT1,
-//        // date_initiated GREATER 1001000, date_initiated GREATER_EQUAL 1000000,
-//        // date_initiated LESS 4000000],
-//        // ScanToken 3=[account_sid EQUAL ACCOUNT1, account_sid EQUAL ACCOUNT1,
-//        // date_initiated EQUAL 1001000, transaction_id GREATER TXN6, date_initiated
-//        // GREATER_EQUAL 1000000, date_initiated LESS 4000000], ScanToken 4=[account_sid
-//        // EQUAL ACCOUNT2, account_sid GREATER ACCOUNT1, date_initiated GREATER_EQUAL
-//        // 1000000, date_initiated LESS 4000000],
-//        // ScanToken 5=[account_sid EQUAL ACCOUNT2, account_sid EQUAL ACCOUNT1,
-//        // date_initiated GREATER 1001000, date_initiated GREATER_EQUAL 1000000,
-//        // date_initiated LESS 4000000],
-//        // ScanToken 6=[account_sid EQUAL ACCOUNT2, account_sid EQUAL ACCOUNT1,
-//        // date_initiated EQUAL 1001000, transaction_id GREATER TXN6, date_initiated
-//        // GREATER_EQUAL 1000000, date_initiated LESS 4000000])
-//        // KuduQuery(table=[[kudu, TABLE_ASC]])
-//
-//        // assert that the sort is pushed down
-//        assertTrue(plan.contains("KuduSortRel"));
-//
-//        rs = conn.createStatement().executeQuery(nextBatchSql);
-//        // the last batch has only two rows
-//        int jEnd = i == 7 ? 4 : 7;
-//        for (int j = 0; j < jEnd; ++j) {
-//          assertTrue("Mismatch in row " + j + " of batch " + i, rs.next());
-//          lastRow = validateRow(rs, TIMESTAMP_PARTITIONS[timestampPartitionIndex], "TXN" + rowNum++,
-//                  expectedAccountSid);
-//          // if we are reading the last row from the partition
-//          if (rowNum == 10) {
-//            rowNum = 0;
-//            if (descending) {
-//              timestampPartitionIndex--;
-//              // if we read all rows from ACCOUNT1
-//              if (timestampPartitionIndex == -1) {
-//                timestampPartitionIndex = 2;
-//                expectedAccountSid = ACCOUNT2;
-//              }
-//            } else {
-//              timestampPartitionIndex++;
-//              // if we read all rows from ACCOUNT1
-//              if (timestampPartitionIndex == 3) {
-//                timestampPartitionIndex = 0;
-//                expectedAccountSid = ACCOUNT2;
-//              }
-//            }
-//          }
-//        }
-//        assertFalse(rs.next());
-//      }
+      String expectedPlan = String.format(expectedPlanFormat, dateInitiatedOrder, tableName);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
     }
   }
 

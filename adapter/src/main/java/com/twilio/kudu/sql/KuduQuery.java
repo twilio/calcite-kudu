@@ -22,22 +22,18 @@ import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
-import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableScan;
-import org.apache.calcite.rel.hint.HintPredicate;
 import org.apache.calcite.rel.hint.HintPredicates;
 import org.apache.calcite.rel.hint.HintStrategyTable;
-import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.util.Util;
 
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
+
 
 /**
  * Relational expression representing a scan of a KuduTable
@@ -46,7 +42,7 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
   final public CalciteKuduTable calciteKuduTable;
 
   public static HintStrategyTable KUDU_HINT_STRATEGY_TABLE = HintStrategyTable.builder()
-      .hintStrategy(KuduNestedJoinRule.HINT_NAME, HintPredicates.JOIN).hintStrategy(KuduFilterRule.HINT_NAME, HintPredicates.SET_VAR).hintStrategy(KuduFilterRule.HINT_NAME, HintPredicates.TABLE_SCAN).build();
+      .hintStrategy(KuduNestedJoinRule.HINT_NAME, HintPredicates.JOIN).hintStrategy(KuduFilterRule.HINT_NAME, HintPredicates.TABLE_SCAN).build();
 
   /**
    * List of column indices that are stored in reverse order.
@@ -60,9 +56,9 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
    * @param calciteKuduTable Kudu table
    * @param projectRowType   Fields and types to project; null to project raw row
    */
-  public KuduQuery(RelOptCluster cluster, RelTraitSet traitSet, RelOptTable table, CalciteKuduTable calciteKuduTable,
-      RelDataType projectRowType) {
-    super(cluster, traitSet, table);
+  public KuduQuery(RelOptCluster cluster, RelTraitSet traitSet, RelOptTable table, List<RelHint> hints, CalciteKuduTable calciteKuduTable,
+                   RelDataType projectRowType) {
+    super(cluster, traitSet, hints, table);
     this.calciteKuduTable = calciteKuduTable;
     this.projectRowType = projectRowType;
     assert getConvention() == KuduRelNode.CONVENTION;
@@ -82,7 +78,6 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
   @Override
   public void register(RelOptPlanner planner) {
     getCluster().setHintStrategies(KUDU_HINT_STRATEGY_TABLE);
-
     // since kudu is a columnar store we never want to push an aggregate past a
     // project
     planner.removeRule(CoreRules.AGGREGATE_PROJECT_MERGE);
