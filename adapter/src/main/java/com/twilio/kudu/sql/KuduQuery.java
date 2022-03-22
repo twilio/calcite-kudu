@@ -34,7 +34,6 @@ import org.apache.calcite.rel.type.RelDataType;
 
 import java.util.List;
 
-
 /**
  * Relational expression representing a scan of a KuduTable
  */
@@ -42,7 +41,8 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
   final public CalciteKuduTable calciteKuduTable;
 
   public static HintStrategyTable KUDU_HINT_STRATEGY_TABLE = HintStrategyTable.builder()
-      .hintStrategy(KuduNestedJoinRule.HINT_NAME, HintPredicates.JOIN).hintStrategy(KuduFilterRule.HINT_NAME, HintPredicates.TABLE_SCAN).build();
+      .hintStrategy(KuduNestedJoinRule.HINT_NAME, HintPredicates.JOIN)
+      .hintStrategy(KuduFilterRule.HINT_NAME, HintPredicates.TABLE_SCAN).build();
 
   /**
    * List of column indices that are stored in reverse order.
@@ -56,8 +56,8 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
    * @param calciteKuduTable Kudu table
    * @param projectRowType   Fields and types to project; null to project raw row
    */
-  public KuduQuery(RelOptCluster cluster, RelTraitSet traitSet, RelOptTable table, List<RelHint> hints, CalciteKuduTable calciteKuduTable,
-                   RelDataType projectRowType) {
+  public KuduQuery(RelOptCluster cluster, RelTraitSet traitSet, RelOptTable table, List<RelHint> hints,
+      CalciteKuduTable calciteKuduTable, RelDataType projectRowType) {
     super(cluster, traitSet, hints, table);
     this.calciteKuduTable = calciteKuduTable;
     this.projectRowType = projectRowType;
