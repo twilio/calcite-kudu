@@ -84,7 +84,7 @@ public class PaginationIT {
   private final String tableName;
 
   private static String JDBC_URL;
-  private static String hint = "/*+ USE_OR_CLAUSE */";
+  private static String hint = "/*+ DISABLE_IN_LIST_OPTIMIZATION */";
 
   @Parameterized.Parameters(name = "PaginationIT_descending={0}")
   public static synchronized Collection<Boolean> data() {

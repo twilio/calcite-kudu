@@ -14,7 +14,6 @@
  */
 package com.twilio.kudu.sql;
 
-import com.google.common.collect.Sets;
 import com.twilio.kudu.sql.rules.KuduFilterRule;
 import com.twilio.kudu.sql.rules.KuduNestedJoinRule;
 import com.twilio.kudu.sql.rules.KuduRules;
@@ -33,6 +32,7 @@ import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.hint.RelHint;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -110,6 +110,12 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     if (CalciteSystemProperty.ENABLE_ENUMERABLE.value()) {
       KuduRules.ENUMERABLE_RULES.stream().forEach(r -> planner.addRule(r));
     }
+  }
+
+  @Override
+  public RelNode withHints(List<RelHint> hintList) {
+    return new KuduQuery(this.getCluster(), this.traitSet, this.table, hintList, this.calciteKuduTable,
+        this.projectRowType);
   }
 
   @Override

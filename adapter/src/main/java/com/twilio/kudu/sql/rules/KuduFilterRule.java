@@ -31,7 +31,7 @@ import java.util.List;
 
 public class KuduFilterRule extends RelOptRule {
 
-  public static final String HINT_NAME = "USE_OR_CLAUSE";
+  public static final String HINT_NAME = "DISABLE_IN_LIST_OPTIMIZATION";
 
   public KuduFilterRule(RelBuilderFactory relBuilderFactory) {
     super(operand(LogicalFilter.class, operand(KuduQuery.class, none())), relBuilderFactory, "KuduPushDownFilters");

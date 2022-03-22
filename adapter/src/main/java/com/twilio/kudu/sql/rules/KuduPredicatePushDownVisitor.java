@@ -21,28 +21,18 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 
-import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.CalciteKuduPredicate;
-import com.twilio.kudu.sql.CalciteKuduTable;
 import com.twilio.kudu.sql.ComparisonPredicate;
 import com.twilio.kudu.sql.InListPredicate;
 import com.twilio.kudu.sql.NullPredicate;
 
 import org.apache.calcite.avatica.util.TimeUnitRange;
-import org.apache.calcite.rel.rel2sql.SqlImplementor;
-import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexBiVisitor;
 import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexProgram;
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlNodeList;
-import org.apache.calcite.sql.SqlUtil;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexOver;
@@ -57,16 +47,13 @@ import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexDynamicParam;
 
-import java.util.Map;
 import java.util.Optional;
 
 import org.apache.calcite.rex.RexNode;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.apache.calcite.util.RangeSets;
 import org.apache.calcite.util.Sarg;
 import org.apache.kudu.client.KuduPredicate;
 
@@ -90,12 +77,13 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
 
   private final RexBuilder rexBuilder;
   private final int primaryKeyColumnCount;
-  private final boolean useOrClause;
+  private final boolean disableInListOptimization;
 
-  public KuduPredicatePushDownVisitor(RexBuilder rexBuilder, int primaryKeyColumnCount, boolean useOrClause) {
+  public KuduPredicatePushDownVisitor(RexBuilder rexBuilder, int primaryKeyColumnCount,
+      boolean disableInListOptimization) {
     this.rexBuilder = rexBuilder;
     this.primaryKeyColumnCount = primaryKeyColumnCount;
-    this.useOrClause = useOrClause;
+    this.disableInListOptimization = disableInListOptimization;
   }
 
   /**
@@ -193,7 +181,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     // TODO see if there is a way to only force using an OR clause when sorting by
     // part of the
     // primary key
-    if (sarg.isPoints() && !useOrClause) {
+    if (sarg.isPoints() && !disableInListOptimization) {
       final List<RexNode> inNodes = sarg.rangeSet.asRanges().stream()
           .map(range -> rexBuilder.makeLiteral(range.lowerEndpoint(), literal.getType(), true, true))
           .collect(Collectors.toList());
