@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.metadata.KuduTableMetadata;
 import com.twilio.kudu.sql.schema.BaseKuduSchemaFactory;
-import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
 import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.util.ImmutableBeans;
@@ -46,28 +45,18 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 public class PaginationIT {
@@ -87,7 +76,6 @@ public class PaginationIT {
   public static final long T3 = 3000;
   public static final long T4 = 4000;
   public static final String[] ACCOUNTS = new String[] { ACCOUNT1, ACCOUNT2 };
-  public static final String TEST_ORGANIZATION_SID = "ORcaba0759581b24aad1915c70c866f1bb";
   public static final long[] TIMESTAMP_PARTITIONS = new long[] { T1, T2, T3 };
   public static final int NUM_ROWS_PER_PARTITION = 10;
   public static KuduTable kuduTable;

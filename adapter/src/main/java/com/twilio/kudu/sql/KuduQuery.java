@@ -53,6 +53,7 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
    * @param cluster          Cluster
    * @param traitSet         Traits
    * @param table            Table
+   * @param hints            List<RelHint>
    * @param calciteKuduTable Kudu table
    * @param projectRowType   Fields and types to project; null to project raw row
    */
