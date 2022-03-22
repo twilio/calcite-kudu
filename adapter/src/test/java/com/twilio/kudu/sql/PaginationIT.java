@@ -96,6 +96,7 @@ public class PaginationIT {
   private final String tableName;
 
   private static String JDBC_URL;
+  private static String hint = "/*+ USE_OR_CLAUSE */";
 
   @Parameterized.Parameters(name = "PaginationIT_descending={0}")
   public static synchronized Collection<Boolean> data() {
@@ -492,11 +493,11 @@ public class PaginationIT {
       TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
       TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
       String dateInitiatedOrder = descending ? "DESC" : "ASC";
-      String firstBatchSqlFormat = "SELECT * FROM %s WHERE (account_sid = '%s' OR account_sid = "
+      String firstBatchSqlFormat = "SELECT * FROM %s %s WHERE (account_sid = '%s' OR account_sid = "
           + "'%s') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
           + "ORDER BY date_initiated %s, transaction_id " + "LIMIT 7";
-      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, ACCOUNT1, ACCOUNT2, lowerBoundDateInitiated,
-          upperBoundDateInitiated, dateInitiatedOrder);
+      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, hint, ACCOUNT1, ACCOUNT2,
+          lowerBoundDateInitiated, upperBoundDateInitiated, dateInitiatedOrder);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
       String plan = SqlUtil.getExplainPlan(rs);
 
@@ -606,9 +607,9 @@ public class PaginationIT {
       TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
       TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
       String dateInitiatedOrder = descending ? "DESC" : "ASC";
-      String firstBatchSqlFormat = "SELECT * FROM %s WHERE (account_sid = 'ACCOUNT1' OR account_sid = 'ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
+      String firstBatchSqlFormat = "SELECT * FROM %s %s WHERE (account_sid = 'ACCOUNT1' OR account_sid = 'ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
           + "ORDER BY account_sid, date_initiated %s, transaction_id " + "LIMIT 7";
-      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, lowerBoundDateInitiated,
+      String firstBatchSql = String.format(firstBatchSqlFormat, tableName, hint, lowerBoundDateInitiated,
           upperBoundDateInitiated, dateInitiatedOrder);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
       String plan = SqlUtil.getExplainPlan(rs);
@@ -722,7 +723,7 @@ public class PaginationIT {
       TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
       TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
       String dateInitiatedOrder = descending ? "DESC" : "ASC";
-      String hint = "/*+ USE_OR_CLAUSE */";
+
       String firstBatchSqlFormat = "SELECT * FROM %s %s WHERE account_sid IN ('ACCOUNT1','ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
           + "ORDER BY account_sid, date_initiated %s, transaction_id " + "LIMIT 7";
 
@@ -759,7 +760,7 @@ public class PaginationIT {
 
       String expectedPlanFormat = "KuduToEnumerableRel\n"
           + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], fetch=[7], groupBySorted=[false])\n"
-          + "    KuduFilterRel(ScanToken 1=[account_sid IN [ACCOUNT1, ACCOUNT2], date_initiated EQUAL 1000000])\n"
+          + "    KuduFilterRel(ScanToken 1=[account_sid IN [ACCOUNT1, ACCOUNT2], date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000])\n"
           + "      KuduQuery(table=[[kudu, %s]])\n";
 
       String expectedPlan = String.format(expectedPlanFormat, dateInitiatedOrder, tableName);
