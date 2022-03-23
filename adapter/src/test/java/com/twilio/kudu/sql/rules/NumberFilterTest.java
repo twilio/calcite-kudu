@@ -46,7 +46,7 @@ public final class NumberFilterTest {
     final RexCall call = (RexCall) builder.makeCall(SqlStdOperatorTable.LESS_THAN_OR_EQUAL,
         Arrays.asList(fieldRef, amountFilter));
 
-    final KuduPredicatePushDownVisitor visitor = new KuduPredicatePushDownVisitor(builder, 0);
+    final KuduPredicatePushDownVisitor visitor = new KuduPredicatePushDownVisitor(builder, 0, false);
 
     final ComparisonPredicate predicate = (ComparisonPredicate) visitor.visitLiteral(amountFilter, call).get(0).get(0);
     Assert.assertEquals("The amount should match what was passed in", new BigDecimal("0.5"), predicate.rightHandValue);

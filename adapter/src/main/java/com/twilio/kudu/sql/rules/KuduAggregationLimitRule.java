@@ -167,6 +167,7 @@ public class KuduAggregationLimitRule extends RelOptRule {
 
   public Pair<List<RelFieldCollation>, List<String>> getSortPkPrefix(final RelCollation originalCollation,
       final RelCollation newCollation, final KuduQuery query, final Optional<Filter> filter) {
+    boolean isDisableInListOptimizationHintPresent = false;
     final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
     final List<RelFieldCollation> sortPrefixColumns = Lists.newArrayList();
     final List<String> sortPkColumns = Lists.newArrayList();
@@ -192,7 +193,8 @@ public class KuduAggregationLimitRule extends RelOptRule {
           final RexBuilder rexBuilder = filter.get().getCluster().getRexBuilder();
           final RexNode originalCondition = RexUtil.expandSearch(rexBuilder, null, filter.get().getCondition());
           while (pkColumnIndex < sortField.getFieldIndex()) {
-            final KuduSortRule.KuduFilterVisitor visitor = new KuduSortRule.KuduFilterVisitor(pkColumnIndex);
+            final KuduSortRule.KuduFilterVisitor visitor = new KuduSortRule.KuduFilterVisitor(pkColumnIndex,
+                isDisableInListOptimizationHintPresent);
             final Boolean foundFieldInCondition = originalCondition.accept(visitor);
             if (foundFieldInCondition.equals(Boolean.FALSE)) {
               return pair;

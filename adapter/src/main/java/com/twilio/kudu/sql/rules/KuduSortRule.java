@@ -68,6 +68,10 @@ public abstract class KuduSortRule extends RelOptRule {
 
   public boolean canApply(final RelTraitSet sortTraits, final KuduQuery query, final KuduTable openedTable,
       final Optional<Filter> filter) {
+    boolean isDisableInListOptimizationHintPresent = false;
+    if (query.getHints().stream().map(h -> h.hintName).anyMatch(s -> s.equalsIgnoreCase(KuduFilterRule.HINT_NAME))) {
+      isDisableInListOptimizationHintPresent = true;
+    }
     // If there is no sort -- i.e. there is only a limit
     // don't pay the cost of returning rows in sorted order.
     final RelCollation collation = sortTraits.getTrait(RelCollationTraitDef.INSTANCE);
@@ -104,7 +108,8 @@ public abstract class KuduSortRule extends RelOptRule {
           final RexBuilder rexBuilder = filter.get().getCluster().getRexBuilder();
           final RexNode originalCondition = RexUtil.expandSearch(rexBuilder, null, filter.get().getCondition());
           while (pkColumnIndex < sortField.getFieldIndex()) {
-            final KuduFilterVisitor visitor = new KuduFilterVisitor(pkColumnIndex);
+            final KuduFilterVisitor visitor = new KuduFilterVisitor(pkColumnIndex,
+                isDisableInListOptimizationHintPresent);
             final Boolean foundFieldInCondition = originalCondition.accept(visitor);
             if (foundFieldInCondition.equals(Boolean.FALSE)) {
               return false;
@@ -184,10 +189,12 @@ public abstract class KuduSortRule extends RelOptRule {
    */
   public static class KuduFilterVisitor extends RexVisitorImpl<Boolean> {
     public final int mustHave;
+    public final boolean isDisableInListOptimizationPresent;
 
-    public KuduFilterVisitor(final int mustHave) {
+    public KuduFilterVisitor(final int mustHave, final boolean isDisableInListOptimizationPresent) {
       super(true);
       this.mustHave = mustHave;
+      this.isDisableInListOptimizationPresent = isDisableInListOptimizationPresent;
     }
 
     public Boolean visitInputRef(final RexInputRef inputRef) {
@@ -217,6 +224,9 @@ public abstract class KuduSortRule extends RelOptRule {
         }
         return Boolean.FALSE;
       case OR:
+        if (!isDisableInListOptimizationPresent) {
+          return Boolean.FALSE;
+        }
         // if all of the operands of the OR clause contain the mustHave column then we
         // can
         // return true
