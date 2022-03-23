@@ -733,7 +733,7 @@ public class PaginationIT {
   }
 
   @Test
-  public void testPaginationMultipleAccountsOrderedByAccountSidUsingINWithoutHint() throws Exception {
+  public void testPaginationMultipleAccountsOrderedByAccountSidWithoutHint() throws Exception {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
       TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
@@ -757,7 +757,7 @@ public class PaginationIT {
   }
 
   @Test
-  public void testPaginationMultipleAccountsOrderedByAccountSidUsingINWithoutHintOrderByDate() throws Exception {
+  public void testPaginationMultipleAccountsOrderedByDateWithoutHint() throws Exception {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
       TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);

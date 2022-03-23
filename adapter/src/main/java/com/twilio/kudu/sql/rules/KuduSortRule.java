@@ -224,6 +224,9 @@ public abstract class KuduSortRule extends RelOptRule {
         }
         return Boolean.FALSE;
       case OR:
+        if (!isDisableInListOptimizationPresent) {
+          return Boolean.FALSE;
+        }
         // if all of the operands of the OR clause contain the mustHave column then we
         // can
         // return true
@@ -231,9 +234,6 @@ public abstract class KuduSortRule extends RelOptRule {
           if (!operand.accept(this).equals(Boolean.TRUE)) {
             return Boolean.FALSE;
           }
-        }
-        if (!isDisableInListOptimizationPresent) {
-          return Boolean.FALSE;
         }
         return Boolean.TRUE;
       }
