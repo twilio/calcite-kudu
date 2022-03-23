@@ -174,13 +174,10 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     final RexLiteral literal = (RexLiteral) call.operands.get(1);
     final Sarg<C> sarg = literal.getValueAs(Sarg.class);
     int columnIndex = getColumnIndex(call.operands.get(0));
-    // if we have an IN list on a primary key count do not use an IN list predicate,
-    // instead use an OR clause which ends up generating a separate scan token for
-    // each clause
-    // this is required in case we are sorting by a part of the primary key
-    // TODO see if there is a way to only force using an OR clause when sorting by
-    // part of the
-    // primary key
+    // If disableInListOptimization is true use an OR clause which ends up
+    // generating a separate scan token for
+    // each clause. this is required for Org queries in case we are sorting by a
+    // part of the primary key
     if (sarg.isPoints() && !disableInListOptimization) {
       final List<RexNode> inNodes = sarg.rangeSet.asRanges().stream()
           .map(range -> rexBuilder.makeLiteral(range.lowerEndpoint(), literal.getType(), true, true))
