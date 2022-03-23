@@ -176,7 +176,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
     int columnIndex = getColumnIndex(call.operands.get(0));
     // If disableInListOptimization is true use an OR clause which ends up
     // generating a separate scan token for
-    // each clause. this is required for Org queries in case we are sorting by a
+    // each clause. this is required in case we are sorting by a
     // part of the primary key
     if (sarg.isPoints() && !disableInListOptimization) {
       final List<RexNode> inNodes = sarg.rangeSet.asRanges().stream()
