@@ -50,10 +50,12 @@ public final class KuduSchema extends AbstractSchema {
   public static String ENABLE_INSERTS_FLAG = "enableInserts";
   public static String DISABLE_CUBE_AGGREGATIONS = "disableCubeAggregation";
   public static String CREATE_DUMMY_PARTITION_FLAG = "createDummyPartition";
+  public static String READ_SNAPSHOT_TIME_DIFFERENCE = "readSnapshotTimeDifference";
 
   public final boolean enableInserts;
   public final boolean disableCubeAggregation;
   public final boolean createDummyPartition;
+  public final long readSnapshotTimeDifference;
 
   public KuduSchema(final String connectString, final Map<String, KuduTableMetadata> kuduTableMetadataMap,
       final Map<String, Object> propertyMap) {
@@ -67,6 +69,8 @@ public final class KuduSchema extends AbstractSchema {
     this.disableCubeAggregation = Boolean
         .valueOf((String) propertyMap.getOrDefault(DISABLE_CUBE_AGGREGATIONS, "false"));
     this.createDummyPartition = Boolean.valueOf((String) propertyMap.getOrDefault(CREATE_DUMMY_PARTITION_FLAG, "true"));
+    this.readSnapshotTimeDifference = Long
+        .valueOf((String) propertyMap.getOrDefault(READ_SNAPSHOT_TIME_DIFFERENCE, "0"));
   }
 
   public void clearCachedTableMap() {
@@ -156,6 +160,7 @@ public final class KuduSchema extends AbstractSchema {
         cubeTableOptional.ifPresent(kuduTable -> {
           final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client)
               .setEnableInserts(enableInserts).setDisableCubeAggregation(disableCubeAggregation)
+              .setReadSnapshotTimeDifference(readSnapshotTimeDifference)
               .setTableType(com.twilio.kudu.sql.TableType.CUBE)
               .setEventTimeAggregationType(cubeTableInfo.eventTimeAggregationType);
           setDescendingFieldIndices(builder, descendingOrderedColumnNames, kuduTable);
@@ -172,7 +177,8 @@ public final class KuduSchema extends AbstractSchema {
       factTableOptional.ifPresent(kuduTable -> {
         final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client)
             .setEnableInserts(enableInserts).setDisableCubeAggregation(disableCubeAggregation)
-            .setTableType(com.twilio.kudu.sql.TableType.FACT).setCubeTables(cubeTableList);
+            .setReadSnapshotTimeDifference(readSnapshotTimeDifference).setTableType(com.twilio.kudu.sql.TableType.FACT)
+            .setCubeTables(cubeTableList);
         setDescendingFieldIndices(builder, descendingOrderedColumnNames, kuduTable);
         setTimestampColumnIndex(builder, kuduTableMetadata.getTimestampColumnName(), kuduTable);
         CalciteKuduTable factTable = builder.build();
@@ -213,7 +219,8 @@ public final class KuduSchema extends AbstractSchema {
   private void createCalciteTable(HashMap<String, Table> tableMap, KuduTable kuduTable,
       com.twilio.kudu.sql.TableType tableType) {
     final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client)
-        .setEnableInserts(enableInserts).setTableType(tableType);
+        .setEnableInserts(enableInserts).setReadSnapshotTimeDifference(readSnapshotTimeDifference)
+        .setTableType(tableType);
     CalciteKuduTable calciteKuduTable = builder.build();
     tableMap.put(kuduTable.getName(), calciteKuduTable);
   }

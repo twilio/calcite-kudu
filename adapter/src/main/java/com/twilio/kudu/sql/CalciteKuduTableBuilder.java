@@ -34,6 +34,7 @@ public class CalciteKuduTableBuilder {
 
   private boolean enableInserts;
   private boolean disableCubeAggregation;
+  private long readSnapshotTimeDifference;
 
   public CalciteKuduTableBuilder(KuduTable kuduTable, AsyncKuduClient client) {
     this.kuduTable = kuduTable;
@@ -47,6 +48,11 @@ public class CalciteKuduTableBuilder {
 
   public CalciteKuduTableBuilder setDisableCubeAggregation(boolean disableCubeAggregation) {
     this.disableCubeAggregation = disableCubeAggregation;
+    return this;
+  }
+
+  public CalciteKuduTableBuilder setReadSnapshotTimeDifference(long readSnapshotTimeDifference) {
+    this.readSnapshotTimeDifference = readSnapshotTimeDifference;
     return this;
   }
 
@@ -79,9 +85,9 @@ public class CalciteKuduTableBuilder {
   public CalciteKuduTable build() {
     if (enableInserts) {
       return new CalciteModifiableKuduTable(kuduTable, client, descendingOrderedFieldIndices, timestampColumnIndex,
-          cubeTabes, tableType, eventTimeAggregationType, disableCubeAggregation);
+          cubeTabes, tableType, eventTimeAggregationType, readSnapshotTimeDifference, disableCubeAggregation);
     }
     return new CalciteKuduTable(kuduTable, client, descendingOrderedFieldIndices, timestampColumnIndex, cubeTabes,
-        tableType, eventTimeAggregationType);
+        tableType, eventTimeAggregationType, readSnapshotTimeDifference);
   }
 }

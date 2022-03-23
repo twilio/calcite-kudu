@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.calcite.linq4j.Linq4j;
-import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexLiteral;
@@ -94,6 +93,9 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
   // type of table
   protected final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType;
 
+  // time difference in millis between snapshot to read and current time
+  protected final long readSnapshotTimeDifference;
+
   /**
    * Create the {@code CalciteKuduTable} for a physical scan over the
    * provided{@link KuduTable}. {@code KuduTable} must exist and be opened.
@@ -113,11 +115,14 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    * @param tableType                    type of this table
    * @param eventTimeAggregationType     How the table is aggregated across time
    *                                     ranges
+   * @param readSnapshotTimeDifference   time difference between snapshot to read
+   *                                     in past and current time
+   *
    */
   public CalciteKuduTable(final KuduTable kuduTable, final AsyncKuduClient client,
       final List<Integer> descendingOrderColumnIndexes, final int timestampColumnIndex,
       final List<CalciteKuduTable> cubeTables, final TableType tableType,
-      final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType) {
+      final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType, final long readSnapshotTimeDifference) {
     super(Object[].class);
     this.kuduTable = kuduTable;
     this.client = client;
@@ -126,6 +131,7 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
     this.tableType = tableType;
     this.timestampColumnIndex = timestampColumnIndex;
     this.eventTimeAggregationType = eventTimeAggregationType;
+    this.readSnapshotTimeDifference = readSnapshotTimeDifference;
   }
 
   @Override
@@ -205,45 +211,41 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    * to return in the response and finally {@code limit} is used to limit the
    * results that come back.
    *
-   * @param predicates                  each member in the first list represents a
-   *                                    single scan.
-   * @param columnIndices               the fields ordinals to select out of Kudu
-   * @param limit                       process the results until limit is
-   *                                    reached. If less then 0, no limit
-   * @param offset                      skip offset number of rows before
-   *                                    returning results
-   * @param snapshotDiffFromCurrentTime time in milliseconds before current time
-   *                                    to read table state at
-   * @param sorted                      whether to return rows in sorted order
-   * @param groupByLimited              indicates if the groupBy method should be
-   *                                    counting unique keys
-   * @param scanStats                   scan stats collector
-   * @param cancelFlag                  flag to indicate the query has been
-   *                                    canceled
-   * @param projection                  function to map the
-   *                                    {@link org.apache.kudu.client.RowResult}
-   *                                    to calcite object
-   * @param filterFunction              predicate to apply to
-   *                                    {@link org.apache.kudu.client.RowResult}
-   * @param isSingleObject              boolean indicating if the projection
-   *                                    returns Object[] or Object
-   * @param sortedPrefixKeySelector     the subset of columns being sorted by that
-   *                                    are a prefix of the primary key of the
-   *                                    table, or an empty list if the group by
-   *                                    and order by columns are the same
-   * @param sortPkColumnNames           the names of the primary key columns that
-   *                                    are present in the ORDER BY clause
+   * @param predicates              each member in the first list represents a
+   *                                single scan.
+   * @param columnIndices           the fields ordinals to select out of Kudu
+   * @param limit                   process the results until limit is reached. If
+   *                                less then 0, no limit
+   * @param offset                  skip offset number of rows before returning
+   *                                results
+   * @param sorted                  whether to return rows in sorted order
+   * @param groupByLimited          indicates if the groupBy method should be
+   *                                counting unique keys
+   * @param scanStats               scan stats collector
+   * @param cancelFlag              flag to indicate the query has been canceled
+   * @param projection              function to map the
+   *                                {@link org.apache.kudu.client.RowResult} to
+   *                                calcite object
+   * @param filterFunction          predicate to apply to
+   *                                {@link org.apache.kudu.client.RowResult}
+   * @param isSingleObject          boolean indicating if the projection returns
+   *                                Object[] or Object
+   * @param sortedPrefixKeySelector the subset of columns being sorted by that are
+   *                                a prefix of the primary key of the table, or
+   *                                an empty list if the group by and order by
+   *                                columns are the same
+   * @param sortPkColumnNames       the names of the primary key columns that are
+   *                                present in the ORDER BY clause
    * @return Enumeration on the objects, Fields conform to
    *         {@link CalciteKuduTable#getRowType}.
    */
   public KuduEnumerable executeQuery(final List<List<CalciteKuduPredicate>> predicates,
-      final List<Integer> columnIndices, final long limit, final long offset, final long snapshotDiffFromCurrentTime,
-      final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
+      final List<Integer> columnIndices, final long limit, final long offset, final boolean sorted,
+      final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
       final Function1<Object, Object> projection, final Predicate1<Object> filterFunction, final boolean isSingleObject,
       final Function1<Object, Object> sortedPrefixKeySelector, final List<String> sortPkColumnNames) {
-    return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset, snapshotDiffFromCurrentTime,
-        sorted, groupByLimited, scanStats, cancelFlag, projection, filterFunction, isSingleObject,
-        sortedPrefixKeySelector, sortPkColumnNames);
+    return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset, sorted, groupByLimited,
+        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumnNames);
   }
 
   @Override
@@ -283,7 +285,7 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
     public Enumerator<T> enumerator() {
       // noinspection unchecked
       final Enumerable<T> enumerable = (Enumerable<T>) getTable().executeQuery(Collections.emptyList(),
-          Collections.emptyList(), -1, -1, 0l, false, false, new KuduScanStats(), new AtomicBoolean(false), null, null,
+          Collections.emptyList(), -1, -1, false, false, new KuduScanStats(), new AtomicBoolean(false), null, null,
           false, null, null);
       return enumerable.enumerator();
     }
@@ -302,44 +304,39 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
      * This is the method that is called by Code generation to run the query. Code
      * generation happens in {@link KuduToEnumerableConverter}
      *
-     * @param predicates                  filters for each of the independent scans
-     * @param fieldsIndices               the column indexes to fetch from the table
-     * @param limit                       maximum number of rows to fetch from the
-     *                                    table
-     * @param offset                      the number of rows to skip from the table
-     * @param snapshotDiffFromCurrentTime time in milliseconds before current time
-     *                                    to read table state at
-     * @param sorted                      whether the query needs to be sorted by
-     *                                    key
-     * @param groupByLimited              whether the query contains a sorted
-     *                                    aggregation
-     * @param scanStats                   stat collector for the query
-     * @param cancelFlag                  atomic boolean that is true when the query
-     *                                    should be canceled
-     * @param projection                  function to turn
-     *                                    {@link org.apache.kudu.client.RowResult}
-     *                                    into Calcite type
-     * @param filterFunction              filter applied to all
-     *                                    {@link org.apache.kudu.client.RowResult}
-     * @param isSingleObject              indicates whether Calcite type is Object
-     *                                    or Object[]
-     * @param sortedPrefixKeySelector     the subset of columns being sorted by that
-     *                                    are a prefix of the primary key of the
-     *                                    table, or an empty list if the group by
-     *                                    and order by columns are the same
-     * @param sortPkColumnNames           the names of the primary key columns that
-     *                                    are present in the ORDER BY clause
+     * @param predicates              filters for each of the independent scans
+     * @param fieldsIndices           the column indexes to fetch from the table
+     * @param limit                   maximum number of rows to fetch from the table
+     * @param offset                  the number of rows to skip from the table
+     * @param sorted                  whether the query needs to be sorted by key
+     * @param groupByLimited          whether the query contains a sorted
+     *                                aggregation
+     * @param scanStats               stat collector for the query
+     * @param cancelFlag              atomic boolean that is true when the query
+     *                                should be canceled
+     * @param projection              function to turn
+     *                                {@link org.apache.kudu.client.RowResult} into
+     *                                Calcite type
+     * @param filterFunction          filter applied to all
+     *                                {@link org.apache.kudu.client.RowResult}
+     * @param isSingleObject          indicates whether Calcite type is Object or
+     *                                Object[]
+     * @param sortedPrefixKeySelector the subset of columns being sorted by that are
+     *                                a prefix of the primary key of the table, or
+     *                                an empty list if the group by and order by
+     *                                columns are the same
+     * @param sortPkColumnNames       the names of the primary key columns that are
+     *                                present in the ORDER BY clause
      * @return Enumerable for the query
      */
     public Enumerable<Object> query(final List<List<CalciteKuduPredicate>> predicates,
-        final List<Integer> fieldsIndices, final long limit, final long offset, final long snapshotDiffFromCurrentTime,
-        final boolean sorted, final boolean groupByLimited, final KuduScanStats scanStats,
-        final AtomicBoolean cancelFlag, final Function1<Object, Object> projection,
-        final Predicate1<Object> filterFunction, final boolean isSingleObject,
-        final Function1<Object, Object> sortedPrefixKeySelector, final List<String> sortPkColumnNames) {
-      return getTable().executeQuery(predicates, fieldsIndices, limit, offset, snapshotDiffFromCurrentTime, sorted,
-          groupByLimited, scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector,
-          sortPkColumnNames);
+        final List<Integer> fieldsIndices, final long limit, final long offset, final boolean sorted,
+        final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
+        final Function1<Object, Object> projection, final Predicate1<Object> filterFunction,
+        final boolean isSingleObject, final Function1<Object, Object> sortedPrefixKeySelector,
+        final List<String> sortPkColumnNames) {
+      return getTable().executeQuery(predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats,
+          cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumnNames);
     }
 
     /**

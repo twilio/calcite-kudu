@@ -117,9 +117,9 @@ public class KuduQueryIT {
 
     final CalciteKuduPredicate filterToSid = new ComparisonPredicate(2, KuduPredicate.ComparisonOp.EQUAL, "SM1234857");
     final Enumerable<Object> results = relTable.executeQuery(
-        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, -1, 0l,
-        false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_ONE_STRING, Predicate1.TRUE, true,
-        null, null);
+        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, -1, false,
+        false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_ONE_STRING, Predicate1.TRUE, true, null,
+        null);
     Iterator<Object> resultIter = results.iterator();
 
     Assert.assertTrue("Should have something to iterate over", resultIter.hasNext());
@@ -135,9 +135,9 @@ public class KuduQueryIT {
     final CalciteKuduPredicate filterToAccountSid = new ComparisonPredicate(0, KuduPredicate.ComparisonOp.EQUAL,
         KuduQueryIT.ACCOUNT_SID);
     final Enumerable<Object> results = relTable.executeQuery(
-        Collections.singletonList(Collections.singletonList(filterToAccountSid)), Arrays.asList(2, 0), -1, -1, 0l,
-        false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false,
-        null, null);
+        Collections.singletonList(Collections.singletonList(filterToAccountSid)), Arrays.asList(2, 0), -1, -1, false,
+        false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false, null,
+        null);
     Iterator<Object> resultIter = results.iterator();
 
     Assert.assertTrue("Should have something to iterate over", resultIter.hasNext());
@@ -173,7 +173,7 @@ public class KuduQueryIT {
     predicateQuery.add(Arrays.asList(firstSid));
     predicateQuery.add(Arrays.asList(secondSid));
 
-    final Enumerable<Object> results = relTable.executeQuery(predicateQuery, Collections.singletonList(2), -1, -1, 0l,
+    final Enumerable<Object> results = relTable.executeQuery(predicateQuery, Collections.singletonList(2), -1, -1,
         false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_ONE_STRING, Predicate1.TRUE, true,
         null, null);
     Enumerator<Object> resultIter = results.enumerator();
@@ -200,15 +200,15 @@ public class KuduQueryIT {
     // Logic now pushes the limit into all the scanners even if there is no
     // RelCollation
     KuduEnumerable kuduEnumerable = (KuduEnumerable) relTable.executeQuery(
-        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), 3, -1, 0l,
-        false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false,
-        null, null);
+        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), 3, -1, false,
+        false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false, null,
+        null);
     for (AsyncKuduScanner scanner : kuduEnumerable.getScanners()) {
       Assert.assertEquals("Each scanner should have pushed down the limit of 3 into the scan", 3L, scanner.getLimit());
     }
 
     kuduEnumerable = (KuduEnumerable) relTable.executeQuery(
-        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), 3, 4, 0l, true,
+        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), 3, 4, true,
         false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false, null,
         null);
     for (AsyncKuduScanner scanner : kuduEnumerable.getScanners()) {
@@ -218,9 +218,9 @@ public class KuduQueryIT {
 
     // since we sorting assert that the limit is pushed down into the kudu scanner
     kuduEnumerable = (KuduEnumerable) relTable.executeQuery(
-        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), 3, -1, 0l,
-        true, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false,
-        null, null);
+        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), 3, -1, true,
+        false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false, null,
+        null);
     for (AsyncKuduScanner scanner : kuduEnumerable.getScanners()) {
       Assert.assertEquals(3, scanner.getLimit());
     }
@@ -228,9 +228,9 @@ public class KuduQueryIT {
     // even though we ask not to sort, since we set an offset the enumerable forces
     // a sort
     kuduEnumerable = (KuduEnumerable) relTable.executeQuery(
-        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, 1, 0l,
-        false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false,
-        null, null);
+        Collections.singletonList(Collections.singletonList(filterToSid)), Collections.singletonList(2), -1, 1, false,
+        false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false, null,
+        null);
     Assert.assertTrue(kuduEnumerable.sort);
     for (AsyncKuduScanner scanner : kuduEnumerable.getScanners()) {
       Assert.assertEquals(Long.MAX_VALUE, scanner.getLimit());
@@ -257,7 +257,7 @@ public class KuduQueryIT {
     predicateQuery.add(Arrays.asList(firstSid));
     predicateQuery.add(Arrays.asList(secondSid));
 
-    final Enumerable<Object> results = relTable.executeQuery(predicateQuery, Collections.singletonList(2), -1, -1, 0l,
+    final Enumerable<Object> results = relTable.executeQuery(predicateQuery, Collections.singletonList(2), -1, -1,
         false, false, new KuduScanStats(), new AtomicBoolean(true), MAP_RESPONSE_TWO_STRINGS, Predicate1.TRUE, false,
         null, null);
     Enumerator<Object> resultIter = results.enumerator();
@@ -279,9 +279,9 @@ public class KuduQueryIT {
     final CalciteKuduPredicate filterToAccountSid = new ComparisonPredicate(0, KuduPredicate.ComparisonOp.EQUAL,
         KuduQueryIT.ACCOUNT_SID);
     final Enumerable<Object> results = relTable.executeQuery(
-        Collections.singletonList(Collections.singletonList(filterToAccountSid)), Arrays.asList(2, 0), -1, -1, 0l,
-        false, false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_ONE_STRING, Predicate1.TRUE, true,
-        null, null);
+        Collections.singletonList(Collections.singletonList(filterToAccountSid)), Arrays.asList(2, 0), -1, -1, false,
+        false, new KuduScanStats(), new AtomicBoolean(false), MAP_RESPONSE_ONE_STRING, Predicate1.TRUE, true, null,
+        null);
     Iterator<Object> resultIter = results.iterator();
 
     Assert.assertTrue("Should have something to iterate over", resultIter.hasNext());
