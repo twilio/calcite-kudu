@@ -20,10 +20,8 @@ import com.twilio.kudu.sql.rules.KuduPredicatePushDownVisitor;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.EnumerableDefaults;
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.client.KuduScanner;
-import org.apache.kudu.client.ReplicaSelection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +45,6 @@ import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.sql.SqlKind;
 
 import java.util.stream.Collectors;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -90,7 +87,6 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
   public final long limit;
   public final long offset;
   public final long groupFetchLimit;
-  public final long snapshotDiffFromCurrentTime;
   public final KuduScanStats scanStats;
 
   private final List<List<CalciteKuduPredicate>> predicates;
@@ -106,45 +102,42 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
    * A KuduEnumerable is an {@link Enumerable} for Kudu that can be configured to
    * be sorted.
    * 
-   * @param predicates                  list of the filters for each disjoint Kudu
-   *                                    Scan
-   * @param columnIndices               the column indexes to fetch from the table
-   * @param client                      Kudu client that will execute the scans
-   * @param calciteKuduTable            table metadata for the scan
-   * @param limit                       the number of rows this should return. -1
-   *                                    indicates no limit
-   * @param offset                      the number of rows from kudu to skip prior
-   *                                    to returning rows
-   * @param snapshotDiffFromCurrentTime time in milliseconds before current time
-   *                                    to read table state at
-   * @param sort                        whether or not have Kudu RPCs come back in
-   *                                    sorted by primary key
-   * @param groupBySorted               when sorted, and
-   *                                    {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)}
-   * @param scanStats                   a container of scan stats that should be
-   *                                    updated as the scan executes.
-   * @param cancelFlag                  boolean indicating the end process has
-   *                                    asked the query to finish.
-   * @param projection                  function to translate
-   *                                    {@link org.apache.kudu.client.RowResult}
-   *                                    into Calcite
-   * @param filterFunction              filter applied to every
-   *                                    {@link org.apache.kudu.client.RowResult}
-   * @param isSingleObject              whether or not Calcite object is an Object
-   *                                    or an
-   * @param sortedPrefixKeySelector     the subset of columns being sorted by that
-   *                                    are a prefix of the primary key of the
-   *                                    table, or an empty list if the group by
-   *                                    and order by columns are the same (only
-   *                                    used if groupBySorted is true)
-   * @param sortPkColumnNames           the names of the primary key columns that
-   *                                    are present in the ORDER BY clause
+   * @param predicates              list of the filters for each disjoint Kudu
+   *                                Scan
+   * @param columnIndices           the column indexes to fetch from the table
+   * @param client                  Kudu client that will execute the scans
+   * @param calciteKuduTable        table metadata for the scan
+   * @param limit                   the number of rows this should return. -1
+   *                                indicates no limit
+   * @param offset                  the number of rows from kudu to skip prior to
+   *                                returning rows
+   * @param sort                    whether or not have Kudu RPCs come back in
+   *                                sorted by primary key
+   * @param groupBySorted           when sorted, and
+   *                                {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)}
+   * @param scanStats               a container of scan stats that should be
+   *                                updated as the scan executes.
+   * @param cancelFlag              boolean indicating the end process has asked
+   *                                the query to finish.
+   * @param projection              function to translate
+   *                                {@link org.apache.kudu.client.RowResult} into
+   *                                Calcite
+   * @param filterFunction          filter applied to every
+   *                                {@link org.apache.kudu.client.RowResult}
+   * @param isSingleObject          whether or not Calcite object is an Object or
+   *                                an
+   * @param sortedPrefixKeySelector the subset of columns being sorted by that are
+   *                                a prefix of the primary key of the table, or
+   *                                an empty list if the group by and order by
+   *                                columns are the same (only used if
+   *                                groupBySorted is true)
+   * @param sortPkColumnNames       the names of the primary key columns that are
+   *                                present in the ORDER BY clause
    */
   public KuduEnumerable(final List<List<CalciteKuduPredicate>> predicates, final List<Integer> columnIndices,
       final AsyncKuduClient client, final CalciteKuduTable calciteKuduTable, final long limit, final long offset,
-      final long snapshotDiffFromCurrentTime, final boolean sort, final boolean groupBySorted,
-      final KuduScanStats scanStats, final AtomicBoolean cancelFlag, final Function1<Object, Object> projection,
-      final Predicate1<Object> filterFunction, final boolean isSingleObject,
+      final boolean sort, final boolean groupBySorted, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
+      final Function1<Object, Object> projection, final Predicate1<Object> filterFunction, final boolean isSingleObject,
       final Function1<Object, Object> sortedPrefixKeySelector, final List<String> sortPkColumnNames) {
     this.scansShouldStop = new AtomicBoolean(false);
     this.cancelFlag = cancelFlag;
@@ -182,8 +175,6 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     } else {
       groupFetchLimit = Long.MAX_VALUE;
     }
-
-    this.snapshotDiffFromCurrentTime = snapshotDiffFromCurrentTime;
   }
 
   @VisibleForTesting
@@ -599,9 +590,10 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       // Allows for consistent row order in reads as it puts in ORDERED by Pk when
       // faultTolerant is set to true
       // setFaultTolerant to true sets the ReadMode to READ_AT_SNAPSHOT
-      // setting snapshot time to time set through constructor or else default to
+      // setting snapshot time to time set from CalciteKuduTable or else default to
       // 0ms/current time.
-      tokenBuilder.snapshotTimestampMicros((System.currentTimeMillis() * 1000) - (snapshotDiffFromCurrentTime * 1000));
+      tokenBuilder.snapshotTimestampMicros(
+          (System.currentTimeMillis() * 1000) - (calciteKuduTable.readSnapshotTimeDifference * 1000));
       tokenBuilder.setFaultTolerant(true);
 
       if (!columnIndices.isEmpty()) {
@@ -654,9 +646,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     // same one.
     final List<List<CalciteKuduPredicate>> merged = KuduPredicatePushDownVisitor.mergePredicateLists(SqlKind.AND,
         this.predicates, conjunctions);
-    return new KuduEnumerable(merged, columnIndices, client, calciteKuduTable, limit, offset,
-        snapshotDiffFromCurrentTime, sort, groupBySorted, scanStats, cancelFlag, projection, filterFunction,
-        isSingleObject, sortedPrefixKeySelector, sortPkColumnNames);
+    return new KuduEnumerable(merged, columnIndices, client, calciteKuduTable, limit, offset, sort, groupBySorted,
+        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumnNames);
   }
 
   /**

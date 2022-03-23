@@ -109,9 +109,6 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
 
     final Expression offset = list.append("offset", Expressions.constant(kuduImplementor.offset));
 
-    final Expression snapshotDiffFromCurrentTime = list.append("snapshotDiffFromCurrentTime",
-        Expressions.constant(kuduImplementor.snapshotDiffFromCurrentTime));
-
     final Expression sorted = list.append("sorted", Expressions.constant(kuduImplementor.sorted));
 
     final Expression table = list.append("table",
@@ -232,9 +229,9 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
         implementor.stash(kuduImplementor.sortPkColumns, List.class));
 
     final Expression enumerable = list.append("enumerable",
-        Expressions.call(table, KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit, offset,
-            snapshotDiffFromCurrentTime, sorted, Expressions.constant(kuduImplementor.groupByLimited), scanStats,
-            cancelBoolean, mapFunction, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumns));
+        Expressions.call(table, KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit, offset, sorted,
+            Expressions.constant(kuduImplementor.groupByLimited), scanStats, cancelBoolean, mapFunction, filterFunction,
+            isSingleObject, sortedPrefixKeySelector, sortPkColumns));
 
     Hook.QUERY_PLAN.run(predicates);
     list.add(Expressions.return_(null, enumerable));

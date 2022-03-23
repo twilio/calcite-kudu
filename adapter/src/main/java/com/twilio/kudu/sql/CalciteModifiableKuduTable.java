@@ -56,9 +56,10 @@ public class CalciteModifiableKuduTable extends CalciteKuduTable implements Modi
   CalciteModifiableKuduTable(final KuduTable kuduTable, final AsyncKuduClient client,
       final List<Integer> descendingOrderColumnIndexes, final int timestampColumnIndex,
       final List<CalciteKuduTable> cubeTables, final TableType tableType,
-      final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType, final boolean disableCubeAggregations) {
+      final CubeTableInfo.EventTimeAggregationType eventTimeAggregationType, final long readSnapshotTimeDifference,
+      final boolean disableCubeAggregations) {
     super(kuduTable, client, descendingOrderColumnIndexes, timestampColumnIndex, cubeTables, tableType,
-        eventTimeAggregationType);
+        eventTimeAggregationType, readSnapshotTimeDifference);
     this.disableCubeAggregations = disableCubeAggregations;
   }
 

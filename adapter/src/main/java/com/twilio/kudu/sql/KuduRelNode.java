@@ -15,7 +15,6 @@
 package com.twilio.kudu.sql;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptTable;
@@ -75,7 +74,6 @@ public interface KuduRelNode extends RelNode {
     public final List<List<CalciteKuduPredicate>> predicates = new ArrayList<>();
     public long limit = -1;
     public long offset = -1;
-    public long snapshotDiffFromCurrentTime = 0l;
     public boolean sorted = false;
     public boolean groupByLimited = false;
     // if groupByLimited is true and sortPkPrefixColumns is empty
