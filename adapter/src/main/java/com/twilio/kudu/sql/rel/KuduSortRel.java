@@ -111,7 +111,7 @@ public class KuduSortRel extends Sort implements KuduRelNode {
     }
 
     implementor.groupByLimited = groupBySorted;
-    implementor.sortPkPrefixColumns = sortPkPrefixColumns;
-    implementor.sortPkColumns = sortPkColumns;
+    implementor.sortPkPrefixColumns.addAll(sortPkPrefixColumns);
+    implementor.sortPkColumns.addAll(sortPkColumns);
   }
 }
