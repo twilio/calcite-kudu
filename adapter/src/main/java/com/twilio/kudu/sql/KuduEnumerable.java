@@ -402,13 +402,12 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       return Linq4j.emptyEnumerator();
     }
 
-    final Schema projectedSchema = scanners.get(0).getProjectionSchema();
-
     if (sort) {
       final List<ScannerCallback> callbacks = scanners.stream().map(scanner -> {
         final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>();
-        return new ScannerCallback(calciteKuduTable, scanner, rowResults, scansShouldStop, cancelFlag, projectedSchema,
-            scanStats, true, projection, filterFunction, isSingleObject, sortPkColumnNames);
+        return new ScannerCallback(calciteKuduTable, scanner, rowResults, scansShouldStop, cancelFlag,
+            scanner.getProjectionSchema(), scanStats, true, projection, filterFunction, isSingleObject,
+            sortPkColumnNames);
       }).collect(Collectors.toList());
       callbacks.stream().forEach(callback -> callback.nextBatch());
 
@@ -418,8 +417,9 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     }
     final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages = new LinkedBlockingQueue<>();
     scanners.stream().map(scanner -> {
-      return new ScannerCallback(calciteKuduTable, scanner, messages, scansShouldStop, cancelFlag, projectedSchema,
-          scanStats, false, projection, filterFunction, isSingleObject, sortPkColumnNames);
+      return new ScannerCallback(calciteKuduTable, scanner, messages, scansShouldStop, cancelFlag,
+          scanner.getProjectionSchema(), scanStats, false, projection, filterFunction, isSingleObject,
+          sortPkColumnNames);
     }).forEach(callback -> callback.nextBatch());
 
     return unsortedEnumerator(scanners, messages);
