@@ -15,11 +15,11 @@
 package com.twilio.kudu.sql;
 
 public enum TableType {
-  FACT(20000000.0d), CUBE(2000000.0), DIMENSION(1000.0), SYSTEM(1000.0);
+  FACT(1e12d), CUBE(1e9d), DIMENSION(1000.0), SYSTEM(1000.0);
 
   private double estimatedRowCount;
 
-  private TableType(final double estimatedRowCount) {
+  TableType(final double estimatedRowCount) {
     this.estimatedRowCount = Double.valueOf(estimatedRowCount);
   }
 

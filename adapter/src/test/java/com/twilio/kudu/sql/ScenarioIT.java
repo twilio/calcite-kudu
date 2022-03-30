@@ -14,16 +14,15 @@
  */
 package com.twilio.kudu.sql;
 
-import com.twilio.kudu.dataloader.DataLoader;
-import com.twilio.kudu.dataloader.Scenario;
-import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
-import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
-import com.twilio.kudu.sql.schema.KuduSchema;
 import org.apache.calcite.rel.core.RelFactories;
-import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
-import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.kudu.test.KuduTestHarness;
+
+import com.twilio.kudu.dataloader.DataLoader;
+import com.twilio.kudu.dataloader.Scenario;
+import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
+import com.twilio.kudu.sql.schema.KuduSchema;
+
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -35,9 +34,13 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -48,15 +51,17 @@ public class ScenarioIT {
   @ClassRule
   public static KuduTestHarness testHarness = new KuduTestHarness();
   private static String JDBC_URL;
+  private static String JDBC_URL_VIEWS_DISABLED;
   private static Scenario usageReportTransactionScenario;
 
   @BeforeClass
   public static void setup() throws SQLException, IOException {
     initializeHints();
     String urlFormat = JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED + ";schema."
-        + KuduSchema.CREATE_DUMMY_PARTITION_FLAG + "=false";
+        + KuduSchema.CREATE_DUMMY_PARTITION_FLAG + "=false" + ";schema." + KuduSchema.DISABLE_SCHEMA_CACHE + "=true";
     JDBC_URL = String.format(urlFormat, DefaultKuduSchemaFactory.class.getName(),
         testHarness.getMasterAddressesAsString());
+    JDBC_URL_VIEWS_DISABLED = JDBC_URL + ";schema." + KuduSchema.DISABLE_MATERIALIZED_VIEWS + "=true";
 
     // create the UsageReportTransactions table
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
@@ -107,8 +112,66 @@ public class ScenarioIT {
     }
   }
 
+  public static void assertResultSetEquals(ResultSet rs1, ResultSet rs2) throws SQLException {
+    ResultSetMetaData rsmd1 = rs1.getMetaData();
+    ResultSetMetaData rsmd2 = rs2.getMetaData();
+    int columnCount = rsmd1.getColumnCount();
+    assertEquals("Row count doesn't match", columnCount, rsmd2.getColumnCount());
+    Set<List<Object>> factData = new HashSet<>();
+    Set<List<Object>> cubeData = new HashSet<>();
+    while (rs1.next() && rs2.next()) {
+      List<Object> factRow = new ArrayList<>();
+      List<Object> cubeRow = new ArrayList<>();
+      for (int i = 0; i < columnCount; ++i) {
+        factRow.add(rs1.getObject(i + 1));
+        cubeRow.add(rs2.getObject(i + 1));
+      }
+      factData.add(factRow);
+      cubeData.add(cubeRow);
+    }
+    assertEquals(factData, cubeData);
+  }
+
+  private void validateData(final String tableName, String viewName, String sql) throws SQLException {
+    try (Connection conn1 = DriverManager.getConnection(JDBC_URL_VIEWS_DISABLED);
+        Connection conn2 = DriverManager.getConnection(JDBC_URL)) {
+
+      // verify the query used the fact table if views are disabled
+      ResultSet rs = conn2.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertTrue("Unexpected plan", plan.contains(viewName));
+
+      // verify the query uses the view if they are enabled
+      rs = conn1.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      plan = SqlUtil.getExplainPlan(rs);
+      assertTrue("Unexpected plan", plan.contains(tableName));
+
+      ResultSet rs1 = conn1.createStatement().executeQuery(sql);
+      ResultSet rs2 = conn2.createStatement().executeQuery(sql);
+      assertResultSetEquals(rs1, rs2);
+    }
+  }
+
   @Test
   public void testOutboundMessages() throws IOException, SQLException {
+    String tableName = "ReportCenter.OutboundMessages";
+    String view1 = "SELECT COUNT(*) as \"count_records\" " + "FROM \"ReportCenter.OutboundMessages\" "
+        + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO HOUR), \"sub_account_sid\", "
+        + "\"msg_app_sid\", \"status\", \"error_code\", \"to_cc\", \"channel\", \"num_segments\", \"mcc\", \"mnc\"";
+    String view2 = "SELECT SUM(\"base_price\") as \"sum_base_price\", COUNT(*) as \"count_records\" "
+        + "FROM \"ReportCenter.OutboundMessages\" "
+        + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
+        + "\"msg_app_sid\", \"error_code\", \"to_cc\", \"mcc\", \"mnc\", \"provide_feedback\", \"feedback_outcome\"";
+    String view3 = "SELECT COUNT(*) as \"count_records\" " + "FROM \"ReportCenter.OutboundMessages\" "
+        + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
+        + "\"msg_app_sid\", \"status\", \"error_code\", \"to_cc\", \"channel\", \"num_segments\", \"mcc\", \"mnc\"";
+    String view4 = "SELECT COUNT(*) as \"count_records\" " + "FROM \"ReportCenter.OutboundMessages\" "
+        + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
+        + "\"msg_app_sid\", \"phone_number\", \"status\", \"error_code\", \"to_cc\", \"channel\", "
+        + "\"num_segments\", \"mcc\", \"mnc\"";
+    String view5 = "SELECT COUNT(*) as \"count_records\" " + "FROM \"ReportCenter.OutboundMessages\" "
+        + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
+        + "\"status\", \"error_code\", \"to_cc\", \"channel\", \"num_segments\", \"mcc\", \"mnc\"";
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String ddl = "CREATE TABLE \"ReportCenter.OutboundMessages\" (" + "\"account_sid\" VARCHAR, "
           + "\"date_created\" TIMESTAMP DESC ROW_TIMESTAMP, " + "\"sid\" VARCHAR, " + "\"mcc\" VARCHAR, "
@@ -121,36 +184,19 @@ public class ScenarioIT {
           + "PARTITION BY HASH (\"account_sid\") PARTITIONS 2 NUM_REPLICAS 1";
       conn.createStatement().execute(ddl);
 
-      String ddl1 = "CREATE MATERIALIZED VIEW \"MessagingAppHourly\" AS " + "SELECT COUNT(*) as \"count_records\" "
-          + "FROM \"ReportCenter.OutboundMessages\" "
-          + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO HOUR), \"sub_account_sid\", "
-          + "\"msg_app_sid\", \"status\", \"error_code\", \"to_cc\", \"channel\", \"num_segments\", \"mcc\", \"mnc\"";
+      String ddl1 = "CREATE MATERIALIZED VIEW \"MessagingAppHourly\" AS " + view1;
       conn.createStatement().execute(ddl1);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"Feedback\" AS "
-          + "SELECT SUM(\"base_price\") as \"sum_base_price\", COUNT(*) as \"count_records\" "
-          + "FROM \"ReportCenter.OutboundMessages\" "
-          + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
-          + "\"msg_app_sid\", \"error_code\", \"to_cc\", \"mcc\", \"mnc\", \"provide_feedback\", \"feedback_outcome\"";
+      String ddl2 = "CREATE MATERIALIZED VIEW \"Feedback\" AS " + view2;
       conn.createStatement().execute(ddl2);
 
-      String ddl3 = "CREATE MATERIALIZED VIEW \"MessagingApp\" AS " + "SELECT COUNT(*) as \"count_records\" "
-          + "FROM \"ReportCenter.OutboundMessages\" "
-          + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
-          + "\"msg_app_sid\", \"status\", \"error_code\", \"to_cc\", \"channel\", \"num_segments\", \"mcc\", \"mnc\"";
+      String ddl3 = "CREATE MATERIALIZED VIEW \"MessagingApp\" AS " + view3;
       conn.createStatement().execute(ddl3);
 
-      String ddl4 = "CREATE MATERIALIZED VIEW \"PhoneNumber\" AS " + "SELECT COUNT(*) as \"count_records\" "
-          + "FROM \"ReportCenter.OutboundMessages\" "
-          + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
-          + "\"msg_app_sid\", \"phone_number\", \"status\", \"error_code\", \"to_cc\", \"channel\", "
-          + "\"num_segments\", \"mcc\", \"mnc\"";
+      String ddl4 = "CREATE MATERIALIZED VIEW \"PhoneNumber\" AS " + view4;
       conn.createStatement().execute(ddl4);
 
-      String ddl5 = "CREATE MATERIALIZED VIEW \"SubAccount\" AS " + "SELECT COUNT(*) as \"count_records\" "
-          + "FROM \"ReportCenter.OutboundMessages\" "
-          + "GROUP BY \"account_sid\", FLOOR(\"date_created\" TO DAY), \"sub_account_sid\", "
-          + "\"status\", \"error_code\", \"to_cc\", \"channel\", \"num_segments\", \"mcc\", \"mnc\"";
+      String ddl5 = "CREATE MATERIALIZED VIEW \"SubAccount\" AS " + view5;
       conn.createStatement().execute(ddl5);
     }
 
@@ -159,49 +205,18 @@ public class ScenarioIT {
 
     // load data
     new DataLoader(JDBC_URL, scenario).loadData(Optional.empty());
-    // verify data was written
-    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
-      ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM \"ReportCenter.OutboundMessages\"");
-      assertTrue(rs.next());
-      assertEquals(scenario.getNumRows(), rs.getInt(1));
-      assertFalse(rs.next());
 
-      // verify the cube row counts match
-      rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-MessagingAppHourly-Hour-Aggregation\"");
-      assertTrue(rs.next());
-      assertEquals(scenario.getNumRows(), rs.getInt(1));
-      assertFalse(rs.next());
-
-      rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-Feedback-Day-Aggregation\"");
-      assertTrue(rs.next());
-      assertEquals(scenario.getNumRows(), rs.getInt(1));
-      assertFalse(rs.next());
-
-      rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-MessagingApp-Day-Aggregation\"");
-      assertTrue(rs.next());
-      assertEquals(scenario.getNumRows(), rs.getInt(1));
-      assertFalse(rs.next());
-
-      rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-PhoneNumber-Day-Aggregation\"");
-      assertTrue(rs.next());
-      assertEquals(scenario.getNumRows(), rs.getInt(1));
-      assertFalse(rs.next());
-
-      rs = conn.createStatement().executeQuery(
-          "SELECT SUM(count_records) FROM " + "\"ReportCenter.OutboundMessages-SubAccount-Day-Aggregation\"");
-      assertTrue(rs.next());
-      assertEquals(scenario.getNumRows(), rs.getInt(1));
-      assertFalse(rs.next());
-    }
+    validateData(tableName, "MessagingAppHourly", view1);
+    validateData(tableName, "Feedback", view2);
+    validateData(tableName, "MessagingApp", view3);
+    validateData(tableName, "PhoneNumber", view4);
+    validateData(tableName, "SubAccount", view5);
   }
 
   @Test
   public void testKuduNestedLoopJoin() throws Exception {
-    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+    // TODO see if KuduNestedJoin rule is required after enabling views
+    try (Connection conn = DriverManager.getConnection(JDBC_URL_VIEWS_DISABLED)) {
       String ddl2 = "CREATE TABLE \"OrganizationAccounts\" (" + "\"organization_sid\" VARCHAR, "
           + "\"account_sid\" VARCHAR, " + "PRIMARY KEY (\"organization_sid\", \"account_sid\"))"
           + "PARTITION BY HASH (\"organization_sid\") PARTITIONS 2 NUM_REPLICAS 1";
@@ -261,21 +276,80 @@ public class ScenarioIT {
   }
 
   @Test
-  public void testUsageReportTransactions() throws IOException, SQLException {
+  public void testUsageReportTransactions() throws SQLException {
     // verify data was written
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
-      ResultSet rs = conn.createStatement()
-          .executeQuery("SELECT COUNT(*) FROM \"ReportCenter.UsageReportTransactions\"");
+      ResultSet rs = conn.createStatement().executeQuery(
+          "SELECT COUNT(*), SUM(\"amount\") as \"sum_amount\", SUM(\"quantity\") as \"sum_quantity\" FROM \"ReportCenter.UsageReportTransactions\"");
       assertTrue(rs.next());
       assertEquals(usageReportTransactionScenario.getNumRows(), rs.getInt(1));
+      long fact_sum_amount = rs.getLong(2);
+      long fact_sum_quantity = rs.getLong(3);
       assertFalse(rs.next());
 
       // verify the cube row counts match
       rs = conn.createStatement().executeQuery(
-          "SELECT SUM(\"count_records\") FROM " + "\"ReportCenter.UsageReportTransactions-Cube-Day-Aggregation\"");
+          "SELECT SUM(\"count_records\"), SUM(\"sum_amount\") as \"sum_amount\", SUM(\"sum_quantity\") as \"sum_quantity\" FROM "
+              + "\"ReportCenter.UsageReportTransactions-Cube-Day-Aggregation\"");
       assertTrue(rs.next());
       assertEquals(usageReportTransactionScenario.getNumRows(), rs.getInt(1));
+      long cube_sum_amount = rs.getLong(2);
+      long cube_sum_quantity = rs.getLong(3);
       assertFalse(rs.next());
+
+      assertEquals(fact_sum_amount, cube_sum_amount);
+      assertEquals(fact_sum_quantity, cube_sum_quantity);
+
+      // validate union query is used when time range is greater than one UTC day
+      String sql = "SELECT COUNT(*) as \"count_records\"" + "FROM \"ReportCenter.UsageReportTransactions\" "
+          + "WHERE date_initiated >= TIMESTAMP'2020-06-02 00:30:30' AND date_initiated < "
+          + "TIMESTAMP'2020-06-07 00:30:30'" + "GROUP BY \"usage_account_sid\", FLOOR(\"date_initiated\" TO DAY) ";
+      conn.createStatement().execute(sql);
+
+      ResultSet rs0 = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs0);
+      String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], count_records=[$t2])\n"
+          + "  EnumerableAggregate(group=[{0, 1}], count_records=[$SUM0($2)])\n" + "    EnumerableUnion(all=[true])\n"
+          + "      EnumerableAggregate(group=[{0, 1}], count_records=[COUNT()])\n" + "        KuduToEnumerableRel\n"
+          + "          KuduProjectRel(USAGE_ACCOUNT_SID=[$0], $f1=[FLOOR($1, FLAG(DAY))])\n"
+          + "            KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1591057830000000, date_initiated LESS 1591142400000000], ScanToken 2=[date_initiated GREATER_EQUAL 1591488000000000, date_initiated LESS 1591489830000000])\n"
+          + "              KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n"
+          + "      EnumerableAggregate(group=[{0, 1}], count_records=[$SUM0($7)])\n" + "        KuduToEnumerableRel\n"
+          + "          KuduProjectRel(USAGE_ACCOUNT_SID=[$0], EXPR$1=[$1], BILLABLE_ITEM=[CAST($2):VARCHAR], UNITS=[CAST($3):SMALLINT], SUB_ACCOUNT_SID=[CAST($4):VARCHAR], EXPR$5=[CAST($5):DECIMAL(19, 0)], EXPR$6=[CAST($6):DECIMAL(19, 0)], EXPR$7=[$7])\n"
+          + "            KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1591142400000000, date_initiated LESS 1591488000000000])\n"
+          + "              KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions-Cube-Day-Aggregation]])\n";
+      assertEquals("Full SQL plan has changed\n", expectedPlan, plan);
+      validateData("ReportCenter.UsageReportTransactions", "Cube-Day-Aggregation", sql);
+
+      // validate view is used when time range spans exactly one UTC day
+      sql = "SELECT COUNT(*) as \"count_records\"" + "FROM \"ReportCenter.UsageReportTransactions\" "
+          + "WHERE date_initiated >= TIMESTAMP'2020-06-02 00:00:00' AND date_initiated < "
+          + "TIMESTAMP'2020-06-07 00:00:00'" + "GROUP BY \"usage_account_sid\", FLOOR(\"date_initiated\" TO DAY) ";
+      conn.createStatement().execute(sql);
+
+      rs0 = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      plan = SqlUtil.getExplainPlan(rs0);
+      expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], count_records=[$t2])\n"
+          + "  EnumerableAggregate(group=[{0, 1}], count_records=[$SUM0($7)])\n" + "    KuduToEnumerableRel\n"
+          + "      KuduProjectRel(USAGE_ACCOUNT_SID=[$0], EXPR$1=[$1], BILLABLE_ITEM=[CAST($2):VARCHAR], UNITS=[CAST($3):SMALLINT], SUB_ACCOUNT_SID=[CAST($4):VARCHAR], EXPR$5=[CAST($5):DECIMAL(19, 0)], EXPR$6=[CAST($6):DECIMAL(19, 0)], EXPR$7=[$7])\n"
+          + "        KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1591056000000000, date_initiated LESS 1591488000000000])\n"
+          + "          KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions-Cube-Day-Aggregation]])\n";
+      assertEquals("Full SQL plan has changed\n", expectedPlan, plan);
+      validateData("ReportCenter.UsageReportTransactions", "Cube-Day-Aggregation", sql);
+
+      // validate fact table is used when time rage is less than one day
+      sql = "SELECT COUNT(*) as \"count_records\"" + "FROM \"ReportCenter.UsageReportTransactions\" "
+          + "WHERE date_initiated >= TIMESTAMP'2020-06-02 00:00:00' AND date_initiated < "
+          + "TIMESTAMP'2020-06-02 23:59:59'" + "GROUP BY \"usage_account_sid\", FLOOR(\"date_initiated\" TO DAY) ";
+      conn.createStatement().execute(sql);
+
+      rs0 = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      plan = SqlUtil.getExplainPlan(rs0);
+      expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], count_records=[$t2])\n"
+          + "  EnumerableAggregate(group=[{0, 1}], count_records=[COUNT()])\n" + "    KuduToEnumerableRel\n"
+          + "      KuduProjectRel(usage_account_sid=[$0], $f1=[FLOOR($1, FLAG(DAY))])\n"
+          + "        KuduFilterRel(ScanToken 1=[date_initiated GREATER_EQUAL 1591056000000000, date_initiated LESS 1591142399000000])\n"
+          + "          KuduQuery(table=[[kudu, ReportCenter.UsageReportTransactions]])\n";
     }
   }
 

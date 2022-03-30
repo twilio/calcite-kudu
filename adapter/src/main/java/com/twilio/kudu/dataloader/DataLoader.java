@@ -14,20 +14,20 @@
  */
 package com.twilio.kudu.dataloader;
 
-import com.twilio.kudu.dataloader.generator.ColumnValueGenerator;
-import com.twilio.kudu.dataloader.generator.MultipleColumnValueGenerator;
-import com.twilio.kudu.dataloader.generator.UniformLongValueGenerator;
-import com.twilio.kudu.sql.CalciteModifiableKuduTable;
-import com.twilio.kudu.sql.schema.BaseKuduSchemaFactory;
 import org.apache.calcite.avatica.util.DateTimeUtils;
-import com.twilio.kudu.sql.CalciteKuduTable;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.jdbc.KuduCalciteConnectionImpl;
 import org.apache.calcite.jdbc.KuduMetaImpl;
 import org.apache.calcite.runtime.SqlFunctions;
 import org.apache.kudu.ColumnSchema;
-import org.apache.kudu.Schema;
-import org.apache.kudu.Type;
+
+import com.twilio.kudu.dataloader.generator.ColumnValueGenerator;
+import com.twilio.kudu.dataloader.generator.MultipleColumnValueGenerator;
+import com.twilio.kudu.dataloader.generator.UniformLongValueGenerator;
+import com.twilio.kudu.sql.CalciteKuduTable;
+import com.twilio.kudu.sql.CalciteModifiableKuduTable;
+import com.twilio.kudu.sql.schema.BaseKuduSchemaFactory;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,7 +38,6 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Date;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
@@ -53,7 +52,7 @@ public class DataLoader {
   private static final Logger logger = LoggerFactory.getLogger(DataLoader.class);
 
   private final ExecutorService threadPool;
-  private final CompletionService<Void> completionService;
+  private final CompletionService<Exception> completionService;
   private final int threadPoolSize;
 
   private final Scenario scenario;
@@ -133,7 +132,7 @@ public class DataLoader {
       } else {
         builder.append(",");
       }
-      builder.append("\"").append(columnSchema.getName()).append("\"");
+      builder.append("\"").append(columnSchema.getName().toUpperCase()).append("\"");
     }
     builder.append(") VALUES (");
     for (int i = 0; i < calciteKuduTable.getKuduTable().getSchema().getColumnCount(); i++) {
@@ -310,7 +309,7 @@ public class DataLoader {
 
       // callable implemented as lambda expression
       final int threadIndex = t;
-      Callable<Void> callableObj = () -> {
+      Callable<Exception> callableObj = () -> {
         logger.info("thread{} start timestamp {}", threadIndex, new Date(threadStartTimestamp));
         logger.info("thread{} end timestamp {}", threadIndex, new Date(threadEndTimestamp));
         long numRowsPerThread = numRows / threadPoolSize;
@@ -362,6 +361,8 @@ public class DataLoader {
             KuduMetaImpl kuduMetaImpl = (conn.unwrap(KuduCalciteConnectionImpl.class)).getMeta();
             kuduMetaImpl.clearMutationState();
           }
+        } catch (Exception e) {
+          return e;
         }
         logger.info("Total number of rows committed {} time taken {}", numRowsPerThread,
             (System.currentTimeMillis() - threadStartTime));
@@ -373,10 +374,13 @@ public class DataLoader {
 
     for (int i = 0; i < threadPoolSize; i++) {
       try {
-        Future<Void> result = completionService.take();
-        result.get();
+        Future<Exception> result = completionService.take();
+        Exception e = result.get();
+        if (e != null) {
+          throw new RuntimeException(e);
+        }
       } catch (Exception e) {
-        logger.error("Got an exception while writing", e);
+        throw new RuntimeException(e);
       }
     }
     logger.info("Total number of rows committed {} time taken {} ", numRows, (System.currentTimeMillis() - startTime));

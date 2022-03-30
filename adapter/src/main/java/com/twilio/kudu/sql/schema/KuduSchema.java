@@ -14,14 +14,28 @@
  */
 package com.twilio.kudu.sql.schema;
 
+import com.google.common.collect.Maps;
 import com.twilio.kudu.sql.metadata.CubeTableInfo;
 import com.twilio.kudu.sql.metadata.KuduTableMetadata;
 import com.twilio.kudu.sql.CalciteKuduTableBuilder;
 import com.twilio.kudu.sql.CalciteModifiableKuduTable;
 import com.twilio.kudu.sql.CalciteKuduTable;
+import org.apache.calcite.avatica.util.Casing;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.runtime.Hook;
+import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
+import org.apache.calcite.schema.impl.MaterializedViewTable;
+import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.SqlWriter;
+import org.apache.calcite.sql.SqlWriterConfig;
+import org.apache.calcite.sql.parser.SqlParseException;
+import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.pretty.SqlPrettyWriter;
+import org.apache.calcite.util.Util;
 import org.apache.kudu.ColumnSchema;
+import org.apache.kudu.Schema;
 import org.apache.kudu.client.AsyncKuduClient;
 import org.apache.kudu.client.KuduTable;
 import org.json.JSONException;
@@ -35,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public final class KuduSchema extends AbstractSchema {
@@ -44,6 +59,10 @@ public final class KuduSchema extends AbstractSchema {
   private final AsyncKuduClient client;
   private final Map<String, KuduTableMetadata> kuduTableMetadataMap;
   private Optional<Map<String, Table>> cachedTableMap = Optional.empty();
+  private Map<String, String> materializedViewSqls = new ConcurrentHashMap<>();
+  private final SchemaPlus parentSchema;
+  private final String name;
+  private final Hook.Closeable addMaterializationsHook;
 
   // properties
   public static String KUDU_CONNECTION_STRING = "connect";
@@ -51,14 +70,17 @@ public final class KuduSchema extends AbstractSchema {
   public static String DISABLE_CUBE_AGGREGATIONS = "disableCubeAggregation";
   public static String CREATE_DUMMY_PARTITION_FLAG = "createDummyPartition";
   public static String READ_SNAPSHOT_TIME_DIFFERENCE = "readSnapshotTimeDifference";
+  public static String DISABLE_SCHEMA_CACHE = "disableSchemaCache";
+  public static String DISABLE_MATERIALIZED_VIEWS = "disableMaterializedViews";
 
   public final boolean enableInserts;
   public final boolean disableCubeAggregation;
+  public final boolean disableMaterializedViews;
   public final boolean createDummyPartition;
   public final long readSnapshotTimeDifference;
 
-  public KuduSchema(final String connectString, final Map<String, KuduTableMetadata> kuduTableMetadataMap,
-      final Map<String, Object> propertyMap) {
+  public KuduSchema(final SchemaPlus parentSchema, final String name, final String connectString,
+      final Map<String, KuduTableMetadata> kuduTableMetadataMap, final Map<String, Object> propertyMap) {
     this.client = new AsyncKuduClient.AsyncKuduClientBuilder(connectString).build();
     this.kuduTableMetadataMap = kuduTableMetadataMap;
     // We disable inserts by default as this feature has not been thoroughly tested
@@ -68,9 +90,14 @@ public final class KuduSchema extends AbstractSchema {
     // DataLoader (useful only for performance testing)
     this.disableCubeAggregation = Boolean
         .valueOf((String) propertyMap.getOrDefault(DISABLE_CUBE_AGGREGATIONS, "false"));
+    this.disableMaterializedViews = Boolean
+        .valueOf((String) propertyMap.getOrDefault(DISABLE_MATERIALIZED_VIEWS, "false"));
     this.createDummyPartition = Boolean.valueOf((String) propertyMap.getOrDefault(CREATE_DUMMY_PARTITION_FLAG, "true"));
     this.readSnapshotTimeDifference = Long
         .valueOf((String) propertyMap.getOrDefault(READ_SNAPSHOT_TIME_DIFFERENCE, "0"));
+    this.parentSchema = parentSchema;
+    this.name = name;
+    this.addMaterializationsHook = prepareAddMaterializationsHook();
   }
 
   public void clearCachedTableMap() {
@@ -92,7 +119,7 @@ public final class KuduSchema extends AbstractSchema {
     }
 
     Map<String, List<CubeTableInfo>> factToCubeListMap = new HashMap<>();
-    // populate the cubetables which were created using DDL statements.
+    // populate the cube tables which were created using DDL statements.
     for (String tableName : tableNames) {
       // cube table
       String[] tableNameSplit = tableName.split("-");
@@ -153,26 +180,93 @@ public final class KuduSchema extends AbstractSchema {
       KuduTableMetadata kuduTableMetadata = entry.getValue();
       final List<String> descendingOrderedColumnNames = kuduTableMetadata.getDescendingOrderedColumnNames();
 
+      String factTableName = entry.getKey();
       // create any cube tables first
       List<CalciteKuduTable> cubeTableList = new ArrayList<>(5);
+      String timestampColumnName = kuduTableMetadata.getTimestampColumnName();
       for (CubeTableInfo cubeTableInfo : kuduTableMetadata.getCubeTableInfo()) {
         Optional<KuduTable> cubeTableOptional = openKuduTable(cubeTableInfo.tableName);
-        cubeTableOptional.ifPresent(kuduTable -> {
-          final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client)
+        cubeTableOptional.ifPresent(cubeKuduTable -> {
+          final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(cubeKuduTable, client)
               .setEnableInserts(enableInserts).setDisableCubeAggregation(disableCubeAggregation)
               .setReadSnapshotTimeDifference(readSnapshotTimeDifference)
               .setTableType(com.twilio.kudu.sql.TableType.CUBE)
               .setEventTimeAggregationType(cubeTableInfo.eventTimeAggregationType);
-          setDescendingFieldIndices(builder, descendingOrderedColumnNames, kuduTable);
-          setTimestampColumnIndex(builder, kuduTableMetadata.getTimestampColumnName(), kuduTable);
+          setDescendingFieldIndices(builder, descendingOrderedColumnNames, cubeKuduTable);
+          setTimestampColumnIndex(builder, kuduTableMetadata.getTimestampColumnName(), cubeKuduTable);
           CalciteKuduTable calciteKuduTable = builder.build();
           tableMap.put(cubeTableInfo.tableName, calciteKuduTable);
           cubeTableList.add(calciteKuduTable);
+
+          StringBuilder queryBuilder = new StringBuilder("SELECT ");
+          // Add the group by columns to the SELECT
+          List<String> groupByCols = new ArrayList<>();
+          Schema cubeSchema = cubeKuduTable.getSchema();
+          for (int i = 0; i < cubeSchema.getPrimaryKeyColumnCount(); ++i) {
+            String colName = cubeSchema.getColumnByIndex(i).getName();
+            if (colName.equals(timestampColumnName)) {
+              groupByCols
+                  .add("FLOOR(\"" + colName.toUpperCase() + "\" TO " + cubeTableInfo.eventTimeAggregationType + ")");
+            } else {
+              groupByCols.add("\"" + colName.toUpperCase() + "\"");
+            }
+          }
+          queryBuilder.append(Util.toString(groupByCols, "", ", ", ""));
+          queryBuilder.append(" , ");
+
+          // Add the aggregate expressions columns to the SELECT
+          List<String> aggExprs = new ArrayList<>();
+          for (int i = cubeSchema.getPrimaryKeyColumnCount(); i < cubeSchema.getColumnCount(); ++i) {
+            String columnName = cubeSchema.getColumnByIndex(i).getName();
+            String aggregateFunction = columnName.substring(0, columnName.indexOf("_"));
+            String colName = columnName.substring(columnName.indexOf("_") + 1);
+            if (aggregateFunction.equalsIgnoreCase("COUNT")) {
+              aggExprs.add("COUNT(*)");
+            } else {
+              aggExprs.add(aggregateFunction + "(\"" + colName.toUpperCase() + "\")");
+            }
+          }
+          queryBuilder.append(Util.toString(aggExprs, "", ", ", ""));
+
+          queryBuilder.append(" FROM \"").append(factTableName).append("\"");
+
+          // Add the group by expressions to the query
+          queryBuilder.append(" GROUP BY ");
+          List<String> groupByExprs = new ArrayList<>();
+          for (int i = 0; i < cubeSchema.getPrimaryKeyColumnCount(); ++i) {
+            String colName = cubeSchema.getColumnByIndex(i).getName();
+            if (colName.equals(timestampColumnName)) {
+              groupByExprs
+                  .add("FLOOR(\"" + colName.toUpperCase() + "\" TO " + cubeTableInfo.eventTimeAggregationType + ")");
+            } else {
+              groupByExprs.add("\"" + colName.toUpperCase() + "\"");
+            }
+          }
+          queryBuilder.append(Util.toString(groupByExprs, "", ", ", ""));
+
+          // Parse and unparse the view query to get properly quoted field names
+          String query = queryBuilder.toString();
+          SqlParser.Config parserConfig = SqlParser.config().withUnquotedCasing(Casing.UNCHANGED);
+
+          SqlSelect parsedQuery;
+          try {
+            parsedQuery = (SqlSelect) SqlParser.create(query, parserConfig).parseQuery();
+          } catch (SqlParseException e) {
+            logger.error("Could not parse query {} for Kudu cube {}", query, cubeTableInfo.tableName);
+            throw new RuntimeException(e);
+          }
+
+          final StringBuilder buf = new StringBuilder(query.length());
+          final SqlWriterConfig config = SqlPrettyWriter.config().withAlwaysUseParentheses(true);
+          final SqlWriter writer = new SqlPrettyWriter(config, buf);
+          parsedQuery.unparse(writer, 0, 0);
+          query = buf.toString();
+
+          materializedViewSqls.put(cubeTableInfo.tableName, query);
         });
       }
 
       // create the fact table
-      String factTableName = entry.getKey();
       Optional<KuduTable> factTableOptional = openKuduTable(factTableName);
       factTableOptional.ifPresent(kuduTable -> {
         final CalciteKuduTableBuilder builder = new CalciteKuduTableBuilder(kuduTable, client)
@@ -258,6 +352,37 @@ public final class KuduSchema extends AbstractSchema {
     } catch (JSONException ex) {
       return null;
     }
+  }
+
+  /** Adds all materialized views defined in the schema to this column family. */
+  private void addMaterializedViews() {
+    // Close the hook use to get us here
+    addMaterializationsHook.close();
+
+    if (disableMaterializedViews) {
+      return;
+    }
+
+    for (Map.Entry<String, String> entry : materializedViewSqls.entrySet()) {
+      // Add the view for this query
+      String viewName = "$" + getTableNames().size();
+      SchemaPlus schema = parentSchema.getSubSchema(name);
+      CalciteSchema calciteSchema = CalciteSchema.from(schema);
+
+      List<String> viewPath = calciteSchema.path(viewName);
+
+      schema.add(viewName,
+          MaterializedViewTable.create(calciteSchema, entry.getValue(), null, viewPath, entry.getKey(), true));
+    }
+  }
+
+  @SuppressWarnings("deprecation")
+  private Hook.Closeable prepareAddMaterializationsHook() {
+    // It adds a global hook, so it should probably be replaced with a thread-local
+    // hook
+    return Hook.TRIMMED.add(node -> {
+      KuduSchema.this.addMaterializedViews();
+    });
   }
 
 }
