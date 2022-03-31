@@ -216,14 +216,13 @@ public class PaginationIT {
   public static Object[] validateRow(ResultSet rs, long expectedTimestamp, String expectedTransactionId,
       String expectedAccountSid) throws SQLException {
     String accountSid = rs.getString(ACCOUNT_SID);
-    String transactionId = rs.getString(3);
+    String transactionId = rs.getString(TRANSACTION_ID);
     long timestamp = rs.getTimestamp(DATE_INITIATED).toInstant().toEpochMilli();
     if (expectedAccountSid != null) {
       assertEquals("Mismatched usage account sid", expectedAccountSid, rs.getString(ACCOUNT_SID));
     }
     assertEquals("Mismatched date initiated", expectedTimestamp + 1, timestamp);
     assertEquals("Mismatched transaction id", expectedTransactionId, transactionId);
-//    System.out.println(rs.getString(ACCOUNT_SID) + " " + rs.getTimestamp(DATE_INITIATED) + " " + rs.getString(TRANSACTION_ID));
     return new Object[] { accountSid, timestamp, transactionId };
   }
 
@@ -274,7 +273,8 @@ public class PaginationIT {
       String sql = String.format(sqlFormat, tableName, ACCOUNT1);
 
       // verify plan
-      String expectedPlanFormat = "KuduToEnumerableRel\n" + "  KuduLimitRel(offset=[5], limit=[20])\n"
+      String expectedPlanFormat = "KuduToEnumerableRel\n"
+          + "  KuduSortRel(offset=[5], fetch=[20], groupBySorted=[false])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
       String expectedPlan = String.format(expectedPlanFormat, ACCOUNT1, tableName);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
@@ -481,19 +481,19 @@ public class PaginationIT {
       TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
       TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
       String dateInitiatedOrder = descending ? "DESC" : "ASC";
-      String firstBatchSqlFormat = "SELECT * FROM %s %s WHERE (account_sid = '%s' OR account_sid = "
-          + "'%s') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
-          + "ORDER BY date_initiated %s, transaction_id " + "LIMIT 7";
+      String firstBatchSqlFormat = "SELECT transaction_id, date_initiated, account_sid FROM %s %s WHERE (account_sid = '%s' OR account_sid = '%s') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' ORDER BY date_initiated %s, transaction_id "
+          + "LIMIT 7";
       String firstBatchSql = String.format(firstBatchSqlFormat, tableName, hint, ACCOUNT1, ACCOUNT2,
           lowerBoundDateInitiated, upperBoundDateInitiated, dateInitiatedOrder);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
       String plan = SqlUtil.getExplainPlan(rs);
 
       String expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[7], " + "groupBySorted=[false])\n"
-          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, "
+          + "  KuduProjectRel(TRANSACTION_ID=[$2], DATE_INITIATED=[$1], ACCOUNT_SID=[$0])\n"
+          + "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[7], " + "groupBySorted=[false])\n"
+          + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, "
           + "date_initiated LESS %d], ScanToken 2=[account_sid EQUAL %s, date_initiated "
-          + "GREATER_EQUAL %d, date_initiated LESS %d])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
+          + "GREATER_EQUAL %d, date_initiated LESS %d])\n" + "        KuduQuery(table=[[kudu, %s]])\n";
       String expectedPlan = String.format(expectedPlanFormat, dateInitiatedOrder, ACCOUNT1, T1 * 1000, T4 * 1000,
           ACCOUNT2, T1 * 1000, T4 * 1000, tableName);
       assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
@@ -530,18 +530,19 @@ public class PaginationIT {
       }
       assertFalse(rs.next());
 
-      String nextBatchSqlFormat = "SELECT * FROM %s %s"
+      String nextBatchSqlFormat = "SELECT transaction_id, date_initiated, account_sid  FROM %s %s"
           + "WHERE ((account_sid = 'ACCOUNT1' AND (date_initiated, transaction_id) > (TIMESTAMP'%s', '%s'))"
           + " OR (account_sid = 'ACCOUNT2' AND (date_initiated, transaction_id) > (TIMESTAMP'%s', '%s'))) "
           + "AND date_initiated >= TIMESTAMP'%s' AND " + "date_initiated < TIMESTAMP'%s' "
           + "ORDER BY date_initiated %s, transaction_id LIMIT 7";
       expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[7], groupBySorted=[false])\n"
-          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL ACCOUNT1, date_initiated %s %d, date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000], "
+          + "  KuduProjectRel(TRANSACTION_ID=[$2], DATE_INITIATED=[$1], ACCOUNT_SID=[$0])\n"
+          + "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[7], groupBySorted=[false])\n"
+          + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL ACCOUNT1, date_initiated %s %d, date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000], "
           + "ScanToken 2=[account_sid EQUAL ACCOUNT1, date_initiated EQUAL %d, transaction_id GREATER %s, date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000], "
           + "ScanToken 3=[account_sid EQUAL ACCOUNT2, date_initiated %s %d, date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000], "
           + "ScanToken 4=[account_sid EQUAL ACCOUNT2, date_initiated EQUAL %d, transaction_id GREATER %s, date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000])\n"
-          + "      KuduQuery(table=[[kudu, %s]])\n";
+          + "        KuduQuery(table=[[kudu, %s]])\n";
 
       // keep reading batches of rows until we have processes rows for all the
       // partitions
@@ -595,19 +596,20 @@ public class PaginationIT {
       TimestampString lowerBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T1);
       TimestampString upperBoundDateInitiated = TimestampString.fromMillisSinceEpoch(T4);
       String dateInitiatedOrder = descending ? "DESC" : "ASC";
-      String firstBatchSqlFormat = "SELECT * FROM %s %s WHERE (account_sid = 'ACCOUNT1' OR account_sid = 'ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' "
-          + "ORDER BY account_sid, date_initiated %s, transaction_id " + "LIMIT 7";
+      String firstBatchSqlFormat = "SELECT transaction_id, date_initiated, account_sid FROM %s %s WHERE (account_sid = 'ACCOUNT1' OR account_sid = 'ACCOUNT2') AND date_initiated >= TIMESTAMP'%s' AND date_initiated < TIMESTAMP'%s' ORDER BY account_sid, date_initiated %s, transaction_id "
+          + "LIMIT 7";
       String firstBatchSql = String.format(firstBatchSqlFormat, tableName, hint, lowerBoundDateInitiated,
           upperBoundDateInitiated, dateInitiatedOrder);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + firstBatchSql);
       String plan = SqlUtil.getExplainPlan(rs);
 
       String expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], "
+          + "  KuduProjectRel(TRANSACTION_ID=[$2], DATE_INITIATED=[$1], ACCOUNT_SID=[$0])\n"
+          + "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], "
           + "fetch=[7], groupBySorted=[false])\n"
-          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, "
+          + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, "
           + "date_initiated LESS %d], ScanToken 2=[account_sid EQUAL %s, date_initiated "
-          + "GREATER_EQUAL %d, date_initiated LESS %d])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
+          + "GREATER_EQUAL %d, date_initiated LESS %d])\n" + "        KuduQuery(table=[[kudu, %s]])\n";
       String expectedPlan = String.format(expectedPlanFormat, dateInitiatedOrder, ACCOUNT1, T1 * 1000, T4 * 1000,
           ACCOUNT2, T1 * 1000, T4 * 1000, tableName);
       assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
@@ -631,7 +633,7 @@ public class PaginationIT {
       }
       assertFalse(rs.next());
 
-      String nextBatchSqlFormat = "SELECT * FROM %s "
+      String nextBatchSqlFormat = "SELECT transaction_id, date_initiated, account_sid  FROM %s "
           + "WHERE ((account_sid = 'ACCOUNT1' OR account_sid = 'ACCOUNT2') AND (account_sid, "
           + "date_initiated, transaction_id) > ('%s', TIMESTAMP'%s', '%s'))"
           + "AND date_initiated >= TIMESTAMP'%s' AND " + "date_initiated < TIMESTAMP'%s' "

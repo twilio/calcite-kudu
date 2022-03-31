@@ -52,7 +52,6 @@ import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnit4.class)
 public final class DescendingSortedOnDatetimeIT {
-  private static final Logger logger = LoggerFactory.getLogger(JDBCQueryIT.class);
 
   private static String FIRST_SID = "SM1234857";
   private static String SECOND_SID = "SM123485789";

@@ -114,7 +114,7 @@ public class KuduSortedAggregationRule extends KuduSortRule {
     final RelTraitSet traitSet = originalSort.getTraitSet().plus(newCollation).plus(Convention.NONE);
 
     // Check the new trait set to see if we can apply the sort against this.
-    if (!canApply(traitSet, query, query.calciteKuduTable.getKuduTable(), Optional.of(filter))) {
+    if (!canApply(traitSet, originalSort.offset, query, query.calciteKuduTable.getKuduTable(), Optional.of(filter))) {
       return;
     }
 

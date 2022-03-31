@@ -14,7 +14,6 @@
  */
 package com.twilio.kudu.sql;
 
-import java.util.Collections;
 import java.util.concurrent.BlockingQueue;
 import com.stumbleupon.async.Callback;
 import org.apache.kudu.client.RowResultIterator;
@@ -52,7 +51,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
   final AtomicBoolean scansShouldStop;
   final AtomicBoolean cancelFlag;
   final AtomicBoolean earlyExit = new AtomicBoolean(false);
-  final List<Integer> primaryKeyColumnsInProjection;
+  final List<Integer> sortPkColumns;
   final List<Integer> descendingSortedFieldIndices;
   final KuduScanStats scanStats;
   final Function1<Object, Object> projectionMapper;
@@ -63,7 +62,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
       final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults, final AtomicBoolean scansShouldStop,
       final AtomicBoolean cancelFlag, final Schema projectedSchema, final KuduScanStats scanStats,
       final boolean isScannerSorted, final Function1<Object, Object> projectionMapper,
-      final Predicate1<Object> filterFunction, final boolean isSingleObject, final List<String> sortPkColumnNames) {
+      final Predicate1<Object> filterFunction, final boolean isSingleObject, final List<Integer> sortPkColumns) {
 
     this.scanner = scanner;
     this.rowResults = rowResults;
@@ -71,9 +70,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
     // if the scanner is sorted, KuduEnumerable has to merge the results from
     // multiple
     // scanners (by picking the smallest row order by primary key key columns)
-    this.primaryKeyColumnsInProjection = isScannerSorted
-        ? calciteKuduTable.getPrimaryKeyColumnsInProjection(sortPkColumnNames, projectedSchema)
-        : Collections.emptyList();
+    this.sortPkColumns = sortPkColumns;
     this.descendingSortedFieldIndices = calciteKuduTable.getDescendingColumnsIndicesInProjection(projectedSchema);
     this.scanStats = scanStats;
     // @NOTE: this can be NULL. Need to check it.
@@ -151,12 +148,12 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
           final CalciteScannerMessage<CalciteRow> wrappedRow;
           if (!isSingleObject) {
             wrappedRow = new CalciteScannerMessage<>(new CalciteRow(row.getSchema(),
-                ((Object[]) projectionMapper.apply(row)), primaryKeyColumnsInProjection, descendingSortedFieldIndices));
+                ((Object[]) projectionMapper.apply(row)), sortPkColumns, descendingSortedFieldIndices));
           } else {
             final Object mapResult = ((Object) projectionMapper.apply(row));
             final Object[] rowData = new Object[] { mapResult };
             wrappedRow = new CalciteScannerMessage<>(
-                new CalciteRow(row.getSchema(), rowData, primaryKeyColumnsInProjection, descendingSortedFieldIndices));
+                new CalciteRow(row.getSchema(), rowData, sortPkColumns, descendingSortedFieldIndices));
           }
           // Blocks if the queue is full.
           // @TODO: How to we protect it from locking up here because nothing is consuming
