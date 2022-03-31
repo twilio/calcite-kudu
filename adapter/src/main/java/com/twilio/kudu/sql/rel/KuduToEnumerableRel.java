@@ -14,6 +14,8 @@
  */
 package com.twilio.kudu.sql.rel;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.twilio.kudu.sql.KuduEnumerable;
 import com.twilio.kudu.sql.KuduMethod;
 import com.twilio.kudu.sql.KuduPhysType;
 import com.twilio.kudu.sql.KuduRelNode;
@@ -225,8 +227,8 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
     }
     Expressions.list(list.append("keySelector", sortedPrefixKeySelector));
 
-    final Expression sortPkColumns = list.append("sortPkColumns",
-        implementor.stash(kuduImplementor.sortPkColumns, List.class));
+    final Expression sortPkColumns = list.append("sortPkColumns", implementor
+        .stash(getPrimaryKeyColumnsInProjection(kuduImplementor.sortPkColumns, kuduColumnIndices), List.class));
 
     final Expression enumerable = list.append("enumerable",
         Expressions.call(table, KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit, offset, sorted,
@@ -238,6 +240,61 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
 
     KuduToEnumerableConverter.logger.debug("Created a KuduQueryable " + list.toBlock());
     return implementor.result(physType, list.toBlock());
+  }
+
+  /**
+   * Return the Integer indices in the Row Projection that match the primary key
+   * columns and in the order they need to match. This lays out how to compare two
+   * {@code CalciteRow}s and determine which one is smaller.
+   * <p>
+   * As an example, imagine we have a table (A, B, C, D, E) with primary columns
+   * in order of (A, B) and we have a scanner SELECT D, C, E, B, A the
+   * projectedSchema will be D, C, E, B, A and the tableSchema will be A, B, C, D,
+   * E *this* function will return List(4, 3) -- the position's of A and B within
+   * the projection and in the order they need to be sorted by.
+   * <p>
+   * The returned index list is used by the sorted {@link KuduEnumerable} to merge
+   * the results from multiple scanners.
+   *
+   * @param projectedColumnIndices the indices of the columns that are being
+   *                               selected or required to evaluate a filter in
+   *                               memory
+   *
+   * @param sortPkColumnIndices    the indices of the primary key columns that are
+   *                               present in the ORDER BY clause
+   *
+   * @return List of column indexes that part of the primary key in the Kudu
+   *         Sorted order
+   */
+  @VisibleForTesting
+  public static List<Integer> getPrimaryKeyColumnsInProjection(final List<Integer> sortPkColumnIndices,
+      final List<Integer> projectedColumnIndices) {
+    final List<Integer> primaryKeyColumnsInProjection = new ArrayList<>();
+    // KuduSortRule checks if the prefix of the primary key columns are being
+    // filtered and are
+    // set to a constant literal, or if the columns being sorted are a prefix of the
+    // primary key
+    // columns.
+    for (int sortPkColumnIndex : sortPkColumnIndices) {
+      boolean found = false;
+      for (int i = 0; i < projectedColumnIndices.size(); ++i) {
+        int projectedColumnIndex = projectedColumnIndices.get(i);
+        if (sortPkColumnIndex == projectedColumnIndex) {
+          primaryKeyColumnsInProjection.add(i);
+          found = true;
+        }
+      }
+      if (!found) {
+        String projectedColumnIndicesString = projectedColumnIndices.stream().map(Object::toString)
+            .collect(Collectors.joining(", "));
+        String sortPkColumnIndicesString = sortPkColumnIndices.stream().map(Object::toString)
+            .collect(Collectors.joining(", "));
+        throw new IllegalStateException("Unable to find primary key column index " + sortPkColumnIndex
+            + " in the projection, " + "projectedColumnIndices " + projectedColumnIndicesString
+            + " sortPkColumnIndices " + sortPkColumnIndicesString);
+      }
+    }
+    return primaryKeyColumnsInProjection;
   }
 
   private Result executeMutation(EnumerableRelImplementor implementor, Prefer prefer) {

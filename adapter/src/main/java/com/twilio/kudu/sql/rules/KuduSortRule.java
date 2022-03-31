@@ -16,6 +16,8 @@ package com.twilio.kudu.sql.rules;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.KuduQuery;
@@ -60,14 +62,14 @@ public abstract class KuduSortRule extends RelOptRule {
   public static final RelOptRule SIMPLE_SORT_RULE = new KuduSortWithoutFilter(RelFactories.LOGICAL_BUILDER);
   public static final RelOptRule FILTER_SORT_RULE = new KuduSortWithFilter(RelFactories.LOGICAL_BUILDER);
 
-  protected List<String> pkSortColumns = Lists.newArrayList();
+  protected List<Integer> pkSortColumns = Lists.newArrayList();
 
   public KuduSortRule(RelOptRuleOperand operand, RelBuilderFactory factory, String description) {
     super(operand, factory, description);
   }
 
-  public boolean canApply(final RelTraitSet sortTraits, final KuduQuery query, final KuduTable openedTable,
-      final Optional<Filter> filter) {
+  public boolean canApply(final RelTraitSet sortTraits, final RexNode offset, final KuduQuery query,
+      final KuduTable openedTable, final Optional<Filter> filter) {
     boolean isDisableInListOptimizationHintPresent = false;
     if (query.getHints().stream().map(h -> h.hintName).anyMatch(s -> s.equalsIgnoreCase(KuduFilterRule.HINT_NAME))) {
       isDisableInListOptimizationHintPresent = true;
@@ -77,7 +79,16 @@ public abstract class KuduSortRule extends RelOptRule {
     final RelCollation collation = sortTraits.getTrait(RelCollationTraitDef.INSTANCE);
 
     if (collation.getFieldCollations().isEmpty()) {
-      return false;
+      if (offset != null) {
+        // if we have an OFFSET return rows sorted by the primary key even if there
+        // isn't an
+        // ORDER BY clause so rows are returned in a deterministic order
+        pkSortColumns = IntStream.range(0, openedTable.getSchema().getPrimaryKeyColumnCount()).boxed()
+            .collect(Collectors.toList());
+        return true;
+      } else {
+        return false;
+      }
     }
 
     if (sortTraits.contains(KuduRelNode.CONVENTION)) {
@@ -120,8 +131,7 @@ public abstract class KuduSortRule extends RelOptRule {
           return false;
         }
       }
-      String pkColumnName = openedTable.getSchema().getColumnByIndex(pkColumnIndex).getName();
-      pkSortColumns.add(pkColumnName);
+      pkSortColumns.add(pkColumnIndex);
       pkColumnIndex++;
     }
     return true;
@@ -129,7 +139,8 @@ public abstract class KuduSortRule extends RelOptRule {
 
   public void perform(final RelOptRuleCall call, final Sort originalSort, final KuduQuery query,
       final KuduTable openedTable, final Optional<Filter> filter) {
-    if (canApply(originalSort.getTraitSet(), query, openedTable, filter)) {
+    RelTraitSet sortTraits = originalSort.getTraitSet();
+    if (canApply(sortTraits, originalSort.offset, query, openedTable, filter)) {
       final RelNode input = originalSort.getInput();
       final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRelNode.CONVENTION)
           .replace(originalSort.getCollation());

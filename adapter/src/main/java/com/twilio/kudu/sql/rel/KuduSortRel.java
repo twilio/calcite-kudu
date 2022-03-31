@@ -51,15 +51,15 @@ public class KuduSortRel extends Sort implements KuduRelNode {
   // and
   // sortPrefixColumns is empty.
   public final List<RelFieldCollation> sortPkPrefixColumns;
-  public final List<String> sortPkColumns;
+  public final List<Integer> sortPkColumns;
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
-      RexNode fetch, List<String> sortPkColumns) {
+      RexNode fetch, List<Integer> sortPkColumns) {
     this(cluster, traitSet, child, collation, offset, fetch, false, Lists.newArrayList(), sortPkColumns);
   }
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
-      RexNode fetch, boolean groupBySorted, List<RelFieldCollation> sortPkPrefixColumns, List<String> sortPkColumns) {
+      RexNode fetch, boolean groupBySorted, List<RelFieldCollation> sortPkPrefixColumns, List<Integer> sortPkColumns) {
     super(cluster, traitSet, child, collation, offset, fetch);
     assert getConvention() == KuduRelNode.CONVENTION;
     assert getConvention() == child.getConvention();
