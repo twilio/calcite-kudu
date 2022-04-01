@@ -93,19 +93,14 @@ public class KuduSortedAggregationRule extends KuduSortRule {
         return;
       }
     }
-    // Take the sorted fields and remap them through the group ordinals and then
-    // through the
-    // project ordinals.
-    // This maps directly to the Kudu field indexes. The Map is between originalSort
-    // ordinal ->
-    // Kudu Field index.
+    // Take the sorted fields and remap them through the project ordinals.
+    // This maps directly to the Kudu field indexes. The Map is between
+    // originalSort ordinal -> Kudu Field index.
     final Map<Integer, Integer> remappingOrdinals = new HashMap<>();
 
-    final List<Integer> groupSet = originalAggregate.getGroupSet().asList();
     for (RelFieldCollation fieldCollation : originalSort.getCollation().getFieldCollations()) {
-      int groupOrdinal = fieldCollation.getFieldIndex();
-      int projectOrdinal = groupSet.get(groupOrdinal);
-      int kuduColumnIndex = ((RexInputRef) project.getProjects().get(projectOrdinal)).getIndex();
+      int ordinal = fieldCollation.getFieldIndex();
+      int kuduColumnIndex = ((RexInputRef) project.getProjects().get(ordinal)).getIndex();
       remappingOrdinals.put(fieldCollation.getFieldIndex(), kuduColumnIndex);
     }
 
