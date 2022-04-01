@@ -47,7 +47,7 @@ public final class SortedAggregationIT {
 
   @ClassRule
   public static KuduTestHarness testHarness = new KuduTestHarness();
-  private static final String descendingSortTableName = "SortedAggregationIT";
+  private static final String tableName = "SortedAggregationIT";
   private static String JDBC_URL;
 
   private static String ACCOUNT_SID1 = "ACCOUNT1";
@@ -66,7 +66,7 @@ public final class SortedAggregationIT {
 
     Schema schema = new Schema(columns);
 
-    testHarness.getClient().createTable(descendingSortTableName, schema, new org.apache.kudu.client.CreateTableOptions()
+    testHarness.getClient().createTable(tableName, schema, new org.apache.kudu.client.CreateTableOptions()
         .addHashPartitions(Arrays.asList("ACCOUNT_SID"), 5).setNumReplicas(1));
 
     JDBC_URL = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, KuduSchemaFactory.class.getName(),
@@ -74,8 +74,7 @@ public final class SortedAggregationIT {
 
     // insert rows
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
-      PreparedStatement stmt = conn
-          .prepareStatement("INSERT INTO \"" + descendingSortTableName + "\" " + "VALUES (?,?,?,?,?,?)");
+      PreparedStatement stmt = conn.prepareStatement("INSERT INTO \"" + tableName + "\" " + "VALUES (?,?,?,?,?,?)");
       // rows for ACCOUNT_SID1
       insertRow(stmt, 3, 29, 100, 1000L, "message-body", ACCOUNT_SID1);
       insertRow(stmt, 3, 29, 101, 1000L, "message-body", ACCOUNT_SID1);
@@ -127,7 +126,7 @@ public final class SortedAggregationIT {
 
   public static class KuduSchemaFactory extends BaseKuduSchemaFactory {
     private static final Map<String, KuduTableMetadata> kuduTableConfigMap = new ImmutableMap.Builder<String, KuduTableMetadata>()
-        .put(descendingSortTableName, new KuduTableMetadata.KuduTableMetadataBuilder()
+        .put(tableName, new KuduTableMetadata.KuduTableMetadataBuilder()
             .setDescendingOrderedColumnNames(Lists.newArrayList("FIELD1", "FIELD2", "FIELD3")).build())
         .build();
 
@@ -152,15 +151,13 @@ public final class SortedAggregationIT {
 
   @AfterClass
   public static void tearDown() throws Exception {
-    testHarness.getClient().deleteTable(descendingSortTableName);
+    testHarness.getClient().deleteTable(tableName);
   }
 
   @Test
   public void aggregateSortedResultsByAccount() throws Exception {
-    final String sql = String.format(
-        "SELECT sum(FIELD4) FROM %s WHERE "
-            + "resource_type = 'message-body' GROUP BY account_sid ORDER BY account_sid ASC " + "limit 1",
-        descendingSortTableName);
+    final String sql = String.format("SELECT sum(FIELD4) FROM %s WHERE "
+        + "resource_type = 'message-body' GROUP BY account_sid ORDER BY account_sid ASC " + "limit 1", tableName);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
@@ -187,7 +184,7 @@ public final class SortedAggregationIT {
   @Test
   public void testAggregationSort() throws Exception {
     String sql = String.format("SELECT FIELD1, FIELD2, SUM(FIELD4) FROM %s " + "WHERE account_sid = '%s' "
-        + "GROUP BY (FIELD2, FIELD1) " + "ORDER BY FIELD1 DESC, FIELD2 DESC LIMIT 2 OFFSET 1 ", descendingSortTableName,
+        + "GROUP BY (FIELD2, FIELD1) " + "ORDER BY FIELD1 DESC, FIELD2 DESC LIMIT 2 OFFSET 1 ", tableName,
         ACCOUNT_SID1);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
@@ -217,7 +214,7 @@ public final class SortedAggregationIT {
       sql = String.format(
           "SELECT FIELD1, FIELD2, SUM(FIELD4) FROM %s " + "WHERE (account_sid = '%s' AND (FIELD1,FIELD2) > (5, 31) ) "
               + "GROUP BY (FIELD2, FIELD1) ORDER BY FIELD1 DESC, FIELD2 DESC LIMIT 1",
-          descendingSortTableName, ACCOUNT_SID1);
+          tableName, ACCOUNT_SID1);
 
       rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       plan = SqlUtil.getExplainPlan(rs);
@@ -241,10 +238,8 @@ public final class SortedAggregationIT {
 
   @Test
   public void testAggregationSortAndGroupByPKPrefix() throws Exception {
-    String sql = String.format(
-        "SELECT FIELD1, FIELD2, SUM(FIELD4) " + "FROM %s WHERE account_sid = '%s' GROUP BY "
-            + "(FIELD2, FIELD1) ORDER BY FIELD1 DESC, SUM(FIELD4) DESC LIMIT 2 OFFSET 1",
-        descendingSortTableName, ACCOUNT_SID1);
+    String sql = String.format("SELECT FIELD1, FIELD2, SUM(FIELD4) " + "FROM %s WHERE account_sid = '%s' GROUP BY "
+        + "(FIELD2, FIELD1) ORDER BY FIELD1 DESC, SUM(FIELD4) DESC LIMIT 2 OFFSET 1", tableName, ACCOUNT_SID1);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
@@ -270,10 +265,8 @@ public final class SortedAggregationIT {
       assertEquals("Incorrect aggregated value", 1502, queryResult.getLong(3));
       assertFalse("Should not have any more results", queryResult.next());
 
-      sql = String.format(
-          "SELECT FIELD1, FIELD2, SUM(FIELD4) " + "FROM %s WHERE account_sid = '%s' GROUP BY "
-              + "(FIELD1, FIELD2) ORDER BY FIELD1 DESC, SUM(FIELD4) DESC LIMIT 1",
-          descendingSortTableName, ACCOUNT_SID2);
+      sql = String.format("SELECT FIELD1, FIELD2, SUM(FIELD4) " + "FROM %s WHERE account_sid = '%s' GROUP BY "
+          + "(FIELD1, FIELD2) ORDER BY FIELD1 DESC, SUM(FIELD4) DESC LIMIT 1", tableName, ACCOUNT_SID2);
       queryResult = conn.createStatement().executeQuery(sql);
       assertTrue("Should have results to iterate over", queryResult.next());
       assertEquals(6, queryResult.getByte(1));
@@ -285,10 +278,8 @@ public final class SortedAggregationIT {
 
   @Test
   public void testAggregationSortByPKPrefix() throws Exception {
-    String sql = String.format(
-        "SELECT FIELD1, RESOURCE_TYPE, SUM(FIELD4) FROM %s WHERE account_sid = '%s' GROUP BY "
-            + "(RESOURCE_TYPE, FIELD1) ORDER BY FIELD1 DESC, RESOURCE_TYPE LIMIT 2 OFFSET 1",
-        descendingSortTableName, ACCOUNT_SID1);
+    String sql = String.format("SELECT FIELD1, RESOURCE_TYPE, SUM(FIELD4) FROM %s WHERE account_sid = '%s' GROUP BY "
+        + "(RESOURCE_TYPE, FIELD1) ORDER BY FIELD1 DESC, RESOURCE_TYPE LIMIT 2 OFFSET 1", tableName, ACCOUNT_SID1);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
@@ -315,7 +306,7 @@ public final class SortedAggregationIT {
       assertFalse("Should not have any more results", queryResult.next());
 
       sql = String.format("SELECT FIELD1, RESOURCE_TYPE, SUM(FIELD4) FROM %s WHERE account_sid = '%s' GROUP BY "
-          + "(RESOURCE_TYPE, FIELD1) ORDER BY FIELD1 DESC, RESOURCE_TYPE", descendingSortTableName, ACCOUNT_SID2);
+          + "(RESOURCE_TYPE, FIELD1) ORDER BY FIELD1 DESC, RESOURCE_TYPE", tableName, ACCOUNT_SID2);
       queryResult = conn.createStatement().executeQuery(sql);
       assertTrue("Should have results to iterate over", queryResult.next());
       assertEquals(6, queryResult.getByte(1));
@@ -329,10 +320,8 @@ public final class SortedAggregationIT {
   public void testAggregationSortByPKExpression() throws Exception {
     // TODO see if KuduAggregationLimitRule can be modified to support this type of
     // query
-    String sql = String.format(
-        "SELECT 6-FIELD1, FIELD2, SUM(FIELD4) " + "FROM %s WHERE account_sid = '%s' GROUP BY "
-            + "(FIELD2, 6-FIELD1) ORDER BY 6-FIELD1 DESC, SUM(FIELD4) DESC LIMIT 2 OFFSET 1",
-        descendingSortTableName, ACCOUNT_SID1);
+    String sql = String.format("SELECT 6-FIELD1, FIELD2, SUM(FIELD4) " + "FROM %s WHERE account_sid = '%s' GROUP BY "
+        + "(FIELD2, 6-FIELD1) ORDER BY 6-FIELD1 DESC, SUM(FIELD4) DESC LIMIT 2 OFFSET 1", tableName, ACCOUNT_SID1);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
@@ -353,7 +342,7 @@ public final class SortedAggregationIT {
   public void aggregateSortedResultsByAccountAndField1() throws Exception {
     final String sql = String.format("SELECT account_sid, sum(cast(FIELD4 as bigint)) \"FIELD4\" FROM %s WHERE "
         + "resource_type = 'message-body' GROUP BY FIELD1, account_sid ORDER BY account_sid ASC, FIELD1 DESC limit 2",
-        descendingSortTableName);
+        tableName);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
@@ -384,7 +373,7 @@ public final class SortedAggregationIT {
   public void aggregateSortedResultsByAccountWrongDirection() throws Exception {
     final String sql = String
         .format("SELECT account_sid, sum(FIELD4) FROM %s WHERE resource_type = 'message-body' GROUP BY "
-            + "account_sid ORDER BY account_sid DESC limit 1", descendingSortTableName);
+            + "account_sid ORDER BY account_sid DESC limit 1", tableName);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
@@ -409,7 +398,7 @@ public final class SortedAggregationIT {
   public void aggregateSortedResultsByAccountAndField1WithOffset() throws Exception {
     final String sql = String.format(
         "SELECT account_sid, sum(cast(FIELD4 as bigint)) \"FIELD4\" FROM %s WHERE account_sid = '%s' GROUP BY FIELD1, account_sid ORDER BY account_sid ASC, FIELD1 DESC limit 1 offset 1",
-        descendingSortTableName, ACCOUNT_SID1);
+        tableName, ACCOUNT_SID1);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
@@ -435,10 +424,8 @@ public final class SortedAggregationIT {
 
   @Test
   public void aggregatedResultsGroupedByOutOfOrder() throws Exception {
-    final String sql = String.format(
-        "SELECT account_sid, sum(FIELD4) FROM %s WHERE resource_type = 'message-body'"
-            + " GROUP BY account_sid, FIELD1 ORDER BY account_sid ASC, " + "FIELD1 ASC" + " limit 1",
-        descendingSortTableName);
+    final String sql = String.format("SELECT account_sid, sum(FIELD4) FROM %s WHERE resource_type = 'message-body'"
+        + " GROUP BY account_sid, FIELD1 ORDER BY account_sid ASC, " + "FIELD1 ASC" + " limit 1", tableName);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
@@ -460,7 +447,7 @@ public final class SortedAggregationIT {
     final String sql = String.format(
         "SELECT account_sid, FIELD1, sum(FIELD3), sum(FIELD4) FROM %s "
             + "WHERE account_sid = '%s' GROUP BY account_sid, FIELD1 ORDER BY account_sid ASC, FIELD1 DESC limit 5",
-        descendingSortTableName, ACCOUNT_SID1);
+        tableName, ACCOUNT_SID1);
 
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       ResultSet queryResult = conn.createStatement().executeQuery(sql);
@@ -494,6 +481,26 @@ public final class SortedAggregationIT {
       assertEquals(String.format("Full SQL plan has changed\n%s", plan), expectedPlan, plan);
 
     }
+  }
+
+  @Test
+  public void testKuduSortedAggregationRuleNotMatched() throws Exception {
+    final String sql = String.format(
+        "SELECT \"FIELD4\", SUM(\"FIELD3\") AS \"MY_SUM\"" + " FROM %s" + " WHERE account_sid = '%s'"
+            + " GROUP BY \"FIELD4\"\n" + " ORDER BY \"MY_SUM\", \"FIELD4\"\n" + " FETCH NEXT 30 ROWS ONLY",
+        tableName, ACCOUNT_SID1);
+
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      String expectedPlan = "EnumerableLimitSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC], fetch=[30])\n"
+          + "  EnumerableAggregate(group=[{0}], MY_SUM=[$SUM0($1)])\n" + "    KuduToEnumerableRel\n"
+          + "      KuduProjectRel(FIELD4=[$4], FIELD3=[$3])\n"
+          + "        KuduFilterRel(ScanToken 1=[ACCOUNT_SID EQUAL ACCOUNT1])\n"
+          + "          KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
+      assertEquals("Plan does not match", expectedPlan, plan);
+    }
+
   }
 
 }
