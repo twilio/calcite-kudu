@@ -62,7 +62,7 @@
         <junit.version>4.13.1</junit.version>
         <slf4j.version>1.7.21</slf4j.version>
         <log4j.version>2.17.1</log4j.version>
-        <mockito.version>3.7.7</mockito.version>
+        <mockito.version>4.6.1</mockito.version>
         <jackson.version>2.13.2.20220328</jackson.version>
         <spotless.version>2.0.1</spotless.version>
         <freemarker-version>2.3.30</freemarker-version>
@@ -208,10 +208,16 @@
               <scope>test</scope>
             </dependency>
             <dependency>
-                <groupId>org.mockito</groupId>
-                <artifactId>mockito-core</artifactId>
-                <scope>test</scope>
-                <version>${mockito.version}</version>
+              <groupId>org.mockito</groupId>
+              <artifactId>mockito-core</artifactId>
+              <version>${mockito.version}</version>
+              <scope>test</scope>
+            </dependency>
+            <dependency>
+              <groupId>org.mockito</groupId>
+              <artifactId>mockito-inline</artifactId>
+              <version>${mockito.version}</version>
+              <scope>test</scope>
             </dependency>
             <dependency>
                 <artifactId>freemarker</artifactId>

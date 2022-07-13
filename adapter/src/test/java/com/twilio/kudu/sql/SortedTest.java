@@ -16,26 +16,29 @@ package com.twilio.kudu.sql;
 
 import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.rel.KuduToEnumerableRel;
-import org.apache.kudu.ColumnSchema;
-import org.apache.kudu.Schema;
-import org.apache.kudu.Type;
+import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelNode;
 import org.junit.Test;
 
 import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
 
 public final class SortedTest {
 
   @Test
   public void findPrimaryKeyOrder() {
+    final KuduToEnumerableRel kuduToEnumerableRel = new KuduToEnumerableRel(mock(RelOptCluster.class),
+        mock(RelTraitSet.class), mock(RelNode.class));
     assertEquals("Expected to find just account_id from projection", Arrays.asList(1),
-        KuduToEnumerableRel.getPrimaryKeyColumnsInProjection(Lists.newArrayList(0), Arrays.asList(10, 0)));
+        kuduToEnumerableRel.getPrimaryKeyColumnsInProjection(Lists.newArrayList(0), Arrays.asList(10, 0)));
 
     assertEquals("Expected to find account_id and date from projection", Arrays.asList(2, 1),
-        KuduToEnumerableRel.getPrimaryKeyColumnsInProjection(Lists.newArrayList(0, 1), Arrays.asList(10, 1, 0)));
+        kuduToEnumerableRel.getPrimaryKeyColumnsInProjection(Lists.newArrayList(0, 1), Arrays.asList(10, 1, 0)));
 
     assertEquals("Expected to find dateColumn from projection", Arrays.asList(1),
-        KuduToEnumerableRel.getPrimaryKeyColumnsInProjection(Lists.newArrayList(1), Arrays.asList(10, 1)));
+        kuduToEnumerableRel.getPrimaryKeyColumnsInProjection(Lists.newArrayList(1), Arrays.asList(10, 1)));
   }
 }
