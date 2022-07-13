@@ -14,7 +14,6 @@
  */
 package com.twilio.kudu.sql.rel;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.twilio.kudu.sql.KuduEnumerable;
 import com.twilio.kudu.sql.KuduMethod;
 import com.twilio.kudu.sql.KuduPhysType;
