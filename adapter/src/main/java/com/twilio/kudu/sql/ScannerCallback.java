@@ -14,6 +14,7 @@
  */
 package com.twilio.kudu.sql;
 
+import java.util.Collections;
 import java.util.concurrent.BlockingQueue;
 import com.stumbleupon.async.Callback;
 import org.apache.kudu.client.RowResultIterator;
@@ -62,7 +63,7 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
       final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults, final AtomicBoolean scansShouldStop,
       final AtomicBoolean cancelFlag, final Schema projectedSchema, final KuduScanStats scanStats,
       final boolean isScannerSorted, final Function1<Object, Object> projectionMapper,
-      final Predicate1<Object> filterFunction, final boolean isSingleObject, final List<Integer> sortPkColumns) {
+      final Predicate1<Object> filterFunction, final boolean isSingleObject, final List<String> sortPkColumnNames) {
 
     this.scanner = scanner;
     this.rowResults = rowResults;
@@ -70,7 +71,9 @@ final public class ScannerCallback implements Callback<Deferred<Void>, RowResult
     // if the scanner is sorted, KuduEnumerable has to merge the results from
     // multiple
     // scanners (by picking the smallest row order by primary key key columns)
-    this.sortPkColumns = sortPkColumns;
+    this.sortPkColumns = isScannerSorted
+        ? calciteKuduTable.getPrimaryKeyColumnsInProjection(sortPkColumnNames, projectedSchema)
+        : Collections.emptyList();
     this.descendingSortedFieldIndices = calciteKuduTable.getDescendingColumnsIndicesInProjection(projectedSchema);
     this.scanStats = scanStats;
     // @NOTE: this can be NULL. Need to check it.

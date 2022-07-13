@@ -79,7 +79,7 @@ public interface KuduRelNode extends RelNode {
     // if groupByLimited is true and sortPkPrefixColumns is empty
     // that means we are sorting by the same columns as we are grouping by
     public List<RelFieldCollation> sortPkPrefixColumns = new ArrayList<>();
-    public List<Integer> sortPkColumns = new ArrayList<>();
+    public List<String> sortPkColumns = new ArrayList<>();
 
     // information required for executing an update
     public List<Integer> columnIndexes;

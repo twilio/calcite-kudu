@@ -26,16 +26,24 @@ import java.util.Arrays;
 import static org.junit.Assert.assertEquals;
 
 public final class SortedTest {
-
   @Test
   public void findPrimaryKeyOrder() {
+    final ColumnSchema accountIdColumn = new ColumnSchema.ColumnSchemaBuilder("account_id", Type.INT64).key(true)
+        .build();
+    final ColumnSchema dateColumn = new ColumnSchema.ColumnSchemaBuilder("date", Type.UNIXTIME_MICROS).key(true)
+        .build();
+    final ColumnSchema foreignKey = new ColumnSchema.ColumnSchemaBuilder("key_to_other_table", Type.STRING).build();
+
     assertEquals("Expected to find just account_id from projection", Arrays.asList(1),
-        KuduToEnumerableRel.getPrimaryKeyColumnsInProjection(Lists.newArrayList(0), Arrays.asList(10, 0)));
+        CalciteKuduTable.getPrimaryKeyColumnsInProjection(Lists.newArrayList("account_id"),
+            new Schema(Arrays.asList(foreignKey, accountIdColumn))));
 
     assertEquals("Expected to find account_id and date from projection", Arrays.asList(2, 1),
-        KuduToEnumerableRel.getPrimaryKeyColumnsInProjection(Lists.newArrayList(0, 1), Arrays.asList(10, 1, 0)));
+        CalciteKuduTable.getPrimaryKeyColumnsInProjection(Lists.newArrayList("account_id", "date"),
+            new Schema(Arrays.asList(foreignKey, dateColumn, accountIdColumn))));
 
     assertEquals("Expected to find dateColumn from projection", Arrays.asList(1),
-        KuduToEnumerableRel.getPrimaryKeyColumnsInProjection(Lists.newArrayList(1), Arrays.asList(10, 1)));
+        CalciteKuduTable.getPrimaryKeyColumnsInProjection(Lists.newArrayList("date"),
+            new Schema(Arrays.asList(foreignKey, dateColumn))));
   }
 }

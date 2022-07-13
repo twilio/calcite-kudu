@@ -82,7 +82,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
   public final boolean sort;
   public final boolean groupBySorted;
   public final Function1<Object, Object> sortedPrefixKeySelector;
-  public final List<Integer> sortPkColumns;
+  public final List<String> sortPkColumnNames;
   public final long limit;
   public final long offset;
   public final long groupFetchLimit;
@@ -130,14 +130,14 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
    *                                an empty list if the group by and order by
    *                                columns are the same (only used if
    *                                groupBySorted is true)
-   * @param sortPkColumns           the indexes of the primary key columns that
-   *                                are present in the ORDER BY clause
+   * @param sortPkColumnNames       the names of the primary key columns that are
+   *                                present in the ORDER BY clause
    */
   public KuduEnumerable(final List<List<CalciteKuduPredicate>> predicates, final List<Integer> columnIndices,
       final AsyncKuduClient client, final CalciteKuduTable calciteKuduTable, final long limit, final long offset,
       final boolean sort, final boolean groupBySorted, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
       final Function1<Object, Object> projection, final Predicate1<Object> filterFunction, final boolean isSingleObject,
-      final Function1<Object, Object> sortedPrefixKeySelector, final List<Integer> sortPkColumns) {
+      final Function1<Object, Object> sortedPrefixKeySelector, final List<String> sortPkColumnNames) {
     this.scansShouldStop = new AtomicBoolean(false);
     this.cancelFlag = cancelFlag;
     this.limit = limit;
@@ -151,7 +151,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     }
     this.groupBySorted = groupBySorted;
     this.sortedPrefixKeySelector = sortedPrefixKeySelector;
-    this.sortPkColumns = sortPkColumns;
+    this.sortPkColumnNames = sortPkColumnNames;
     this.scanStats = scanStats;
 
     this.predicates = predicates;
@@ -402,7 +402,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       final List<ScannerCallback> callbacks = scanners.stream().map(scanner -> {
         final BlockingQueue<CalciteScannerMessage<CalciteRow>> rowResults = new LinkedBlockingQueue<>();
         return new ScannerCallback(calciteKuduTable, scanner, rowResults, scansShouldStop, cancelFlag,
-            scanner.getProjectionSchema(), scanStats, true, projection, filterFunction, isSingleObject, sortPkColumns);
+            scanner.getProjectionSchema(), scanStats, true, projection, filterFunction, isSingleObject,
+            sortPkColumnNames);
       }).collect(Collectors.toList());
       callbacks.stream().forEach(callback -> callback.nextBatch());
 
@@ -413,7 +414,8 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     final BlockingQueue<CalciteScannerMessage<CalciteRow>> messages = new LinkedBlockingQueue<>();
     scanners.stream().map(scanner -> {
       return new ScannerCallback(calciteKuduTable, scanner, messages, scansShouldStop, cancelFlag,
-          scanner.getProjectionSchema(), scanStats, false, projection, filterFunction, isSingleObject, sortPkColumns);
+          scanner.getProjectionSchema(), scanStats, false, projection, filterFunction, isSingleObject,
+          sortPkColumnNames);
     }).forEach(callback -> callback.nextBatch());
 
     return unsortedEnumerator(scanners, messages);
@@ -641,7 +643,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     final List<List<CalciteKuduPredicate>> merged = KuduPredicatePushDownVisitor.mergePredicateLists(SqlKind.AND,
         this.predicates, conjunctions);
     return new KuduEnumerable(merged, columnIndices, client, calciteKuduTable, limit, offset, sort, groupBySorted,
-        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumns);
+        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumnNames);
   }
 
   /**

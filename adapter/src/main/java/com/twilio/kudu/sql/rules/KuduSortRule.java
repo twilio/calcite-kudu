@@ -62,7 +62,7 @@ public abstract class KuduSortRule extends RelOptRule {
   public static final RelOptRule SIMPLE_SORT_RULE = new KuduSortWithoutFilter(RelFactories.LOGICAL_BUILDER);
   public static final RelOptRule FILTER_SORT_RULE = new KuduSortWithFilter(RelFactories.LOGICAL_BUILDER);
 
-  protected List<Integer> pkSortColumns = Lists.newArrayList();
+  protected List<String> pkSortColumns = Lists.newArrayList();
 
   public KuduSortRule(RelOptRuleOperand operand, RelBuilderFactory factory, String description) {
     super(operand, factory, description);
@@ -83,7 +83,7 @@ public abstract class KuduSortRule extends RelOptRule {
         // if we have an OFFSET return rows sorted by the primary key even if there
         // isn't an
         // ORDER BY clause so rows are returned in a deterministic order
-        pkSortColumns = IntStream.range(0, openedTable.getSchema().getPrimaryKeyColumnCount()).boxed()
+        pkSortColumns = openedTable.getSchema().getPrimaryKeyColumns().stream().map(schema -> schema.getName())
             .collect(Collectors.toList());
         return true;
       } else {
@@ -131,7 +131,8 @@ public abstract class KuduSortRule extends RelOptRule {
           return false;
         }
       }
-      pkSortColumns.add(pkColumnIndex);
+      String pkColumnName = openedTable.getSchema().getColumnByIndex(pkColumnIndex).getName();
+      pkSortColumns.add(pkColumnName);
       pkColumnIndex++;
     }
     return true;

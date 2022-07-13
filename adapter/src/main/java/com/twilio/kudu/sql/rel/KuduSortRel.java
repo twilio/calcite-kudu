@@ -51,27 +51,28 @@ public class KuduSortRel extends Sort implements KuduRelNode {
   // and
   // sortPrefixColumns is empty.
   public final List<RelFieldCollation> sortPkPrefixColumns;
-  public final List<Integer> sortPkColumns;
+  public final List<String> sortPkColumnNames;
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
-      RexNode fetch, List<Integer> sortPkColumns) {
-    this(cluster, traitSet, child, collation, offset, fetch, false, Lists.newArrayList(), sortPkColumns);
+      RexNode fetch, List<String> sortPkColumnNames) {
+    this(cluster, traitSet, child, collation, offset, fetch, false, Lists.newArrayList(), sortPkColumnNames);
   }
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
-      RexNode fetch, boolean groupBySorted, List<RelFieldCollation> sortPkPrefixColumns, List<Integer> sortPkColumns) {
+      RexNode fetch, boolean groupBySorted, List<RelFieldCollation> sortPkPrefixColumns,
+      List<String> sortPkColumnNames) {
     super(cluster, traitSet, child, collation, offset, fetch);
     assert getConvention() == KuduRelNode.CONVENTION;
     assert getConvention() == child.getConvention();
     this.groupBySorted = groupBySorted;
     this.sortPkPrefixColumns = sortPkPrefixColumns;
-    this.sortPkColumns = sortPkColumns;
+    this.sortPkColumnNames = sortPkColumnNames;
   }
 
   @Override
   public Sort copy(RelTraitSet traitSet, RelNode input, RelCollation newCollation, RexNode offset, RexNode fetch) {
     return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, groupBySorted, sortPkPrefixColumns,
-        sortPkColumns);
+        sortPkColumnNames);
   }
 
   @Override
@@ -112,6 +113,6 @@ public class KuduSortRel extends Sort implements KuduRelNode {
 
     implementor.groupByLimited = groupBySorted;
     implementor.sortPkPrefixColumns.addAll(sortPkPrefixColumns);
-    implementor.sortPkColumns.addAll(sortPkColumns);
+    implementor.sortPkColumns.addAll(sortPkColumnNames);
   }
 }

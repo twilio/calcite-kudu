@@ -127,7 +127,7 @@ public class KuduAggregationLimitRule extends RelOptRule {
     }
 
     // Check the new trait set to see if we can apply the sort against this.
-    final Pair<List<RelFieldCollation>, List<Integer>> pair = getSortPkPrefix(originalSort.getCollation(), newCollation,
+    final Pair<List<RelFieldCollation>, List<String>> pair = getSortPkPrefix(originalSort.getCollation(), newCollation,
         query, Optional.of(filter));
     if (pair.left.isEmpty()) {
       return;
@@ -165,13 +165,13 @@ public class KuduAggregationLimitRule extends RelOptRule {
     return true;
   }
 
-  public Pair<List<RelFieldCollation>, List<Integer>> getSortPkPrefix(final RelCollation originalCollation,
+  public Pair<List<RelFieldCollation>, List<String>> getSortPkPrefix(final RelCollation originalCollation,
       final RelCollation newCollation, final KuduQuery query, final Optional<Filter> filter) {
     boolean isDisableInListOptimizationHintPresent = false;
     final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
     final List<RelFieldCollation> sortPrefixColumns = Lists.newArrayList();
-    final List<Integer> sortPkColumns = Lists.newArrayList();
-    final Pair<List<RelFieldCollation>, List<Integer>> pair = new Pair<>(sortPrefixColumns, sortPkColumns);
+    final List<String> sortPkColumns = Lists.newArrayList();
+    final Pair<List<RelFieldCollation>, List<String>> pair = new Pair<>(sortPrefixColumns, sortPkColumns);
     // If there is no sort just return
     if (newCollation.getFieldCollations().isEmpty()) {
       return pair;
@@ -208,7 +208,8 @@ public class KuduAggregationLimitRule extends RelOptRule {
 
       // use the originalCollations
       sortPrefixColumns.add(originalCollation.getFieldCollations().get(collationIndex));
-      sortPkColumns.add(pkColumnIndex);
+      String pkColumnName = openedTable.getSchema().getColumnByIndex(pkColumnIndex).getName();
+      sortPkColumns.add(pkColumnName);
       pkColumnIndex++;
     }
 

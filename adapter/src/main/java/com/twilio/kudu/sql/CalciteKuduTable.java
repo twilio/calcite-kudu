@@ -234,8 +234,8 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    *                                a prefix of the primary key of the table, or
    *                                an empty list if the group by and order by
    *                                columns are the same
-   * @param sortPkColumns           the indexes of the primary key columns that
-   *                                are present in the ORDER BY clause
+   * @param sortPkColumnNames       the names of the primary key columns that are
+   *                                present in the ORDER BY clause
    * @return Enumeration on the objects, Fields conform to
    *         {@link CalciteKuduTable#getRowType}.
    */
@@ -243,9 +243,9 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
       final List<Integer> columnIndices, final long limit, final long offset, final boolean sorted,
       final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
       final Function1<Object, Object> projection, final Predicate1<Object> filterFunction, final boolean isSingleObject,
-      final Function1<Object, Object> sortedPrefixKeySelector, final List<Integer> sortPkColumns) {
+      final Function1<Object, Object> sortedPrefixKeySelector, final List<String> sortPkColumnNames) {
     return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset, sorted, groupByLimited,
-        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumns);
+        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumnNames);
   }
 
   @Override
@@ -325,7 +325,7 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
      *                                a prefix of the primary key of the table, or
      *                                an empty list if the group by and order by
      *                                columns are the same
-     * @param sortPkColumns           the names of the primary key columns that are
+     * @param sortPkColumnNames       the names of the primary key columns that are
      *                                present in the ORDER BY clause
      * @return Enumerable for the query
      */
@@ -334,9 +334,9 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
         final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
         final Function1<Object, Object> projection, final Predicate1<Object> filterFunction,
         final boolean isSingleObject, final Function1<Object, Object> sortedPrefixKeySelector,
-        final List<Integer> sortPkColumns) {
+        final List<String> sortPkColumnNames) {
       return getTable().executeQuery(predicates, fieldsIndices, limit, offset, sorted, groupByLimited, scanStats,
-          cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumns);
+          cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumnNames);
     }
 
     /**
@@ -368,6 +368,53 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
       KuduMetaImpl kuduMetaImpl = ((KuduCalciteConnectionImpl) queryProvider).getMeta();
       return Linq4j.singletonEnumerable(kuduMetaImpl.getMutationState(table).mutateRow(columnIndexes, values));
     }
+  }
+
+  /**
+   * Return the Integer indices in the Row Projection that match the primary key
+   * columns and in the order they need to match. This lays out how to compare two
+   * {@code CalciteRow}s and determine which one is smaller.
+   * <p>
+   * As an example, imagine we have a table (A, B, C, D, E) with primary columns
+   * in order of (A, B) and we have a scanner SELECT D, C, E, B, A the
+   * projectedSchema will be D, C, E, B, A and the tableSchema will be A, B, C, D,
+   * E *this* function will return List(4, 3) -- the position's of A and B within
+   * the projection and in the order they need to be sorted by.
+   * <p>
+   * The returned index list is used by the sorted {@link KuduEnumerable} to merge
+   * the results from multiple scanners.
+   *
+   * @param projectedSchema   the Kudu Schema used in RPC requests
+   * @param sortPkColumnNames the names of the primary key columns that are
+   *                          present in the ORDER BY clause
+   *
+   * @return List of column indexes that part of the primary key in the Kudu
+   *         Sorted order
+   */
+  @VisibleForTesting
+  public static List<Integer> getPrimaryKeyColumnsInProjection(final List<String> sortPkColumnNames,
+      final Schema projectedSchema) {
+    final List<Integer> primaryKeyColumnsInProjection = new ArrayList<>();
+    final List<ColumnSchema> columnSchemas = projectedSchema.getColumns();
+
+    // KuduSortRule checks if the prefix of the primary key columns are being
+    // filtered and
+    // are set to a constant literal, or if the columns being sorted are a
+    // prefix of the primary key columns.
+    for (String sortPkColumnName : sortPkColumnNames) {
+      boolean found = false;
+      for (int columnIdx = 0; columnIdx < projectedSchema.getColumnCount(); columnIdx++) {
+        if (columnSchemas.get(columnIdx).getName().equals(sortPkColumnName)) {
+          primaryKeyColumnsInProjection.add(columnIdx);
+          found = true;
+        }
+      }
+      if (!found) {
+        throw new IllegalStateException(
+            "Unable to find primary key " + "column " + sortPkColumnName + " in the projection.");
+      }
+    }
+    return primaryKeyColumnsInProjection;
   }
 
   public CubeTableInfo.EventTimeAggregationType getEventTimeAggregationType() {
