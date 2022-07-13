@@ -14,7 +14,6 @@
  */
 package com.twilio.kudu.sql.rel;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.twilio.kudu.sql.KuduEnumerable;
 import com.twilio.kudu.sql.KuduMethod;
 import com.twilio.kudu.sql.KuduPhysType;
@@ -266,8 +265,7 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
    * @return List of column indexes that part of the primary key in the Kudu
    *         Sorted order
    */
-  @VisibleForTesting
-  public static List<Integer> getPrimaryKeyColumnsInProjection(final List<Integer> sortPkColumnIndices,
+  public List<Integer> getPrimaryKeyColumnsInProjection(final List<Integer> sortPkColumnIndices,
       final List<Integer> projectedColumnIndices) {
     final List<Integer> primaryKeyColumnsInProjection = new ArrayList<>();
     // KuduSortRule checks if the prefix of the primary key columns are being
