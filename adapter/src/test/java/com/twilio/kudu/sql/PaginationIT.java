@@ -21,7 +21,6 @@ import com.twilio.kudu.sql.metadata.KuduTableMetadata;
 import com.twilio.kudu.sql.schema.BaseKuduSchemaFactory;
 import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
-import org.apache.calcite.util.ImmutableBeans;
 import org.apache.calcite.util.TimestampString;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.ColumnTypeAttributes;
@@ -124,7 +123,7 @@ public class PaginationIT {
 
   public static void initializeHints() {
     try {
-      SqlToRelConverter.Config CONFIG_MODIFIED = ImmutableBeans.create(SqlToRelConverter.Config.class)
+      SqlToRelConverter.Config CONFIG_MODIFIED = SqlToRelConverter.config()
           .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
           .withRelBuilderConfigTransform(c -> c.withPushJoinCondition(true))
           .withHintStrategyTable(KuduQuery.KUDU_HINT_STRATEGY_TABLE);
@@ -273,8 +272,7 @@ public class PaginationIT {
       String sql = String.format(sqlFormat, tableName, ACCOUNT1);
 
       // verify plan
-      String expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(offset=[5], fetch=[20], groupBySorted=[false])\n"
+      String expectedPlanFormat = "KuduToEnumerableRel\n" + "  KuduSortRel(offset=[5], fetch=[20])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
       String expectedPlan = String.format(expectedPlanFormat, ACCOUNT1, tableName);
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
@@ -346,8 +344,8 @@ public class PaginationIT {
       String plan = SqlUtil.getExplainPlan(rs);
       String expectedPlanFormat = "KuduToEnumerableRel\n"
           + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], "
-          + "dir2=[ASC], offset=[7], fetch=[6], groupBySorted=[false])\n"
-          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
+          + "dir2=[ASC], offset=[7], fetch=[6])\n" + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s])\n"
+          + "      KuduQuery(table=[[kudu, %s]])\n";
       String expectedPlan = String.format(expectedPlanFormat, descending ? "DESC" : "ASC", ACCOUNT1, tableName);
       assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
       rs = conn.createStatement().executeQuery(firstBatchSql);
@@ -399,7 +397,7 @@ public class PaginationIT {
       String plan = SqlUtil.getExplainPlan(rs);
 
       String expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[4], groupBySorted=[false])\n"
+          + "  KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[4])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, date_initiated LESS %d])\n"
           + "      KuduQuery(table=[[kudu, %s]])\n";
       String expectedPlan = String.format(expectedPlanFormat, dateInitiatedOrder, ACCOUNT2, T1 * 1000, T4 * 1000,
@@ -429,7 +427,7 @@ public class PaginationIT {
           + "AND (date_initiated, transaction_id) > (TIMESTAMP'%s', '%s') "
           + "ORDER BY date_initiated %s, transaction_id " + "LIMIT 4";
       expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[4], groupBySorted=[false])\n"
+          + "  KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[4])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, "
           + "date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000, "
           + "date_initiated %s %d], ScanToken 2=[account_sid EQUAL %s, "
@@ -490,7 +488,7 @@ public class PaginationIT {
 
       String expectedPlanFormat = "KuduToEnumerableRel\n"
           + "  KuduProjectRel(TRANSACTION_ID=[$2], DATE_INITIATED=[$1], ACCOUNT_SID=[$0])\n"
-          + "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[7], " + "groupBySorted=[false])\n"
+          + "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[7])\n"
           + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, "
           + "date_initiated LESS %d], ScanToken 2=[account_sid EQUAL %s, date_initiated "
           + "GREATER_EQUAL %d, date_initiated LESS %d])\n" + "        KuduQuery(table=[[kudu, %s]])\n";
@@ -537,7 +535,7 @@ public class PaginationIT {
           + "ORDER BY date_initiated %s, transaction_id LIMIT 7";
       expectedPlanFormat = "KuduToEnumerableRel\n"
           + "  KuduProjectRel(TRANSACTION_ID=[$2], DATE_INITIATED=[$1], ACCOUNT_SID=[$0])\n"
-          + "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[7], groupBySorted=[false])\n"
+          + "    KuduSortRel(sort0=[$1], sort1=[$2], dir0=[%s], dir1=[ASC], fetch=[7])\n"
           + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL ACCOUNT1, date_initiated %s %d, date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000], "
           + "ScanToken 2=[account_sid EQUAL ACCOUNT1, date_initiated EQUAL %d, transaction_id GREATER %s, date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000], "
           + "ScanToken 3=[account_sid EQUAL ACCOUNT2, date_initiated %s %d, date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000], "
@@ -605,8 +603,7 @@ public class PaginationIT {
 
       String expectedPlanFormat = "KuduToEnumerableRel\n"
           + "  KuduProjectRel(TRANSACTION_ID=[$2], DATE_INITIATED=[$1], ACCOUNT_SID=[$0])\n"
-          + "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], "
-          + "fetch=[7], groupBySorted=[false])\n"
+          + "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], " + "fetch=[7])\n"
           + "      KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, "
           + "date_initiated LESS %d], ScanToken 2=[account_sid EQUAL %s, date_initiated "
           + "GREATER_EQUAL %d, date_initiated LESS %d])\n" + "        KuduQuery(table=[[kudu, %s]])\n";
@@ -652,7 +649,7 @@ public class PaginationIT {
         // The plan is of the form
         // KuduToEnumerableRel
         // KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[ASC],
-        // dir2=[ASC], fetch=[7], groupBySorted=[false])
+        // dir2=[ASC], fetch=[7])
         // KuduFilterRel(
         // ScanToken 1=[account_sid EQUAL ACCOUNT1, account_sid GREATER ACCOUNT1,
         // date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000],
@@ -723,8 +720,7 @@ public class PaginationIT {
       String plan = SqlUtil.getExplainPlan(rs);
 
       String expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], "
-          + "fetch=[7], groupBySorted=[false])\n"
+          + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], " + "fetch=[7])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL %s, date_initiated GREATER_EQUAL %d, "
           + "date_initiated LESS %d], ScanToken 2=[account_sid EQUAL %s, date_initiated "
           + "GREATER_EQUAL %d, date_initiated LESS %d])\n" + "      KuduQuery(table=[[kudu, %s]])\n";
@@ -749,7 +745,7 @@ public class PaginationIT {
       String plan = SqlUtil.getExplainPlan(rs);
 
       String expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], fetch=[7], groupBySorted=[false])\n"
+          + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[%s], dir2=[ASC], fetch=[7])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid IN [ACCOUNT1, ACCOUNT2], date_initiated GREATER_EQUAL 1000000, date_initiated LESS 4000000])\n"
           + "      KuduQuery(table=[[kudu, %s]])\n";
 

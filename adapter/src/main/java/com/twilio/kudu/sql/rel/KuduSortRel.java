@@ -16,6 +16,7 @@ package com.twilio.kudu.sql.rel;
 
 import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.KuduRelNode;
+import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
@@ -25,6 +26,7 @@ import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.Sort;
+import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
@@ -40,53 +42,59 @@ import java.util.List;
 public class KuduSortRel extends Sort implements KuduRelNode {
 
   public static final Logger LOGGER = CalciteTrace.getPlannerTracer();
+  // groupBySorted true means one of the subclasses of KuduSortRule matched and
+  // the columns being sorted are a prefix of the PK columns so we do not need
+  // to sort the returned rows on the client
   public final boolean groupBySorted;
-  // If KuduAggregationLimitRule matched then the columns being sorted are a
-  // prefix of the PK
-  // columns and additional columns as well so we need to sort the returned rows.
-  // sortPrefixColumns contains the PK prefix columns
-  // If any of the subclasses of KuduSortRule matched then the columns being
-  // sorted
-  // are a prefix of the PK columns so we do not need to sort the returned rows
-  // and
-  // sortPrefixColumns is empty.
-  public final List<RelFieldCollation> sortPkPrefixColumns;
+  // groupByLimited true means KuduAggregationLimitRule was matched and the
+  // columns being sorted are a prefix of the PK columns and additional
+  // columns as well so we need to sort the returned rows on the client
+  public final boolean groupByLimited;
+
   public final List<Integer> sortPkColumns;
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
       RexNode fetch, List<Integer> sortPkColumns) {
-    this(cluster, traitSet, child, collation, offset, fetch, false, Lists.newArrayList(), sortPkColumns);
+    this(cluster, traitSet, child, collation, offset, fetch, false, false, sortPkColumns);
+    // include our own metadata provider so that we can customize costs
+    JaninoRelMetadataProvider relMetadataProvider = JaninoRelMetadataProvider.of(KuduRelMetadataProvider.INSTANCE);
+    RelMetadataQuery.THREAD_PROVIDERS.set(relMetadataProvider);
+    getCluster().setMetadataProvider(relMetadataProvider);
   }
 
   public KuduSortRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode child, RelCollation collation, RexNode offset,
-      RexNode fetch, boolean groupBySorted, List<RelFieldCollation> sortPkPrefixColumns, List<Integer> sortPkColumns) {
+      RexNode fetch, boolean groupBySorted, boolean groupByLimited, List<Integer> sortPkColumns) {
     super(cluster, traitSet, child, collation, offset, fetch);
     assert getConvention() == KuduRelNode.CONVENTION;
     assert getConvention() == child.getConvention();
     this.groupBySorted = groupBySorted;
-    this.sortPkPrefixColumns = sortPkPrefixColumns;
-    this.sortPkColumns = sortPkColumns;
+    this.groupByLimited = groupByLimited;
+    this.sortPkColumns = Lists.newArrayList(sortPkColumns);
   }
 
   @Override
   public Sort copy(RelTraitSet traitSet, RelNode input, RelCollation newCollation, RexNode offset, RexNode fetch) {
-    return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, groupBySorted, sortPkPrefixColumns,
+    return new KuduSortRel(getCluster(), traitSet, input, collation, offset, fetch, groupBySorted, groupByLimited,
         sortPkColumns);
   }
 
   @Override
   public RelWriter explainTerms(RelWriter pw) {
     super.explainTerms(pw);
-    pw.item("groupBySorted", groupBySorted);
-    if (!sortPkPrefixColumns.isEmpty()) {
-      pw.item("sortPkPrefixColumns", sortPkPrefixColumns);
+    if (groupBySorted) {
+      pw.item("groupBySorted", groupBySorted);
+    }
+    if (groupByLimited) {
+      pw.item("groupByLimited", groupByLimited);
     }
     return pw;
   }
 
   @Override
   public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
-    double dRows = Double.MIN_VALUE;
+    // increase the cost of the relation that does limit push down compared to the
+    // relation that does sort push down so that sort push down preferred
+    double dRows = groupByLimited ? 1.0 : Double.MIN_VALUE;
     double dCpu = 0;
     double dIo = 0;
     return planner.getCostFactory().makeCost(dRows, dCpu, dIo);
@@ -110,8 +118,9 @@ public class KuduSortRel extends Sort implements KuduRelNode {
       implementor.limit = properFetch;
     }
 
-    implementor.groupByLimited = groupBySorted;
-    implementor.sortPkPrefixColumns.addAll(sortPkPrefixColumns);
+    implementor.groupBySorted = groupBySorted;
+    implementor.groupByLimited = groupByLimited;
+    implementor.sortPkColumns.clear();
     implementor.sortPkColumns.addAll(sortPkColumns);
   }
 }

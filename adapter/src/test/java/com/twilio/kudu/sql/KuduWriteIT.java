@@ -146,7 +146,7 @@ public class KuduWriteIT {
       // validate rows are returned in reverse order
       String sql = "SELECT * FROM \"" + BASE_TABLE_NAME
           + "\" WHERE STRING_COL='ACCOUNT1' ORDER BY UNIXTIME_MICROS_COL DESC";
-      String expectedPlan = "KuduToEnumerableRel\n" + "  KuduSortRel(sort0=[$1], dir0=[DESC], groupBySorted=[false])\n"
+      String expectedPlan = "KuduToEnumerableRel\n" + "  KuduSortRel(sort0=[$1], dir0=[DESC])\n"
           + "    KuduFilterRel(ScanToken 1=[STRING_COL EQUAL ACCOUNT1])\n"
           + "      KuduQuery(table=[[kudu, SCHEMA.TABLE]])\n";
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);

@@ -14,6 +14,7 @@
  */
 package com.twilio.kudu.sql;
 
+import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
 import com.twilio.kudu.sql.rules.KuduProjectValuesRule;
 import com.twilio.kudu.sql.rules.KuduToEnumerableConverter;
 import com.twilio.kudu.sql.rules.KuduValuesRule;
@@ -25,6 +26,8 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.prepare.Prepare;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableModify;
+import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.kudu.client.KuduTable;
 
@@ -40,6 +43,10 @@ public class KuduWrite extends TableModify implements KuduRelNode {
     super(cluster, cluster.traitSetOf(KuduRelNode.CONVENTION), table, catalogReader, child, operation, updateColumnList,
         sourceExpressionList, flattened);
     this.kuduTable = kuduTable;
+    // include our own metadata provider so that we can customize costs
+    JaninoRelMetadataProvider relMetadataProvider = JaninoRelMetadataProvider.of(KuduRelMetadataProvider.INSTANCE);
+    RelMetadataQuery.THREAD_PROVIDERS.set(relMetadataProvider);
+    getCluster().setMetadataProvider(relMetadataProvider);
   }
 
   @Override

@@ -218,20 +218,22 @@ public class KuduToEnumerableRel extends ConverterImpl implements EnumerableRel 
     // If the output type has a Single column, inform the ScannerCallback.
     final Expression isSingleObject = Expressions.constant(physType.getRowType().getFieldCount() == 1);
 
+    List<Integer> sortedPkColumnIndexes = getPrimaryKeyColumnsInProjection(kuduImplementor.sortPkColumns,
+        kuduColumnIndices);
     final Expression sortedPrefixKeySelector;
-    if (!kuduImplementor.sortPkPrefixColumns.isEmpty()) {
-      sortedPrefixKeySelector = physType.generateCollationKey(kuduImplementor.sortPkPrefixColumns).left;
+    if (kuduImplementor.groupByLimited) {
+      sortedPrefixKeySelector = physType.generateAccessor(sortedPkColumnIndexes);
     } else {
       sortedPrefixKeySelector = Expressions.constant(null, Function1.class);
     }
     Expressions.list(list.append("keySelector", sortedPrefixKeySelector));
 
-    final Expression sortPkColumns = list.append("sortPkColumns", implementor
-        .stash(getPrimaryKeyColumnsInProjection(kuduImplementor.sortPkColumns, kuduColumnIndices), List.class));
+    final Expression sortPkColumns = list.append("sortPkColumns", implementor.stash(sortedPkColumnIndexes, List.class));
 
+    boolean groupBySortedOrLimited = kuduImplementor.groupBySorted || kuduImplementor.groupByLimited;
     final Expression enumerable = list.append("enumerable",
         Expressions.call(table, KuduMethod.KUDU_QUERY_METHOD.method, predicates, fields, limit, offset, sorted,
-            Expressions.constant(kuduImplementor.groupByLimited), scanStats, cancelBoolean, mapFunction, filterFunction,
+            Expressions.constant(groupBySortedOrLimited), scanStats, cancelBoolean, mapFunction, filterFunction,
             isSingleObject, sortedPrefixKeySelector, sortPkColumns));
 
     Hook.QUERY_PLAN.run(predicates);

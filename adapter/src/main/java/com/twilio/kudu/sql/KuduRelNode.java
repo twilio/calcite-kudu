@@ -15,11 +15,15 @@
 package com.twilio.kudu.sql;
 
 import com.google.common.collect.ImmutableList;
+import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
 import com.twilio.kudu.sql.rules.KuduToEnumerableConverter;
 import org.apache.calcite.plan.Convention;
+import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 
 import java.util.ArrayList;
@@ -75,10 +79,12 @@ public interface KuduRelNode extends RelNode {
     public long limit = -1;
     public long offset = -1;
     public boolean sorted = false;
+    // flag that determines if we are grouping and ordering by a prefix of the pk
+    // columns so that we can push down the sort
+    public boolean groupBySorted = false;
+    // flag that determines if we are grouping by a prefix of the pk columns so that
+    // we can push down the limit
     public boolean groupByLimited = false;
-    // if groupByLimited is true and sortPkPrefixColumns is empty
-    // that means we are sorting by the same columns as we are grouping by
-    public List<RelFieldCollation> sortPkPrefixColumns = new ArrayList<>();
     public List<Integer> sortPkColumns = new ArrayList<>();
 
     // information required for executing an update

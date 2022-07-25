@@ -40,6 +40,7 @@ import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexUtil;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.Pair;
 import org.apache.kudu.client.KuduTable;
@@ -66,9 +67,8 @@ import java.util.stream.Collectors;
  */
 public class KuduAggregationLimitRule extends RelOptRule {
 
-  private static final RelOptRuleOperand OPERAND = operand(Sort.class,
-      some(operand(Aggregate.class, some(operand(KuduToEnumerableRel.class,
-          some(operand(Project.class, some(operand(Filter.class, some(operand(KuduQuery.class, none())))))))))));
+  private static final RelOptRuleOperand OPERAND = operand(Sort.class, some(operand(Aggregate.class,
+      some(operand(Project.class, some(operand(Filter.class, some(operand(KuduQuery.class, none())))))))));
 
   public static final RelOptRule AGGREGATION_LIMIT_RULE = new KuduAggregationLimitRule(RelFactories.LOGICAL_BUILDER);
 
@@ -83,24 +83,21 @@ public class KuduAggregationLimitRule extends RelOptRule {
     if (originalSort.fetch == null)
       return;
     final Aggregate originalAggregate = (Aggregate) call.getRelList().get(1);
-    final KuduToEnumerableRel kuduToEnumerableRel = (KuduToEnumerableRel) call.getRelList().get(2);
-    final Project project = (Project) call.getRelList().get(3);
+    final Project project = (Project) call.getRelList().get(2);
     boolean containsExpression = project.getProjects().stream().filter(n -> !(n instanceof RexInputRef)).findAny()
         .isPresent();
     if (containsExpression)
       return;
-    final Filter filter = (Filter) call.getRelList().get(4);
-    final KuduQuery query = (KuduQuery) call.getRelList().get(5);
+    final Filter filter = (Filter) call.getRelList().get(3);
+    final KuduQuery query = (KuduQuery) call.getRelList().get(4);
 
-    perform(call, originalSort, originalAggregate, kuduToEnumerableRel, project, filter, query);
+    perform(call, originalSort, originalAggregate, project, filter, query);
   }
 
   protected void perform(final RelOptRuleCall call, final Sort originalSort, final Aggregate originalAggregate,
-      final KuduToEnumerableRel kuduToEnumerableRel, final Project project, final Filter filter,
-      final KuduQuery query) {
+      final Project project, final Filter filter, final KuduQuery query) {
 
     // Check that the columns being grouped are a prefix of the pk columns
-    int pkColumnIndex = 0;
     List<Integer> remappedGroupOrdinals = originalAggregate.getGroupSet().asList().stream()
         .map(groupedOrdinal -> ((RexInputRef) project.getProjects().get(groupedOrdinal)).getIndex())
         // sort so that we can check if the group by columns match a prefix
@@ -119,36 +116,28 @@ public class KuduAggregationLimitRule extends RelOptRule {
 
     RelCollation newCollation = RelCollationTraitDef.INSTANCE
         .canonize(RelCollations.permute(originalSort.getCollation(), remappingOrdinals));
-    final RelTraitSet traitSet = originalSort.getTraitSet().plus(newCollation).plus(Convention.NONE);
-
-    // TODO is this needed
-    if (traitSet.contains(KuduRelNode.CONVENTION)) {
-      return;
-    }
 
     // Check the new trait set to see if we can apply the sort against this.
-    final Pair<List<RelFieldCollation>, List<Integer>> pair = getSortPkPrefix(originalSort.getCollation(), newCollation,
-        query, Optional.of(filter));
-    if (pair.left.isEmpty()) {
+    final List<Integer> sortPkPrefix = getSortPkPrefix(newCollation, query, Optional.of(filter));
+    if (sortPkPrefix.isEmpty()) {
       return;
     }
 
     // create a KuduSortRel but indicate that the input does not come out sorted so
     // that EnumerableSort is used to sort the results
-    final KuduSortRel kuduSort = new KuduSortRel(project.getCluster(),
-        originalSort.getTraitSet().replace(KuduRelNode.CONVENTION), project, originalSort.getCollation(),
-        originalSort.offset, originalSort.fetch, true, pair.left, pair.right);
-
-    final RelNode newKuduToEnumerableRel = kuduToEnumerableRel.copy(kuduToEnumerableRel.getTraitSet(),
-        Lists.newArrayList(kuduSort));
+    final RelTraitSet traitSet = originalSort.getTraitSet().replace(KuduRelNode.CONVENTION)
+        .replace(originalSort.getCollation());
+    final KuduSortRel kuduSort = new KuduSortRel(project.getCluster(), traitSet,
+        convert(project, traitSet.replace(RelCollations.EMPTY)), originalSort.getCollation(), originalSort.offset,
+        originalSort.fetch, false, true, sortPkPrefix);
 
     final RelNode newAggregation = originalAggregate.copy(originalAggregate.getTraitSet(),
-        Collections.singletonList(newKuduToEnumerableRel));
+        Collections.singletonList(kuduSort));
 
-    final RelNode limitSort = EnumerableLimitSort.create(newAggregation, originalSort.getCollation(),
+    final RelNode newSort = originalSort.copy(originalSort.getTraitSet(), newAggregation, originalSort.getCollation(),
         originalSort.offset, originalSort.fetch);
 
-    call.transformTo(limitSort);
+    call.transformTo(newSort);
   }
 
   private boolean checkSortDirection(final KuduQuery query, final RelFieldCollation sortField) {
@@ -165,16 +154,12 @@ public class KuduAggregationLimitRule extends RelOptRule {
     return true;
   }
 
-  public Pair<List<RelFieldCollation>, List<Integer>> getSortPkPrefix(final RelCollation originalCollation,
-      final RelCollation newCollation, final KuduQuery query, final Optional<Filter> filter) {
-    boolean isDisableInListOptimizationHintPresent = false;
-    final KuduTable openedTable = query.calciteKuduTable.getKuduTable();
-    final List<RelFieldCollation> sortPrefixColumns = Lists.newArrayList();
+  public List<Integer> getSortPkPrefix(final RelCollation newCollation, final KuduQuery query,
+      final Optional<Filter> filter) {
     final List<Integer> sortPkColumns = Lists.newArrayList();
-    final Pair<List<RelFieldCollation>, List<Integer>> pair = new Pair<>(sortPrefixColumns, sortPkColumns);
     // If there is no sort just return
     if (newCollation.getFieldCollations().isEmpty()) {
-      return pair;
+      return sortPkColumns;
     }
 
     int pkColumnIndex = 0;
@@ -193,11 +178,10 @@ public class KuduAggregationLimitRule extends RelOptRule {
           final RexBuilder rexBuilder = filter.get().getCluster().getRexBuilder();
           final RexNode originalCondition = RexUtil.expandSearch(rexBuilder, null, filter.get().getCondition());
           while (pkColumnIndex < sortField.getFieldIndex()) {
-            final KuduSortRule.KuduFilterVisitor visitor = new KuduSortRule.KuduFilterVisitor(pkColumnIndex,
-                isDisableInListOptimizationHintPresent);
+            final KuduSortRule.KuduFilterVisitor visitor = new KuduSortRule.KuduFilterVisitor(pkColumnIndex, false);
             final Boolean foundFieldInCondition = originalCondition.accept(visitor);
             if (foundFieldInCondition.equals(Boolean.FALSE)) {
-              return pair;
+              return sortPkColumns;
             }
             pkColumnIndex++;
           }
@@ -206,13 +190,11 @@ public class KuduAggregationLimitRule extends RelOptRule {
         }
       }
 
-      // use the originalCollations
-      sortPrefixColumns.add(originalCollation.getFieldCollations().get(collationIndex));
       sortPkColumns.add(pkColumnIndex);
       pkColumnIndex++;
     }
 
-    return pair;
+    return sortPkColumns;
   }
 
 }

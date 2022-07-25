@@ -115,7 +115,7 @@ public class KuduSortedAggregationRule extends KuduSortRule {
 
     final KuduSortRel newSort = new KuduSortRel(project.getCluster(), traitSet.replace(KuduRelNode.CONVENTION),
         convert(project, project.getTraitSet().replace(RelCollations.EMPTY)), newCollation, originalSort.offset,
-        originalSort.fetch, true, Lists.newArrayList(), pkSortColumns);
+        originalSort.fetch, true, false, pkSortColumns);
 
     // Copy in the new collation because! this new rel is now coming out Sorted.
     final RelNode newkuduToEnumerableRel = kuduToEnumerableRel
