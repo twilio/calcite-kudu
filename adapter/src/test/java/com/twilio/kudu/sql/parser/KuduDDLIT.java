@@ -76,7 +76,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       KuduClient client = testHarness.getClient();
@@ -103,7 +103,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName\" "
@@ -167,7 +167,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName1\" "
@@ -232,7 +232,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName2\" " + "AS SELECT COUNT(INT32_COL) " + "FROM \"MY_TABLE_14\" "
@@ -309,7 +309,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"my_schema.MY_CUBE_1\" "
@@ -337,7 +337,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName4\" "
@@ -382,7 +382,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_10\" ";
@@ -408,7 +408,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_3\" " + "STRING_COL VARCHAR "
@@ -435,7 +435,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_5\" "
@@ -462,7 +462,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       // Creating a cube with aliases for column names should work
@@ -487,7 +487,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_26\" "
@@ -515,7 +515,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"LinkName\" "
@@ -576,7 +576,7 @@ public class KuduDDLIT {
           + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_NOT_EXISTS\"");
@@ -626,7 +626,7 @@ public class KuduDDLIT {
           + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_IF_EXISTS\"");
@@ -667,7 +667,7 @@ public class KuduDDLIT {
           + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER\"");
@@ -716,7 +716,7 @@ public class KuduDDLIT {
           + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_PK\"");
@@ -753,7 +753,7 @@ public class KuduDDLIT {
           + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_DROP_PK\"");
@@ -786,7 +786,7 @@ public class KuduDDLIT {
           + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_ALTER_ADD_NON_NULL_COL\"");
@@ -824,7 +824,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, UNIXTIME_MICROS_COL, \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"LinkName\" "
@@ -887,7 +887,7 @@ public class KuduDDLIT {
           + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
       String ddl2 = "CREATE MATERIALIZED VIEW \"MY_CUBE_7\" " + "AS SELECT * " + "FROM \"my_schema.MY_TABLE_7\" "
@@ -913,7 +913,7 @@ public class KuduDDLIT {
           + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE\"");
@@ -1026,7 +1026,7 @@ public class KuduDDLIT {
           + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TABLE_EXIST\"");
@@ -1047,7 +1047,7 @@ public class KuduDDLIT {
           + "\"double_col\" DOUBLE DEFAULT 0.0123456789," + "DECIMAL_COL DECIMAL(22, 6) DEFAULT 1234567890.123456, "
           + "PRIMARY KEY (STRING_COL, \"unixtime_micros_col\", \"int64_col\"))"
           + "PARTITION BY HASH (STRING_COL) PARTITIONS 17 " + "NUM_REPLICAS 1 "
-          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200, 'invalid.property'='1234')";
+          + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
       // validate the table can be queried
       ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"my_schema.MY_TAB\"");
