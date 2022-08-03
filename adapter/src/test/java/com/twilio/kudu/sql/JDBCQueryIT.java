@@ -318,7 +318,7 @@ public final class JDBCQueryIT {
       String expectedPlan = String.format(expectedPlanFormat, limit ? " fetch=[51]," : "", Boolean.toString(limit));
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
-//      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
+      assertEquals(String.format("Unexpected plan\n%s", plan), expectedPlan, plan);
 
       // since the table has three rows each with a unique date, we expect three rows
       // sorted by date
