@@ -55,18 +55,17 @@
 
     <properties>
         <kudu.version>1.16.0</kudu.version>
+        <!-- If https://issues.apache.org/jira/browse/CALCITE-5226 is resolved
+             remove the commons-dpcp2 in dependency management -->
         <calcite.version>1.31.0</calcite.version>
         <guava.version>30.1.1-jre</guava.version>
         <junit.version>4.13.1</junit.version>
         <slf4j.version>1.7.21</slf4j.version>
         <log4j.version>2.17.1</log4j.version>
         <mockito.version>4.6.1</mockito.version>
-        <jackson.version>2.13.2.20220328</jackson.version>
         <spotless.version>2.0.1</spotless.version>
         <freemarker-version>2.3.30</freemarker-version>
         <json-version>20200518</json-version>
-        <httpcomponents.version>4.5.13</httpcomponents.version>
-        <json-smart.version>2.4.7</json-smart.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -143,8 +142,8 @@
                 <version>${calcite.version}</version>
             </dependency>
             <!-- This is a dependency of calcite-core that pulls in log4j1.x
-                 This is just copy and pasta from over 8 years ago and at that time log4j 
-                 was assumed for runtime dependency. 
+                 This is just copy and pasta from over 8 years ago and at that time log4j
+                 was assumed for runtime dependency.
                  It is *NOT* used during compliation or runtime by this library -->
             <dependency>
               <groupId>com.google.uzaygezen</groupId>
@@ -219,29 +218,15 @@
                 <version>${json-version}</version>
             </dependency>
 
-            <!-- https://ossindex.sonatype.org/vulnerability/c0ed9602-d5c5-4c45-af48-c757161879ee -->
+            <!--Calcite fix: https://issues.apache.org/jira/browse/CALCITE-5226
+                https://ossindex.sonatype.org/vulnerability/sonatype-2020-1349?component-type=maven&component-name=org.apache.commons%2Fcommons-dbcp2&utm_source=ossindex-client&utm_medium=integration&utm_content=1.7.0
+                 https://ossindex.sonatype.org/vulnerability/sonatype-2020-0460?component-type=maven&component-name=org.apache.commons%2Fcommons-dbcp2&utm_source=ossindex-client&utm_medium=integration&utm_content=1.7.0
+                 -->
             <dependency>
-              <groupId>org.apache.httpcomponents</groupId>
-              <artifactId>httpclient</artifactId>
-              <version>${httpcomponents.version}</version>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-dbcp2</artifactId>
+                <version>2.9.0</version>
             </dependency>
-
-            <!-- https://ossindex.sonatype.org/vulnerability/2f4d58e2-444b-4231-bec2-2a2c2135b9d7 -->
-            <dependency>
-              <groupId>net.minidev</groupId>
-              <artifactId>json-smart</artifactId>
-              <version>${json-smart.version}</version>
-            </dependency>
-
-            <!-- https://ossindex.sonatype.org/vulnerability/f582b4ea-ef28-4d6e-93ad-15034025df21 -->
-			<!-- https://github.com/advisories/GHSA-57j2-w4cx-62h2 -->
-			<dependency>
-			  <groupId>com.fasterxml.jackson</groupId>
-			  <artifactId>jackson-bom</artifactId>
-			  <version>${jackson.version}</version>
-			  <type>pom</type>
-			  <scope>import</scope>
-			</dependency>
         </dependencies>
     </dependencyManagement>
     <build>
