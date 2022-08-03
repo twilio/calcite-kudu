@@ -41,11 +41,15 @@ public class KuduToEnumerableConverter extends ConverterRule {
 
   public static final Logger logger = CalciteTrace.getPlannerTracer();
 
-  public static final ConverterRule INSTANCE = new KuduToEnumerableConverter(RelFactories.LOGICAL_BUILDER);
+  private static final Config DEFAULT_CONFIG = Config.INSTANCE
+      .withConversion(RelNode.class, KuduRelNode.CONVENTION, EnumerableConvention.INSTANCE, "KuduToEnumerableConverter")
+      .withRuleFactory(KuduToEnumerableConverter::new);
 
-  private KuduToEnumerableConverter(RelBuilderFactory relBuilderFactory) {
-    super(RelNode.class, Predicates.<RelNode>alwaysTrue(), KuduRelNode.CONVENTION, EnumerableConvention.INSTANCE,
-        relBuilderFactory, "KuduToEnumerableConverterRule");
+  public static final KuduToEnumerableConverter INSTANCE = KuduToEnumerableConverter.DEFAULT_CONFIG
+      .toRule(KuduToEnumerableConverter.class);
+
+  protected KuduToEnumerableConverter(Config config) {
+    super(config);
   }
 
   @Override

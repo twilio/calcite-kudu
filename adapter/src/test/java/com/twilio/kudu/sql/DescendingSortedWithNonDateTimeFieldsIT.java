@@ -133,7 +133,7 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
       String plan = SqlUtil.getExplainPlan(rs);
       String expectedPlanFormat = "KuduToEnumerableRel\n"
           + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], "
-          + "dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC], " + "groupBySorted=[false])\n"
+          + "dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
           + "      KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
       String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);
@@ -219,7 +219,7 @@ public class DescendingSortedWithNonDateTimeFieldsIT {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
       String expectedPlanFormat = "KuduToEnumerableRel\n"
-          + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC], groupBySorted=[false])\n"
+          + "  KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], sort3=[$3], sort4=[$4], dir0=[ASC], dir1=[DESC], dir2=[DESC], dir3=[DESC], dir4=[DESC])\n"
           + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, reverse_byte_field GREATER 1, reverse_short_field GREATER 1, reverse_int_field GREATER 1, reverse_long_field GREATER 1])\n"
           + "      KuduQuery(table=[[kudu, DescendingSortTestTable]])\n";
       String expectedPlan = String.format(expectedPlanFormat, ACCOUNT_SID);

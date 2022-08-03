@@ -16,12 +16,14 @@ package com.twilio.kudu.sql.rel;
 
 import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.KuduRelNode;
+import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -55,6 +57,10 @@ public class KuduProjectRel extends Project implements KuduRelNode {
   public KuduProjectRel(RelOptCluster cluster, RelTraitSet traitSet, RelNode input, List<? extends RexNode> projects,
       RelDataType rowType) {
     super(cluster, traitSet, input, projects, rowType);
+    // include our own metadata provider so that we can customize costs
+    JaninoRelMetadataProvider relMetadataProvider = JaninoRelMetadataProvider.of(KuduRelMetadataProvider.INSTANCE);
+    RelMetadataQuery.THREAD_PROVIDERS.set(relMetadataProvider);
+    getCluster().setMetadataProvider(relMetadataProvider);
   }
 
   @Override

@@ -24,9 +24,10 @@ import org.apache.calcite.rex.RexUtil;
 
 public class KuduFilterIntoJoinRule extends FilterJoinRule.FilterIntoJoinRule {
 
-  public static final KuduFilterIntoJoinRule KUDU_FILTER_INTO_JOIN = new KuduFilterIntoJoinRule(Config.DEFAULT);
+  public static final KuduFilterIntoJoinRule KUDU_FILTER_INTO_JOIN = new KuduFilterIntoJoinRule(
+      FilterIntoJoinRuleConfig.DEFAULT);
 
-  protected KuduFilterIntoJoinRule(Config config) {
+  protected KuduFilterIntoJoinRule(FilterIntoJoinRuleConfig config) {
     super(config);
   }
 

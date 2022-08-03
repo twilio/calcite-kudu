@@ -249,7 +249,7 @@ public final class SortedAggregationIT {
       String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], FIELD1=[$t1], FIELD2=[$t0], EXPR$2=[$t2])\n"
           + "  EnumerableLimitSort(sort0=[$1], sort1=[$2], dir0=[DESC], dir1=[DESC], offset=[1], fetch=[2])\n"
           + "    EnumerableAggregate(group=[{0, 1}], EXPR$2=[$SUM0($2)])\n" + "      KuduToEnumerableRel\n"
-          + "        KuduSortRel(sort0=[$1], sort1=[$2], dir0=[DESC], dir1=[DESC], offset=[1], fetch=[2], groupBySorted=[true], sortPkPrefixColumns=[[1 DESC]])\n"
+          + "        KuduSortRel(sort0=[$1], sort1=[$2], dir0=[DESC], dir1=[DESC], offset=[1], fetch=[2], groupByLimited=[true])\n"
           + "          KuduProjectRel(FIELD2=[$2], FIELD1=[$1], FIELD4=[$4])\n"
           + "            KuduFilterRel(ScanToken 1=[ACCOUNT_SID EQUAL ACCOUNT1])\n"
           + "              KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
@@ -289,7 +289,7 @@ public final class SortedAggregationIT {
       String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], FIELD1=[$t1], RESOURCE_TYPE=[$t0], EXPR$2=[$t2])\n"
           + "  EnumerableLimitSort(sort0=[$1], sort1=[$0], dir0=[DESC], dir1=[ASC], offset=[1], fetch=[2])\n"
           + "    EnumerableAggregate(group=[{0, 1}], EXPR$2=[$SUM0($2)])\n" + "      KuduToEnumerableRel\n"
-          + "        KuduSortRel(sort0=[$1], sort1=[$0], dir0=[DESC], dir1=[ASC], offset=[1], fetch=[2], groupBySorted=[true], sortPkPrefixColumns=[[1 DESC]])\n"
+          + "        KuduSortRel(sort0=[$1], sort1=[$0], dir0=[DESC], dir1=[ASC], offset=[1], fetch=[2], groupByLimited=[true])\n"
           + "          KuduProjectRel(RESOURCE_TYPE=[$5], FIELD1=[$1], FIELD4=[$4])\n"
           + "            KuduFilterRel(ScanToken 1=[ACCOUNT_SID EQUAL ACCOUNT1])\n"
           + "              KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
@@ -433,7 +433,7 @@ public final class SortedAggregationIT {
       final String expectedPlan = "EnumerableCalc(expr#0..2=[{inputs}], ACCOUNT_SID=[$t0], EXPR$1=[$t2], FIELD1=[$t1])\n"
           + "  EnumerableLimitSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC], fetch=[1])\n"
           + "    EnumerableAggregate(group=[{0, 1}], EXPR$1=[$SUM0($2)])\n" + "      KuduToEnumerableRel\n"
-          + "        KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC], fetch=[1], groupBySorted=[true], sortPkPrefixColumns=[[0]])\n"
+          + "        KuduSortRel(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC], fetch=[1], groupByLimited=[true])\n"
           + "          KuduProjectRel(ACCOUNT_SID=[$0], FIELD1=[$1], FIELD4=[$4])\n"
           + "            KuduFilterRel(ScanToken 1=[RESOURCE_TYPE EQUAL message-body])\n"
           + "              KuduQuery(table=[[kudu, SortedAggregationIT]])\n";
@@ -465,6 +465,9 @@ public final class SortedAggregationIT {
       assertTrue(String.format("Plan should contain KuduSortRel. It is\n%s", plan), plan.contains("KuduSortRel"));
       assertTrue(String.format("KuduSortRel should have groupBySorted set to true. It doesn't\n%s", plan),
           plan.contains("groupBySorted=[true]"));
+      assertEquals(String.format("Full SQL plan has changed\n%s", plan), expectedPlan, plan);
+
+//      TestUtil.printResultSet(queryResult);
 
       assertEquals("Should be grouped second by Byte of 6", 6, queryResult.getByte(2));
       assertTrue("Should have more results", queryResult.next());
@@ -477,9 +480,6 @@ public final class SortedAggregationIT {
 
       assertEquals("Should be grouped first by Byte of 4", 3, queryResult.getByte(2));
       assertFalse("Should only have four results", queryResult.next());
-
-      assertEquals(String.format("Full SQL plan has changed\n%s", plan), expectedPlan, plan);
-
     }
   }
 

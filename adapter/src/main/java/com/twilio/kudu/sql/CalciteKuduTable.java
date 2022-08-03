@@ -219,7 +219,7 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    * @param offset                  skip offset number of rows before returning
    *                                results
    * @param sorted                  whether to return rows in sorted order
-   * @param groupByLimited          indicates if the groupBy method should be
+   * @param groupBySortedOrLimited  indicates if the groupBy method should be
    *                                counting unique keys
    * @param scanStats               scan stats collector
    * @param cancelFlag              flag to indicate the query has been canceled
@@ -241,11 +241,12 @@ public class CalciteKuduTable extends AbstractQueryableTable implements Translat
    */
   public KuduEnumerable executeQuery(final List<List<CalciteKuduPredicate>> predicates,
       final List<Integer> columnIndices, final long limit, final long offset, final boolean sorted,
-      final boolean groupByLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
+      final boolean groupBySortedOrLimited, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
       final Function1<Object, Object> projection, final Predicate1<Object> filterFunction, final boolean isSingleObject,
       final Function1<Object, Object> sortedPrefixKeySelector, final List<Integer> sortPkColumns) {
-    return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset, sorted, groupByLimited,
-        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumns);
+    return new KuduEnumerable(predicates, columnIndices, this.client, this, limit, offset, sorted,
+        groupBySortedOrLimited, scanStats, cancelFlag, projection, filterFunction, isSingleObject,
+        sortedPrefixKeySelector, sortPkColumns);
   }
 
   @Override

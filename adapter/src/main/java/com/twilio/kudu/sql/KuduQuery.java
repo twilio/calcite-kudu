@@ -14,6 +14,7 @@
  */
 package com.twilio.kudu.sql;
 
+import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
 import com.twilio.kudu.sql.rules.KuduFilterRule;
 import com.twilio.kudu.sql.rules.KuduNestedJoinRule;
 import com.twilio.kudu.sql.rules.KuduRules;
@@ -28,11 +29,11 @@ import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.hint.HintPredicates;
 import org.apache.calcite.rel.hint.HintStrategyTable;
 import org.apache.calcite.rel.hint.RelHint;
+import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.hint.RelHint;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -64,6 +65,10 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     this.calciteKuduTable = calciteKuduTable;
     this.projectRowType = projectRowType;
     assert getConvention() == KuduRelNode.CONVENTION;
+    // include our own metadata provider so that we can customize costs
+    JaninoRelMetadataProvider relMetadataProvider = JaninoRelMetadataProvider.of(KuduRelMetadataProvider.INSTANCE);
+    RelMetadataQuery.THREAD_PROVIDERS.set(relMetadataProvider);
+    getCluster().setMetadataProvider(relMetadataProvider);
   }
 
   @Override

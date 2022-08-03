@@ -15,6 +15,7 @@
 package com.twilio.kudu.sql.rel;
 
 import com.twilio.kudu.sql.KuduRelNode;
+import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
@@ -22,6 +23,7 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.SingleRel;
+import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
@@ -37,6 +39,10 @@ public class KuduLimitRel extends SingleRel implements KuduRelNode {
     this.offset = offset;
     this.fetch = fetch;
     assert getConvention() == input.getConvention();
+    // include our own metadata provider so that we can customize costs
+    JaninoRelMetadataProvider relMetadataProvider = JaninoRelMetadataProvider.of(KuduRelMetadataProvider.INSTANCE);
+    RelMetadataQuery.THREAD_PROVIDERS.set(relMetadataProvider);
+    getCluster().setMetadataProvider(relMetadataProvider);
   }
 
   @Override

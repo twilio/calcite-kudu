@@ -80,7 +80,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
   private final AtomicBoolean cancelFlag;
 
   public final boolean sort;
-  public final boolean groupBySorted;
+  public final boolean groupBySortedOrLimited;
   public final Function1<Object, Object> sortedPrefixKeySelector;
   public final List<Integer> sortPkColumns;
   public final long limit;
@@ -112,7 +112,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
    *                                returning rows
    * @param sort                    whether or not have Kudu RPCs come back in
    *                                sorted by primary key
-   * @param groupBySorted           when sorted, and
+   * @param groupBySortedOrLimited  when sorted, and
    *                                {@link Enumerable#groupBy(Function1, Function0, Function2, Function2)}
    * @param scanStats               a container of scan stats that should be
    *                                updated as the scan executes.
@@ -135,8 +135,9 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
    */
   public KuduEnumerable(final List<List<CalciteKuduPredicate>> predicates, final List<Integer> columnIndices,
       final AsyncKuduClient client, final CalciteKuduTable calciteKuduTable, final long limit, final long offset,
-      final boolean sort, final boolean groupBySorted, final KuduScanStats scanStats, final AtomicBoolean cancelFlag,
-      final Function1<Object, Object> projection, final Predicate1<Object> filterFunction, final boolean isSingleObject,
+      final boolean sort, final boolean groupBySortedOrLimited, final KuduScanStats scanStats,
+      final AtomicBoolean cancelFlag, final Function1<Object, Object> projection,
+      final Predicate1<Object> filterFunction, final boolean isSingleObject,
       final Function1<Object, Object> sortedPrefixKeySelector, final List<Integer> sortPkColumns) {
     this.scansShouldStop = new AtomicBoolean(false);
     this.cancelFlag = cancelFlag;
@@ -146,10 +147,10 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     // if we have an offset always sort by the primary key to ensure the rows are
     // returned in a predictable order
     this.sort = offset > 0 || sort;
-    if (groupBySorted && !this.sort) {
+    if (groupBySortedOrLimited && !this.sort) {
       throw new IllegalArgumentException("If groupBySorted is true the results must need to be " + "sorted");
     }
-    this.groupBySorted = groupBySorted;
+    this.groupBySortedOrLimited = groupBySortedOrLimited;
     this.sortedPrefixKeySelector = sortedPrefixKeySelector;
     this.sortPkColumns = sortPkColumns;
     this.scanStats = scanStats;
@@ -181,7 +182,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
   private boolean checkLimitReached(int totalMoves) {
     // handling of limit and/or offset for groupBySorted is done in the groupBy
     // method
-    if (limit > 0 && !groupBySorted) {
+    if (limit > 0 && !groupBySortedOrLimited) {
       long moveOffset = offset > 0 ? offset : 0;
       if (totalMoves - moveOffset > limit) {
         return true;
@@ -317,7 +318,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       private void moveToOffset() {
         // handling of limit and/or offset for groupBySorted is done in the groupBy
         // method
-        if (offset > 0 && !groupBySorted) {
+        if (offset > 0 && !groupBySortedOrLimited) {
           while (totalMoves < offset && moveNext())
             ;
         }
@@ -513,7 +514,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     // or there is no
     // limit to the grouping, read every single matching row for this query.
     // This implies sorted = false.
-    if (!groupBySorted) {
+    if (!groupBySortedOrLimited) {
       return EnumerableDefaults.groupBy(getThis(), keySelector, accumulatorInitializer, accumulatorAdder,
           resultSelector);
     }
@@ -598,7 +599,7 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
       // 2. All the predicates are pushed into the scan.
       // When those are true, the Scanners can inform the datanode that it only
       // requires a small number of rows.
-      if (limit > 0 && !groupBySorted && filterFunction == Predicate1.TRUE) {
+      if (limit > 0 && !groupBySortedOrLimited && filterFunction == Predicate1.TRUE) {
         if (offset > 0) {
           tokenBuilder.limit(offset + limit);
         } else {
@@ -640,8 +641,9 @@ public final class KuduEnumerable extends AbstractEnumerable<Object> implements 
     // same one.
     final List<List<CalciteKuduPredicate>> merged = KuduPredicatePushDownVisitor.mergePredicateLists(SqlKind.AND,
         this.predicates, conjunctions);
-    return new KuduEnumerable(merged, columnIndices, client, calciteKuduTable, limit, offset, sort, groupBySorted,
-        scanStats, cancelFlag, projection, filterFunction, isSingleObject, sortedPrefixKeySelector, sortPkColumns);
+    return new KuduEnumerable(merged, columnIndices, client, calciteKuduTable, limit, offset, sort,
+        groupBySortedOrLimited, scanStats, cancelFlag, projection, filterFunction, isSingleObject,
+        sortedPrefixKeySelector, sortPkColumns);
   }
 
   /**

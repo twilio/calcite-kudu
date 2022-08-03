@@ -16,9 +16,12 @@ package com.twilio.kudu.sql.rel;
 
 import com.google.common.collect.ImmutableList;
 import com.twilio.kudu.sql.KuduRelNode;
+import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.core.Values;
+import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexLiteral;
@@ -30,6 +33,10 @@ public class KuduValuesRel extends Values implements KuduRelNode {
   public KuduValuesRel(RelOptCluster cluster, RelDataType rowType, ImmutableList<ImmutableList<RexLiteral>> tuples,
       RelTraitSet traits) {
     super(cluster, rowType, tuples, traits);
+    // include our own metadata provider so that we can customize costs
+    JaninoRelMetadataProvider relMetadataProvider = JaninoRelMetadataProvider.of(KuduRelMetadataProvider.INSTANCE);
+    RelMetadataQuery.THREAD_PROVIDERS.set(relMetadataProvider);
+    getCluster().setMetadataProvider(relMetadataProvider);
   }
 
   @Override

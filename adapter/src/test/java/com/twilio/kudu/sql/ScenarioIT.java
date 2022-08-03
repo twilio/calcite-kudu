@@ -16,12 +16,13 @@ package com.twilio.kudu.sql;
 
 import com.twilio.kudu.dataloader.DataLoader;
 import com.twilio.kudu.dataloader.Scenario;
+import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
 import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
 import com.twilio.kudu.sql.schema.KuduSchema;
-import org.apache.calcite.prepare.KuduPrepareImpl;
 import org.apache.calcite.rel.core.RelFactories;
+import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
-import org.apache.calcite.util.ImmutableBeans;
 import org.apache.kudu.test.KuduTestHarness;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -94,7 +95,7 @@ public class ScenarioIT {
   // TODO figure out a better way to set the HintStrategyTable for sql queries
   public static void initializeHints() {
     try {
-      SqlToRelConverter.Config CONFIG_MODIFIED = ImmutableBeans.create(SqlToRelConverter.Config.class)
+      SqlToRelConverter.Config CONFIG_MODIFIED = SqlToRelConverter.config()
           .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
           .withRelBuilderConfigTransform(c -> c.withPushJoinCondition(true))
           .withHintStrategyTable(KuduQuery.KUDU_HINT_STRATEGY_TABLE);

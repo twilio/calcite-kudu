@@ -16,6 +16,7 @@ package com.twilio.kudu.sql.rel;
 
 import com.twilio.kudu.sql.CalciteKuduPredicate;
 import com.twilio.kudu.sql.KuduRelNode;
+import com.twilio.kudu.sql.metadata.KuduRelMetadataProvider;
 import com.twilio.kudu.sql.rel.KuduProjectRel.KuduColumnVisitor;
 
 import org.apache.calcite.plan.RelOptCluster;
@@ -25,6 +26,7 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.Filter;
+import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.kudu.Schema;
@@ -43,6 +45,10 @@ public class KuduFilterRel extends Filter implements KuduRelNode {
     this.scanPredicates = predicates;
     this.kuduSchema = kuduSchema;
     this.useInMemoryFiltering = useInMemoryFiltering;
+    // include our own metadata provider so that we can customize costs
+    JaninoRelMetadataProvider relMetadataProvider = JaninoRelMetadataProvider.of(KuduRelMetadataProvider.INSTANCE);
+    RelMetadataQuery.THREAD_PROVIDERS.set(relMetadataProvider);
+    getCluster().setMetadataProvider(relMetadataProvider);
   }
 
   @Override
