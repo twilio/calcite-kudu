@@ -56,7 +56,7 @@
     <properties>
 	  <!-- When updating check if CALCITE-5025 is resolved and if it is removed 
 		   commons-io:commons-io from dependency managment section -->
-        <calcite.version>1.26.0</calcite.version>
+        <calcite.version>1.31.0</calcite.version>
         <kudu.version>1.16.0</kudu.version>
         <guava.version>30.1.1-jre</guava.version>
         <junit.version>4.13.1</junit.version>
