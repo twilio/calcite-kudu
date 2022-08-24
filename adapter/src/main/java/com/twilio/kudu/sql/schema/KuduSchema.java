@@ -97,7 +97,7 @@ public final class KuduSchema extends AbstractSchema {
         .valueOf((String) propertyMap.getOrDefault(READ_SNAPSHOT_TIME_DIFFERENCE, "0"));
     this.parentSchema = parentSchema;
     this.name = name;
-    this.addMaterializationsHook = prepareAddMaterializationsHook();
+    this.addMaterializationsHook = disableMaterializedViews ? null : prepareAddMaterializationsHook();
   }
 
   public void clearCachedTableMap() {
@@ -356,23 +356,21 @@ public final class KuduSchema extends AbstractSchema {
 
   /** Adds all materialized views defined in the schema to this column family. */
   private void addMaterializedViews() {
-    // Close the hook use to get us here
-    addMaterializationsHook.close();
+    SchemaPlus schema = parentSchema.getSubSchema(name);
+    if (schema != null) {
+      // Close the hook use to get us here
+      addMaterializationsHook.close();
 
-    if (disableMaterializedViews) {
-      return;
-    }
+      for (Map.Entry<String, String> entry : materializedViewSqls.entrySet()) {
+        // Add the view for this query
+        String viewName = "$" + getTableNames().size();
+        CalciteSchema calciteSchema = CalciteSchema.from(schema);
 
-    for (Map.Entry<String, String> entry : materializedViewSqls.entrySet()) {
-      // Add the view for this query
-      String viewName = "$" + getTableNames().size();
-      SchemaPlus schema = parentSchema.getSubSchema(name);
-      CalciteSchema calciteSchema = CalciteSchema.from(schema);
+        List<String> viewPath = calciteSchema.path(viewName);
 
-      List<String> viewPath = calciteSchema.path(viewName);
-
-      schema.add(viewName,
-          MaterializedViewTable.create(calciteSchema, entry.getValue(), null, viewPath, entry.getKey(), true));
+        schema.add(viewName,
+            MaterializedViewTable.create(calciteSchema, entry.getValue(), null, viewPath, entry.getKey(), true));
+      }
     }
   }
 
