@@ -173,12 +173,12 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
   private <C extends Comparable<C>> List<List<CalciteKuduPredicate>> visitSearch(RexCall call, RexCall parent) {
     final RexLiteral literal = (RexLiteral) call.operands.get(1);
     final Sarg<C> sarg = literal.getValueAs(Sarg.class);
-    int columnIndex = getColumnIndex(call.operands.get(0));
     // If disableInListOptimization is true use an OR clause which ends up
     // generating a separate scan token for
     // each clause. this is required in case we are sorting by a
     // part of the primary key
     if (sarg.isPoints() && !disableInListOptimization) {
+      int columnIndex = getColumnIndex(call.operands.get(0));
       final List<RexNode> inNodes = sarg.rangeSet.asRanges().stream()
           .map(range -> rexBuilder.makeLiteral(range.lowerEndpoint(), literal.getType(), true, true))
           .collect(Collectors.toList());
@@ -264,7 +264,7 @@ public class KuduPredicatePushDownVisitor implements RexBiVisitor<List<List<Calc
       return ((RexInputRef) node).getIndex();
     }
     // if the node is an expression of the form expr#14=[CAST($t3):INTEGER] we need
-    // to exptract
+    // to extract
     // the column index from the input to the CAST expression
     else if (node instanceof RexCall) {
       RexCall call = (RexCall) node;

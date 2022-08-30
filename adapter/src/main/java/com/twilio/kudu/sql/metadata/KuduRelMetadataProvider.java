@@ -23,6 +23,6 @@ public class KuduRelMetadataProvider {
 
   public static final RelMetadataProvider INSTANCE = ChainedRelMetadataProvider.of(
       // add the kudu rel metadata providers before the default metadata provider
-      ImmutableList.of(KuduNonCumulativeCost.SOURCE, DefaultRelMetadataProvider.INSTANCE));
+      ImmutableList.of(KuduNonCumulativeCost.SOURCE, KuduRelMdSelectivity.SOURCE, DefaultRelMetadataProvider.INSTANCE));
 
 }

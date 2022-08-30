@@ -18,10 +18,12 @@ import com.twilio.kudu.sql.KuduRelNode;
 import com.twilio.kudu.sql.rel.KuduToEnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
+import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.core.RelFactories;
+import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.tools.RelBuilderFactory;
 
 import org.apache.calcite.util.trace.CalciteTrace;

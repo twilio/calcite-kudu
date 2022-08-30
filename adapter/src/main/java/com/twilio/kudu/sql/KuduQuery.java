@@ -32,6 +32,7 @@ import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.rules.materialize.MaterializedViewRules;
 import org.apache.calcite.rel.type.RelDataType;
 
 import java.util.List;
@@ -115,6 +116,16 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     if (CalciteSystemProperty.ENABLE_ENUMERABLE.value()) {
       KuduRules.ENUMERABLE_RULES.stream().forEach(r -> planner.addRule(r));
     }
+
+    // TODO remove if/when CALCITE-5420 is merged
+    planner.removeRule(MaterializedViewRules.AGGREGATE);
+    planner.addRule(KuduRules.MV_AGGREGATE);
+
+    // we include our own metadata provider that overrides calcite's default Sarg
+    // selectivity so
+    // that union queries work as expected
+    JaninoRelMetadataProvider relMetadataProvider = JaninoRelMetadataProvider.of(KuduRelMetadataProvider.INSTANCE);
+    RelMetadataQuery.THREAD_PROVIDERS.set(relMetadataProvider);
   }
 
   @Override
