@@ -53,26 +53,31 @@ public class KuduRelMdSelectivity extends RelMdSelectivity {
     final RexExecutor executor = Util.first(rel.getCluster().getPlanner().getExecutor(), RexUtil.EXECUTOR);
     final RexSimplify rexSimplify = new RexSimplify(rel.getCluster().getRexBuilder(), RelOptPredicateList.EMPTY,
         executor);
-    RexNode e = rexSimplify.simplify(predicate);
-    if (e.getKind() == SqlKind.SEARCH) {
-      RexCall call = (RexCall) e;
-      Sarg sarg = ((RexLiteral) call.getOperands().get(1)).getValueAs(Sarg.class);
-      double selectivity = 0.d;
-      for (Object o : sarg.rangeSet.asRanges()) {
-        Range r = (Range) o;
-        if (!(r.lowerEndpoint() instanceof TimestampString) || !(r.upperEndpoint() instanceof TimestampString)) {
-          return RelMdUtil.guessSelectivity(predicate);
+    RexNode simplifiedPred = rexSimplify.simplify(predicate);
+    double sel = 1.0;
+    for (RexNode pred : RelOptUtil.conjunctions(simplifiedPred)) {
+      if (pred.getKind() == SqlKind.SEARCH) {
+        RexCall call = (RexCall) pred;
+        Sarg sarg = ((RexLiteral) call.getOperands().get(1)).getValueAs(Sarg.class);
+        double rangSelectivity = 0.d;
+        for (Object o : sarg.rangeSet.asRanges()) {
+          Range r = (Range) o;
+          if (!r.hasLowerBound() || !r.hasUpperBound() || !(r.lowerEndpoint() instanceof TimestampString)
+              || !(r.upperEndpoint() instanceof TimestampString)) {
+            sel *= RelMdUtil.guessSelectivity(predicate);
+          } else {
+            long lowerBound = r.hasLowerBound() ? ((TimestampString) r.lowerEndpoint()).getMillisSinceEpoch() : 0l;
+            long upperBound = r.hasUpperBound() ? ((TimestampString) r.upperEndpoint()).getMillisSinceEpoch()
+                : System.currentTimeMillis();
+            rangSelectivity += (upperBound - lowerBound) / MAX_TIME_RANGE;
+            rangSelectivity = Math.min(1.0, rangSelectivity);
+            sel *= rangSelectivity;
+          }
         }
-        long lowerBound = r.hasLowerBound() ? ((TimestampString) r.lowerEndpoint()).getMillisSinceEpoch() : 0l;
-        long upperBound = r.hasUpperBound() ? ((TimestampString) r.upperEndpoint()).getMillisSinceEpoch()
-            : System.currentTimeMillis();
-        selectivity += (upperBound - lowerBound) / MAX_TIME_RANGE;
-        if (selectivity > 1.0) {
-          return 1.0;
-        }
+      } else {
+        sel *= RelMdUtil.guessSelectivity(predicate);
       }
-      return selectivity;
     }
-    return RelMdUtil.guessSelectivity(predicate);
+    return sel;
   }
 }

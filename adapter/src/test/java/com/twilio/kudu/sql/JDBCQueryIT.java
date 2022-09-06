@@ -139,10 +139,11 @@ public final class JDBCQueryIT {
   @Test
   public void testProjectionWithFilter() throws Exception {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
-      String sqlFormat = "SELECT sid FROM \"ReportCenter.DeliveredMessages\" WHERE " + "account_sid = '%s'";
+      String sqlFormat = "SELECT sid FROM \"ReportCenter.DeliveredMessages\" WHERE "
+          + "account_sid = '%s' AND mcc NOT IN ('mcc4', 'mcc5')";
       String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
-      String expectedPlan = "KuduToEnumerableRel\n" + "  KuduProjectRel(SID=[$2])\n"
-          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567])\n"
+      String expectedPlan = "EnumerableCalc(expr#0..5=[{inputs}], SID=[$t2])\n" + "  KuduToEnumerableRel\n"
+          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567], MemoryFilters=[AND(=($0, 'AC1234567'), SEARCH($3, Sarg[(-∞..'mcc4'), ('mcc4'..'mcc5'), ('mcc5'..+∞)]:CHAR(4)))])\n"
           + "      KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
       String plan = SqlUtil.getExplainPlan(rs);
