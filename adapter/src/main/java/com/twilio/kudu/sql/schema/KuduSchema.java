@@ -15,13 +15,20 @@
 package com.twilio.kudu.sql.schema;
 
 import com.google.common.collect.Maps;
+import com.twilio.kudu.sql.KuduQuery;
 import com.twilio.kudu.sql.metadata.CubeTableInfo;
 import com.twilio.kudu.sql.metadata.KuduTableMetadata;
 import com.twilio.kudu.sql.CalciteKuduTableBuilder;
 import com.twilio.kudu.sql.CalciteModifiableKuduTable;
 import com.twilio.kudu.sql.CalciteKuduTable;
+import com.twilio.kudu.sql.rules.KuduFilterRule;
+import com.twilio.kudu.sql.rules.KuduNestedJoinRule;
+
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.rel.core.RelFactories;
+import org.apache.calcite.rel.hint.HintPredicates;
+import org.apache.calcite.rel.hint.HintStrategyTable;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.Table;
@@ -33,6 +40,8 @@ import org.apache.calcite.sql.SqlWriterConfig;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.pretty.SqlPrettyWriter;
+import org.apache.calcite.sql2rel.SqlToRelConverter;
+import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.Util;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
@@ -50,6 +59,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public final class KuduSchema extends AbstractSchema {
@@ -63,6 +73,7 @@ public final class KuduSchema extends AbstractSchema {
   private final SchemaPlus parentSchema;
   private final String name;
   private final Hook.Closeable addMaterializationsHook;
+  private final Hook.Closeable assignHintsHook;
 
   // properties
   public static String KUDU_CONNECTION_STRING = "connect";
@@ -98,6 +109,9 @@ public final class KuduSchema extends AbstractSchema {
     this.parentSchema = parentSchema;
     this.name = name;
     this.addMaterializationsHook = disableMaterializedViews ? null : prepareAddMaterializationsHook();
+    this.assignHintsHook = Hook.SQL2REL_CONVERTER_CONFIG_BUILDER.add(node -> {
+      KuduSchema.this.assignHints(((Holder<SqlToRelConverter.Config>) node));
+    });
   }
 
   public void clearCachedTableMap() {
@@ -358,9 +372,6 @@ public final class KuduSchema extends AbstractSchema {
   private void addMaterializedViews() {
     SchemaPlus schema = parentSchema.getSubSchema(name);
     if (schema != null) {
-      // Close the hook use to get us here
-      addMaterializationsHook.close();
-
       for (Map.Entry<String, String> entry : materializedViewSqls.entrySet()) {
         // Add the view for this query
         String viewName = "$" + getTableNames().size();
@@ -372,15 +383,19 @@ public final class KuduSchema extends AbstractSchema {
             MaterializedViewTable.create(calciteSchema, entry.getValue(), null, viewPath, entry.getKey(), true));
       }
     }
+    // Close the hook use to get us here
+    addMaterializationsHook.close();
   }
 
   @SuppressWarnings("deprecation")
   private Hook.Closeable prepareAddMaterializationsHook() {
-    // It adds a global hook, so it should probably be replaced with a thread-local
-    // hook
     return Hook.TRIMMED.add(node -> {
       KuduSchema.this.addMaterializedViews();
     });
+  }
+
+  public void assignHints(Holder<SqlToRelConverter.Config> configHolder) {
+    configHolder.accept(config -> config.withHintStrategyTable(KuduQuery.KUDU_HINT_STRATEGY_TABLE));
   }
 
 }

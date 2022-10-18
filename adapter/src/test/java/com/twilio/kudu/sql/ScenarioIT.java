@@ -56,7 +56,6 @@ public class ScenarioIT {
 
   @BeforeClass
   public static void setup() throws SQLException, IOException {
-    initializeHints();
     String urlFormat = JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED + ";schema."
         + KuduSchema.CREATE_DUMMY_PARTITION_FLAG + "=false" + ";schema." + KuduSchema.DISABLE_SCHEMA_CACHE + "=true";
     JDBC_URL = String.format(urlFormat, DefaultKuduSchemaFactory.class.getName(),
@@ -84,31 +83,6 @@ public class ScenarioIT {
           .loadScenario(ScenarioIT.class.getResource("/scenarios/ReportCenter.UsageReportTransactions.json"));
       // load data
       new DataLoader(JDBC_URL, usageReportTransactionScenario).loadData(Optional.empty());
-    }
-  }
-
-  private static void setFinalStatic(Field field, Object newValue) throws Exception {
-    field.setAccessible(true);
-
-    Field modifiersField = Field.class.getDeclaredField("modifiers");
-    modifiersField.setAccessible(true);
-    modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-
-    field.set(null, newValue);
-  }
-
-  // TODO figure out a better way to set the HintStrategyTable for sql queries
-  public static void initializeHints() {
-    try {
-      SqlToRelConverter.Config CONFIG_MODIFIED = SqlToRelConverter.config()
-          .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
-          .withRelBuilderConfigTransform(c -> c.withPushJoinCondition(true))
-          .withHintStrategyTable(KuduQuery.KUDU_HINT_STRATEGY_TABLE);
-      // change SqlToRelConverter.CONFIG to use one that has the above
-      // HintStrategyTable
-      setFinalStatic(SqlToRelConverter.class.getDeclaredField("CONFIG"), CONFIG_MODIFIED);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
     }
   }
 
