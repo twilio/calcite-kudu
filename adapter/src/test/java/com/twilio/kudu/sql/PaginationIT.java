@@ -97,7 +97,6 @@ public class PaginationIT {
 
   @BeforeClass
   public static void setup() throws Exception {
-    initializeHints();
     KuduClient client = testHarness.getClient();
 
     createTable(client, "TABLE_ASC", false);
@@ -119,30 +118,6 @@ public class PaginationIT {
     public KuduSchemaFactory(Map<String, KuduTableMetadata> kuduTableConfigMap) {
       super(kuduTableConfigMap);
     }
-  }
-
-  public static void initializeHints() {
-    try {
-      SqlToRelConverter.Config CONFIG_MODIFIED = SqlToRelConverter.config()
-          .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
-          .withRelBuilderConfigTransform(c -> c.withPushJoinCondition(true))
-          .withHintStrategyTable(KuduQuery.KUDU_HINT_STRATEGY_TABLE);
-      // change SqlToRelConverter.CONFIG to use one that has the above
-      // HintStrategyTable
-      setFinalStatic(SqlToRelConverter.class.getDeclaredField("CONFIG"), CONFIG_MODIFIED);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private static void setFinalStatic(Field field, Object newValue) throws Exception {
-    field.setAccessible(true);
-
-    Field modifiersField = Field.class.getDeclaredField("modifiers");
-    modifiersField.setAccessible(true);
-    modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-
-    field.set(null, newValue);
   }
 
   private static Timestamp normalizeTimestamp(boolean descending, long ts) {
