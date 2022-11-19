@@ -109,6 +109,10 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     // KuduFilterIntoJoinRule which expands SArgs
     planner.removeRule(CoreRules.FILTER_INTO_JOIN);
 
+    // This rule is broken and drops named projections. Remove until fixed:
+    // CALCITE-5391
+    planner.removeRule(CoreRules.JOIN_ON_UNIQUE_TO_SEMI_JOIN);
+
     planner.addRule(EnumerableRules.ENUMERABLE_LIMIT_SORT_RULE);
 
     KuduRules.CORE_RULES.stream().forEach(rule -> planner.addRule(rule));
