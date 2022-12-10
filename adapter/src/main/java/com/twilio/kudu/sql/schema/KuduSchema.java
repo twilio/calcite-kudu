@@ -395,7 +395,8 @@ public final class KuduSchema extends AbstractSchema {
   }
 
   public void assignHints(Holder<SqlToRelConverter.Config> configHolder) {
-    configHolder.accept(config -> config.withHintStrategyTable(KuduQuery.KUDU_HINT_STRATEGY_TABLE));
+    configHolder.accept(config -> config.withHintStrategyTable(KuduQuery.KUDU_HINT_STRATEGY_TABLE)
+        .withInSubQueryThreshold(Integer.MAX_VALUE));
   }
 
 }
