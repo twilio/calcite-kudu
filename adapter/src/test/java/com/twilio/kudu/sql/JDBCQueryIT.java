@@ -163,6 +163,23 @@ public final class JDBCQueryIT {
   }
 
   @Test
+  public void testInFilterAlwaysPushedDown() throws Exception {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String sqlFormat = "SELECT sid FROM \"ReportCenter.DeliveredMessages\" WHERE "
+          + "account_sid = '%s' AND mcc IN ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20')";
+      String sql = String.format(sqlFormat, JDBCQueryIT.ACCOUNT_SID);
+      String expectedPlan = "KuduToEnumerableRel\n" + "  KuduProjectRel(SID=[$2])\n"
+          + "    KuduFilterRel(ScanToken 1=[account_sid EQUAL AC1234567, mcc IN [1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9]])\n"
+          + "      KuduQuery(table=[[kudu, ReportCenter.DeliveredMessages]])\n";
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + sql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", expectedPlan, plan);
+      rs = conn.createStatement().executeQuery(sql);
+      assertFalse(rs.next());
+    }
+  }
+
+  @Test
   public void testProjectionWithFunctions() throws Exception {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
       String sqlFormat = "SELECT mcc||mnc, mcc, mnc, mnc||mcc FROM \"ReportCenter"
