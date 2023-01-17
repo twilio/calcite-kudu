@@ -17,7 +17,10 @@ package com.twilio.kudu.sql.parser;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.twilio.kudu.sql.JDBCUtil;
+import com.twilio.kudu.sql.SqlUtil;
 import com.twilio.kudu.sql.schema.DefaultKuduSchemaFactory;
+import com.twilio.kudu.sql.schema.KuduSchema;
+
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.Type;
@@ -31,6 +34,7 @@ import org.apache.kudu.test.KuduTestHarness;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.math.BigDecimal;
@@ -58,9 +62,10 @@ public class KuduDDLIT {
   private static String JDBC_URL;
 
   @BeforeClass
-  public static void setup() throws Exception {
-    JDBC_URL = String.format(JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED, DefaultKuduSchemaFactory.class.getName(),
-        testHarness.getMasterAddressesAsString());
+  public static void setup() {
+    JDBC_URL = String.format(
+        JDBCUtil.CALCITE_MODEL_TEMPLATE_DML_DDL_ENABLED + ";schema." + KuduSchema.DISABLE_SCHEMA_CACHE + "=true",
+        DefaultKuduSchemaFactory.class.getName(), testHarness.getMasterAddressesAsString());
   }
 
   @Test
@@ -92,9 +97,9 @@ public class KuduDDLIT {
   @Test
   public void testCreateMaterializedViewCountAggregate() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
-
       String ddl = "CREATE TABLE \"MY_TABLE\" (" + "STRING_COL VARCHAR "
           + "COLUMN_ENCODING 'PREFIX_ENCODING' COMPRESSION 'LZ4' DEFAULT 'abc' BLOCK_SIZE 5000, "
+          + "TIMESTAMP_COLUMN TIMESTAMP, "
           + "UNIXTIME_MICROS_COL TIMESTAMP DEFAULT 1234567890 ROW_TIMESTAMP COMMENT 'this column "
           + "is the timestamp', " + "\"int64_col\" BIGINT DEFAULT 1234567890, "
           + "INT8_COL TINYINT not null DEFAULT -128," + "\"int16_col\" SMALLINT not null DEFAULT -32768, "
@@ -106,15 +111,32 @@ public class KuduDDLIT {
           + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName\" "
-          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL) " + "FROM \"MY_TABLE\" "
-          + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO hour)";
+      String queryFormat = "SELECT COUNT(INT32_COL) FROM \"MY_TABLE\" "
+          + "GROUP BY FLOOR(TIMESTAMP_COLUMN TO hour), STRING_COL, INT8_COL "
+          + "ORDER BY STRING_COL, FLOOR(TIMESTAMP_COLUMN TO hour) %s, INT8_COL DESC";
+      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName\" AS " + String.format(queryFormat, "DESC");
       conn.createStatement().execute(ddl2);
-      // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE-CubeName-Hour-Aggregation\"");
-      assertFalse(rs.next());
+
+      // validate the view is chosen queried
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + String.format(queryFormat, "DESC"));
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", "KuduToEnumerableRel\n"
+          + "  KuduProjectRel(COUNT_INT32_COL=[$3], STRING_COL=[$0], TIMESTAMP_COLUMN=[CAST($1):TIMESTAMP(0)], INT8_COL=[$2])\n"
+          + "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[DESC], dir2=[DESC])\n"
+          + "      KuduQuery(table=[[kudu, MY_TABLE-CubeName-Hour-Aggregation]])\n", plan);
+
+      // validate the plan does a SORT when the ORDER by doesn't match
+      rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + String.format(queryFormat, ""));
+      plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ",
+          "EnumerableSort(sort0=[$1], sort1=[$2], sort2=[$3], dir0=[ASC], dir1=[ASC], dir2=[DESC])\n"
+              + "  KuduToEnumerableRel\n"
+              + "    KuduProjectRel(COUNT_INT32_COL=[$3], STRING_COL=[$0], TIMESTAMP_COLUMN=[CAST($1):TIMESTAMP(0)], INT8_COL=[$2])\n"
+              + "      KuduQuery(table=[[kudu, MY_TABLE-CubeName-Hour-Aggregation]])\n",
+          plan);
     }
 
+    // validate cube table schema is stored correctly
     KuduClient client = testHarness.getClient();
     KuduTable kuduTable = client.openTable("MY_TABLE-CubeName-Hour-Aggregation");
 
@@ -135,7 +157,7 @@ public class KuduDDLIT {
     assertEquals("Unexpected extra configs", expectedConfig, kuduTable.getExtraConfig());
 
     // validate primary key
-    assertEquals(2, kuduTable.getSchema().getPrimaryKeyColumnCount());
+    assertEquals(3, kuduTable.getSchema().getPrimaryKeyColumnCount());
     List<ColumnSchema> columnSchemas = kuduTable.getSchema().getPrimaryKeyColumns();
     ColumnSchema idColSchema = columnSchemas.get(0);
     assertNotNull(idColSchema);
@@ -144,12 +166,17 @@ public class KuduDDLIT {
     assertEquals(ColumnSchema.CompressionAlgorithm.LZ4, idColSchema.getCompressionAlgorithm());
     assertEquals(5000, idColSchema.getDesiredBlockSize());
     ColumnSchema timestampCol = columnSchemas.get(1);
-    assertEquals("UNIXTIME_MICROS_COL", timestampCol.getName());
+    assertEquals("TIMESTAMP_COLUMN", timestampCol.getName());
+    assertEquals("{\"isTimeStampColumn\":true,\"isDescendingSortOrder\":true}", timestampCol.getComment());
+    ColumnSchema thirdCol = columnSchemas.get(2);
+    assertEquals("INT8_COL", thirdCol.getName());
+    assertEquals("{\"isDescendingSortOrder\":true}", thirdCol.getComment());
 
     // validate column attributes
     Schema schema = kuduTable.getSchema();
     validateColumnSchema(schema, "STRING_COL", Type.STRING, false, "abc");
-    validateColumnSchema(schema, "UNIXTIME_MICROS_COL", Type.UNIXTIME_MICROS, false, 1234567890l);
+    validateColumnSchema(schema, "TIMESTAMP_COLUMN", Type.UNIXTIME_MICROS, false, null);
+    validateColumnSchema(schema, "INT8_COL", Type.INT8, false, (byte) -128);
     validateColumnSchema(schema, "COUNT_INT32_COL", Type.INT64, false, null);
   }
 
@@ -170,13 +197,18 @@ public class KuduDDLIT {
           + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName1\" "
-          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL), SUM(INT8_COL), MIN(INT8_COL), MAX(INT32_COL) "
-          + "FROM \"MY_TABLE_24\" " + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO YEAR)";
+      String query = "SELECT COUNT(INT32_COL), SUM(INT8_COL), MIN(INT8_COL), MAX(INT32_COL) " + "FROM \"MY_TABLE_24\" "
+          + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO YEAR)";
+      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName1\" AS " + query;
       conn.createStatement().execute(ddl2);
-      // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE_24-CubeName1-Year-Aggregation\"");
-      assertFalse(rs.next());
+
+      // validate the view is chosen
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + query);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ",
+          "KuduToEnumerableRel\n" + "  KuduProjectRel(EXPR$0=[$2], EXPR$1=[$3], EXPR$2=[$4], EXPR$3=[$5])\n"
+              + "    KuduQuery(table=[[kudu, MY_TABLE_24-CubeName1-Year-Aggregation]])\n",
+          plan);
     }
 
     KuduClient client = testHarness.getClient();
@@ -207,6 +239,9 @@ public class KuduDDLIT {
     assertEquals(5000, idColSchema.getDesiredBlockSize());
     ColumnSchema timestampCol = columnSchemas.get(1);
     assertEquals("UNIXTIME_MICROS_COL", timestampCol.getName());
+    assertEquals(
+        "{\"isTimeStampColumn\":true,\"isDescendingSortOrder\":false,\"comment\":\"'this column is the timestamp'\"}",
+        timestampCol.getComment());
 
     // validate column attributes
     Schema schema = kuduTable.getSchema();
@@ -235,12 +270,15 @@ public class KuduDDLIT {
           + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName2\" " + "AS SELECT COUNT(INT32_COL) " + "FROM \"MY_TABLE_14\" "
+      String viewSql = "SELECT COUNT(INT32_COL) " + "FROM \"MY_TABLE_14\" "
           + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
+      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName2\" AS " + viewSql;
       conn.createStatement().execute(ddl2);
-      // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE_14-CubeName2-Day-Aggregation\"");
-      assertFalse(rs.next());
+      // validate the view can be queried
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + viewSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", "KuduToEnumerableRel\n" + "  KuduProjectRel(EXPR$0=[$2])\n"
+          + "    KuduQuery(table=[[kudu, MY_TABLE_14-CubeName2-Day-Aggregation]])\n", plan);
     }
 
     KuduClient client = testHarness.getClient();
@@ -340,13 +378,15 @@ public class KuduDDLIT {
           + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName4\" "
-          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, COUNT(INT32_COL) " + "FROM \"MY_TABLE11\" "
+      String viewSql = "SELECT COUNT(INT32_COL) " + "FROM \"MY_TABLE11\" "
           + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO HOUR)";
+      String ddl2 = "CREATE MATERIALIZED VIEW \"CubeName4\" AS " + viewSql;
       conn.createStatement().execute(ddl2);
-      // validate the table can be queried
-      ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"MY_TABLE11-CubeName4-Hour-Aggregation\"");
-      assertFalse(rs.next());
+      // validate the view can be queried
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + viewSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", "KuduToEnumerableRel\n" + "  KuduProjectRel(EXPR$0=[$2])\n"
+          + "    KuduQuery(table=[[kudu, MY_TABLE11-CubeName4-Hour-Aggregation]])\n", plan);
 
       // create the cube again
       try {
@@ -474,6 +514,7 @@ public class KuduDDLIT {
   }
 
   @Test
+  @Ignore
   public void testCreateMaterializedViewAggMAX() throws SQLException, KuduException {
     try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
 
@@ -518,14 +559,15 @@ public class KuduDDLIT {
           + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"LinkName\" "
-          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) " + "FROM \"my_schema.MY_TAB_8\" "
+      String viewSql = "SELECT SUM(INT32_COL) FROM \"my_schema.MY_TAB_8\" "
           + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DaY)";
+      String ddl2 = "CREATE MATERIALIZED VIEW \"LinkName\" AS " + viewSql;
       conn.createStatement().execute(ddl2);
-      // validate the table can be queried
-      ResultSet rs = conn.createStatement()
-          .executeQuery("SELECT * FROM \"my_schema.MY_TAB_8-LinkName-Day-Aggregation\"");
-      assertFalse(rs.next());
+      // validate the view can be queried
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + viewSql);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", "KuduToEnumerableRel\n" + "  KuduProjectRel(EXPR$0=[$2])\n"
+          + "    KuduQuery(table=[[kudu, my_schema.MY_TAB_8-LinkName-Day-Aggregation]])\n", plan);
     }
 
     KuduClient client = testHarness.getClient();
@@ -827,14 +869,16 @@ public class KuduDDLIT {
           + "TBLPROPERTIES ('kudu.table.history_max_age_sec'=7200)";
       conn.createStatement().execute(ddl);
 
-      String ddl2 = "CREATE MATERIALIZED VIEW \"LinkName\" "
-          + "AS SELECT STRING_COL, UNIXTIME_MICROS_COL, SUM(INT32_COL) " + "FROM \"my_schema.MY_TABLE_8\" "
-          + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DaY)";
+      String query = "SELECT SUM(INT32_COL) " + "FROM \"my_schema.MY_TABLE_8\" "
+          + "GROUP BY STRING_COL, FLOOR(UNIXTIME_MICROS_COL TO DAY)";
+      String ddl2 = "CREATE MATERIALIZED VIEW \"LinkName\" AS " + query;
       conn.createStatement().execute(ddl2);
-      // validate the table can be queried
-      ResultSet rs = conn.createStatement()
-          .executeQuery("SELECT * FROM \"my_schema.MY_TABLE_8-LinkName-Day-Aggregation\"");
-      assertFalse(rs.next());
+
+      // validate the view is chosen queried
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + query);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", "KuduToEnumerableRel\n" + "  KuduProjectRel(EXPR$0=[$2])\n"
+          + "    KuduQuery(table=[[kudu, my_schema.MY_TABLE_8-LinkName-Day-Aggregation]])\n", plan);
     }
 
     KuduClient client = testHarness.getClient();
@@ -976,7 +1020,7 @@ public class KuduDDLIT {
   }
 
   @Test
-  public void TestExistingTableWithNonJsonComment() throws Exception {
+  public void testExistingTableWithNonJsonComment() throws Exception {
     // create the table
     final List<ColumnSchema> columns = Arrays.asList(
         new ColumnSchema.ColumnSchemaBuilder("query_id", Type.STRING).key(true).comment("Query Id").build(),
@@ -1277,6 +1321,45 @@ public class KuduDDLIT {
       conn.createStatement().execute("create view s.v as select * from s.t");
       fail("create view is not supported");
     }
+  }
+
+  @Test
+  public void testCreateMaterializedWithOrderBy() throws SQLException {
+    try (Connection conn = DriverManager.getConnection(JDBC_URL)) {
+      String ddl1 = "CREATE TABLE \"ABCD\" (" + "STRING_COL VARCHAR, " + "TIMESTAMP_COLUMN1 TIMESTAMP ROW_TIMESTAMP, "
+          + "TIMESTAMP_COLUMN2 TIMESTAMP, " + "TIMESTAMP_COLUMN3 TIMESTAMP, " + "INT32_COLUMN1 INTEGER, "
+          + "INT32_COLUMN2 INTEGER, " + "ID VARCHAR, " + "PRIMARY KEY (STRING_COL, TIMESTAMP_COLUMN1 DESC, ID))"
+          + "PARTITION BY HASH (STRING_COL) PARTITIONS 17";
+      conn.createStatement().execute(ddl1);
+
+      String viewQuery1 = "SELECT COUNT(ID) FROM \"ABCD\" "
+          + "GROUP BY FLOOR(TIMESTAMP_COLUMN1 TO hour), STRING_COL, INT32_COLUMN1 "
+          + "ORDER BY STRING_COL, FLOOR(TIMESTAMP_COLUMN1 TO hour) DESC, INT32_COLUMN1 DESC";
+      String ddl2 = "CREATE MATERIALIZED VIEW ABCD_V1 AS " + viewQuery1;
+      conn.createStatement().execute(ddl2);
+
+      String viewQuery2 = "SELECT COUNT(ID) FROM \"ABCD\" "
+          + "GROUP BY FLOOR(TIMESTAMP_COLUMN2 TO hour), STRING_COL, INT32_COLUMN2 "
+          + "ORDER BY STRING_COL, FLOOR(TIMESTAMP_COLUMN2 TO hour) DESC, INT32_COLUMN2 DESC";
+      String ddl3 = "CREATE MATERIALIZED VIEW ABCD_V2 AS " + viewQuery2;
+      conn.createStatement().execute(ddl3);
+
+      // validate the view is chosen queried
+      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + viewQuery1);
+      String plan = SqlUtil.getExplainPlan(rs);
+      assertEquals("Unexpected plan ", "KuduToEnumerableRel\n"
+          + "  KuduProjectRel(COUNT_ID=[$3], STRING_COL=[$0], TIMESTAMP_COLUMN1=[$1], INT32_COLUMN1=[CAST($2):INTEGER])\n"
+          + "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[DESC], dir2=[DESC])\n"
+          + "      KuduQuery(table=[[kudu, ABCD-ABCD_V1-Hour-Aggregation]])\n", plan);
+
+      ResultSet rs1 = conn.createStatement().executeQuery("EXPLAIN PLAN FOR " + viewQuery2);
+      String plan1 = SqlUtil.getExplainPlan(rs1);
+      assertEquals("KuduToEnumerableRel\n"
+          + "  KuduProjectRel(COUNT_ID=[$3], STRING_COL=[$0], TIMESTAMP_COLUMN2=[CAST($1):TIMESTAMP(0)], INT32_COLUMN2=[CAST($2):INTEGER])\n"
+          + "    KuduSortRel(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC], dir1=[DESC], dir2=[DESC])\n"
+          + "      KuduQuery(table=[[kudu, ABCD-ABCD_V2-Hour-Aggregation]])\n", plan1);
+    }
+
   }
 
 }

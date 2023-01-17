@@ -108,6 +108,7 @@ DROP [IF EXISTS]
 ### CREATE MATERIALIZED VIEW
 Used to register a rollup aggregate view that can be used for queries.
 The select query should contain a group by with a timestamp column that is being truncated.
+An ORDER BY can be optionally specified to store aggregated data in a specified order.
 ```
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [db_name.]materialized_view_name
 AS query
@@ -117,12 +118,16 @@ SELECT { aggFunc [, aggFunc ]* }
 	FROM tableExpression
 	[ WHERE booleanExpression ]
 	[ GROUP BY { groupItem [, groupItem ]* } ]
+	[ ORDER BY { orderItem [, orderItem ]* } ]
 
 aggFunc:
 	COUNT | SUM
 
 groupItem:
 	col_name | FLOOR(col_name TO interval)
+
+orderItem:
+	col_name [DESC] | FLOOR(col_name TO interval) [DESC]
 ```
 
 ## Descending Sort Implementation

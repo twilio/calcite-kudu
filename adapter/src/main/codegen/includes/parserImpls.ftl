@@ -64,6 +64,7 @@ SqlNode SqlCreateMaterializedView() :
      SqlIdentifier cubeName;
      boolean ifNotExists = false;
      SqlSelect query;
+     SqlNodeList orderList;
 }
 {
         <CREATE> { pos = getPos(); }
@@ -74,8 +75,12 @@ SqlNode SqlCreateMaterializedView() :
         cubeName = CompoundIdentifier()
         <AS>
         query = SqlSelect()
+        (
+            orderList = OrderBy(true)
+        |   { orderList = SqlNodeList.EMPTY; }
+        )
         {
-            return new SqlCreateMaterializedView(pos.plus(getPos()), cubeName, ifNotExists, query);
+            return new SqlCreateMaterializedView(pos.plus(getPos()), cubeName, ifNotExists, query, orderList);
         }
 }
 
