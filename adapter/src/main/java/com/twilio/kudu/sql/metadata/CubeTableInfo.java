@@ -14,14 +14,21 @@
  */
 package com.twilio.kudu.sql.metadata;
 
+import java.util.List;
+
 public class CubeTableInfo {
 
   public String tableName;
   public EventTimeAggregationType eventTimeAggregationType;
+  public List<String> descendingOrderedColumnNames;
+  public String timestampColumnName;
 
-  public CubeTableInfo(String tableName, EventTimeAggregationType eventTimeAggregationType) {
+  public CubeTableInfo(String tableName, EventTimeAggregationType eventTimeAggregationType,
+      final List<String> descendingOrderedColumnNames, final String timestampColumnName) {
     this.eventTimeAggregationType = eventTimeAggregationType;
     this.tableName = tableName;
+    this.descendingOrderedColumnNames = descendingOrderedColumnNames;
+    this.timestampColumnName = timestampColumnName;
   }
 
   public enum EventTimeAggregationType {

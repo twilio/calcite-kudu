@@ -14,20 +14,12 @@
  */
 package org.apache.calcite.prepare;
 
-import com.google.common.collect.ImmutableMap;
-import com.twilio.kudu.sql.CalciteKuduTable;
-import com.twilio.kudu.sql.parser.SortOrder;
-import com.twilio.kudu.sql.parser.SqlAlterTable;
-import com.twilio.kudu.sql.parser.SqlCreateMaterializedView;
-import com.twilio.kudu.sql.parser.SqlCreateTable;
-import com.twilio.kudu.sql.schema.KuduSchema;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
 import org.apache.calcite.sql.SqlColumnDefNode;
 import org.apache.calcite.sql.SqlColumnNameNode;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
@@ -40,13 +32,25 @@ import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduException;
 import org.apache.kudu.client.KuduTable;
 import org.apache.kudu.client.PartialRow;
+
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.twilio.kudu.sql.CalciteKuduTable;
+import com.twilio.kudu.sql.parser.SortOrder;
+import com.twilio.kudu.sql.parser.SqlAlterTable;
+import com.twilio.kudu.sql.parser.SqlCreateMaterializedView;
+import com.twilio.kudu.sql.parser.SqlCreateTable;
+import com.twilio.kudu.sql.schema.KuduSchema;
+
 import org.json.JSONObject;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -63,6 +67,19 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
     TimeAggregationType(String interval) {
       this.interval = interval;
     }
+  }
+
+  private Optional<String> getRowTimestampColumn(KuduTable kuduTable) {
+    return kuduTable.getSchema().getColumns().stream().filter(columnSchema -> {
+      String comment = columnSchema.getComment();
+      if (!comment.isEmpty()) {
+        JSONObject jsonObject = new JSONObject(comment);
+        if (jsonObject.has("isTimeStampColumn") && jsonObject.getBoolean("isTimeStampColumn")) {
+          return true;
+        }
+      }
+      return false;
+    }).findFirst().map(columnSchema -> columnSchema.getName());
   }
 
   @Override
@@ -219,7 +236,8 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
 
         SqlCreateMaterializedView createMaterializedViewNode = (SqlCreateMaterializedView) node;
         SqlNode fromNode = (createMaterializedViewNode.query).getFrom();
-        SqlNodeList groupByNode = (createMaterializedViewNode.query).getGroup();
+        SqlNodeList groupByList = (createMaterializedViewNode.query).getGroup();
+        SqlNodeList orderByList = createMaterializedViewNode.orderByList;
         SqlNodeList selectList = (createMaterializedViewNode.query).getSelectList();
         KuduTable kuduTable = kuduClient.openTable(fromNode.toString());
 
@@ -231,7 +249,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           throw new IllegalArgumentException("CubeName must not be of form MySchema.MyCube");
         }
 
-        if (groupByNode == null) {
+        if (groupByList == null) {
           throw new IllegalArgumentException("Columns should be present in the Group by clause.");
         }
 
@@ -239,57 +257,135 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
           throw new IllegalArgumentException("Select list should not be a copy of fact table");
         }
 
-        boolean groupByContainsFloor = false;
-        String interval = "";
-        // group by columns become the primary key of the cube.
-        List<String> pkColumns = new ArrayList<>();
-        for (SqlNode sqlnode : groupByNode.getList()) {
-          // sqlnode contains Floor
-          if (sqlnode instanceof SqlBasicCall) {
-            if (((SqlBasicCall) sqlnode).getOperator().getName().equals("FLOOR")) {
-              groupByContainsFloor = true;
-              for (SqlNode operand : ((SqlBasicCall) sqlnode).getOperandList()) {
-                if (operand instanceof SqlIntervalQualifier) {
-                  interval = TimeAggregationType.valueOf(operand.toString().toUpperCase()).interval;
-                } else if (operand instanceof SqlIdentifier) {
-                  pkColumns.add(operand.toString());
+        // if an ORDER BY is not specified the rows are ordered by the columns in the
+        // GROUP BY
+        // if an ORDER BY clause is specified the columns need to match those specified
+        // in the GROUP BY
+        Set<String> orderByColumns = new LinkedHashSet<>();
+        String interval = null;
+        String rollupTimestampColumn = null;
+        List<String> descendingCols = new ArrayList<>();
+        if (!orderByList.isEmpty()) {
+          for (SqlNode sqlnode : orderByList.getList()) {
+            if (sqlnode instanceof SqlIdentifier) {
+              orderByColumns.add(sqlnode.toString());
+            } else if (sqlnode instanceof SqlBasicCall) {
+              SqlBasicCall callNode = (SqlBasicCall) sqlnode;
+              SqlBasicCall floorNode = null;
+              if (callNode.getKind() == SqlKind.DESCENDING) {
+                SqlNode innerCallNode = callNode.operand(0);
+                if (innerCallNode.getKind() == SqlKind.IDENTIFIER) {
+                  descendingCols.add(innerCallNode.toString());
+                  orderByColumns.add(innerCallNode.toString());
+                } else if (innerCallNode.getKind() == SqlKind.FLOOR) {
+                  if (rollupTimestampColumn != null) {
+                    throw new IllegalArgumentException("ORDER BY can contain only one FLOOR()");
+                  }
+                  floorNode = (SqlBasicCall) innerCallNode;
+                  descendingCols.add(floorNode.getOperandList().get(0).toString());
+                } else {
+                  throw new IllegalArgumentException("Only FLOOR() OR DESC is supported in the ORDER BY");
                 }
+              } else if (callNode.getKind() == SqlKind.FLOOR) {
+                floorNode = callNode;
+              } else {
+                throw new IllegalArgumentException("Only FLOOR() OR DESC is supported in the ORDER BY");
               }
+              if (floorNode != null) {
+                rollupTimestampColumn = floorNode.getOperandList().get(0).toString();
+                interval = TimeAggregationType
+                    .valueOf(floorNode.getOperandList().get(1).toString().toUpperCase()).interval;
+                orderByColumns.add(rollupTimestampColumn);
+              }
+            } else {
+              throw new IllegalArgumentException("ORDER BY should only contain columns or a FLOOR");
             }
-
-          } else {
-            pkColumns.add(sqlnode.toString());
+          }
+          if (interval == null || rollupTimestampColumn == null) {
+            throw new IllegalArgumentException(
+                "ORDER BY clause should contain a FLOOR function on a timestamp column and an interval");
           }
         }
 
-        if (!groupByContainsFloor) {
-          throw new IllegalArgumentException("GROUP BY clause should contain a FLOOR function on the timestamp column");
+        // group by columns become the primary key of the cube.
+        Set<String> groupByColumns = new LinkedHashSet<>();
+        boolean groupByFloorMatched = false;
+        for (SqlNode sqlnode : groupByList.getList()) {
+          // sqlnode contains Floor
+          if (sqlnode instanceof SqlBasicCall) {
+            if (groupByFloorMatched) {
+              throw new IllegalArgumentException("GROUP BY can contain only one FLOOR()");
+            }
+            SqlBasicCall floorNode = (SqlBasicCall) sqlnode;
+            if (floorNode.getOperator().getKind() != SqlKind.FLOOR || floorNode.getOperandList().size() != 2) {
+              throw new IllegalArgumentException("GROUP BY should only contain columns or a FLOOR");
+            }
+            if (!orderByList.isEmpty()) {
+              if (!rollupTimestampColumn.equals(floorNode.getOperandList().get(0).toString()) || !interval.equals(
+                  TimeAggregationType.valueOf(floorNode.getOperandList().get(1).toString().toUpperCase()).interval)) {
+                throw new IllegalArgumentException("GROUP BY and ORDER BY should use the same FLOOR()");
+              }
+            } else {
+              rollupTimestampColumn = floorNode.getOperandList().get(0).toString();
+              interval = TimeAggregationType
+                  .valueOf(floorNode.getOperandList().get(1).toString().toUpperCase()).interval;
+              if (!rollupTimestampColumn.equals(getRowTimestampColumn(kuduTable).orElseThrow(
+                  () -> new IllegalArgumentException("Table must contain at least one ROW_TIMESTAMP COLUMN")))) {
+                throw new IllegalArgumentException(
+                    "GROUP BY clause should contain a FLOOR function on the timestamp column");
+              }
+            }
+            groupByColumns.add(rollupTimestampColumn);
+            groupByFloorMatched = true;
+          } else if (sqlnode instanceof SqlIdentifier) {
+            groupByColumns.add(sqlnode.toString());
+          } else {
+            throw new IllegalArgumentException("GROUP BY should only contain columns or a FLOOR.");
+          }
+        }
+        if (interval == null || rollupTimestampColumn == null) {
+          throw new IllegalArgumentException(
+              "GROUP BY clause should contain a FLOOR function on a timestamp column and an interval");
         }
 
-        if (interval.isEmpty()) {
-          throw new IllegalArgumentException(
-              "GROUP BY clause should contain a FLOOR function on the timestamp column and an interval");
+        if (!orderByColumns.isEmpty() & !groupByColumns.equals(orderByColumns)) {
+          throw new IllegalArgumentException("ORDER BY should contain the same columns are the GROUP BY");
         }
 
         String physicalCubeTableName = kuduTable.getName() + "-" + cubeName + "-" + interval + "-" + "Aggregation";
-
         // return if the cube already exists
         if (createMaterializedViewNode.ifNotExists && kuduClient.tableExists(physicalCubeTableName)) {
           return;
         }
 
+        Set<String> pkColumns = orderByColumns.isEmpty() ? groupByColumns : orderByColumns;
         List<ColumnSchema> cubeColumnSchemas = new ArrayList<>();
-
         // determine range partition columns
-        List<String> rangePartitionCols = new ArrayList<>();
-        for (String s : pkColumns) {
-          ColumnSchema colSchema = kuduTable.getSchema().getColumn(s);
-          if (colSchema.getWireType().equals(org.apache.kudu.Common.DataType.UNIXTIME_MICROS)) {
-            rangePartitionCols.add(s);
-          }
+        for (String columnName : pkColumns) {
+          ColumnSchema colSchema = kuduTable.getSchema().getColumn(columnName);
           ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(colSchema);
           columnSchemaBuilder.nullable(false);
           columnSchemaBuilder.key(true);
+
+          // if an ORDER BY clause was specified store the timestamp and descending column
+          // metadata in the comments of the cube
+          if (!orderByList.isEmpty()) {
+            if (rollupTimestampColumn.equals(columnName)) {
+              JSONObject jsonObject = new JSONObject();
+              jsonObject.put("isTimeStampColumn", true);
+              if (descendingCols.contains(rollupTimestampColumn)) {
+                jsonObject.put("isDescendingSortOrder", true);
+              }
+              columnSchemaBuilder.comment(jsonObject.toString());
+            } else if (descendingCols.contains(columnName)) {
+              JSONObject jsonObject = new JSONObject();
+              jsonObject.put("isDescendingSortOrder", true);
+              columnSchemaBuilder.comment(jsonObject.toString());
+            } else {
+              columnSchemaBuilder.comment("");
+            }
+          }
+
           // Get the column schema for pk from the original table.
           cubeColumnSchemas.add(columnSchemaBuilder.build());
         }
@@ -356,7 +452,7 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
         List<String> hashPartitionColNames = new ArrayList<>();
         for (Integer i : kuduTable.getPartitionSchema().getHashBucketSchemas().get(0).getColumnIds()) {
           String colName = kuduTable.getSchema().getColumnByIndex(i).getName();
-          if (pkColumns.contains(colName)) {
+          if (groupByColumns.contains(colName)) {
             hashPartitionColNames.add(colName);
           }
         }
@@ -366,30 +462,23 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
               kuduTable.getPartitionSchema().getHashBucketSchemas().get(0).getNumBuckets());
         }
 
-        // if there is a row timestamp column defined, create a single dummy range
-        // partition for
-        // that column so that we can add new partitions later
-        if (!rangePartitionCols.isEmpty()) {
-          String rowTimestampColumn = rangePartitionCols.get(0);
-          CalciteKuduTable calciteTable = (CalciteKuduTable) kuduSchema.getTable(kuduTable.getName());
-          PartialRow lowerBound = cubeSchema.newPartialRow();
-          PartialRow upperBound = cubeSchema.newPartialRow();
-
-          if (kuduSchema.createDummyPartition) {
-            // Set range partition to EPOCH.MAX - minvalue for DESC case.
-            if (calciteTable.isColumnOrderedDesc(rowTimestampColumn)) {
-              lowerBound.addTimestamp(rowTimestampColumn,
-                  new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
-              upperBound.addTimestamp(rowTimestampColumn,
-                  new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
-            } else {
-              lowerBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE));
-              upperBound.addTimestamp(rowTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
-            }
+        // create a single dummy range partition using the rollup timestamp column
+        PartialRow lowerBound = cubeSchema.newPartialRow();
+        PartialRow upperBound = cubeSchema.newPartialRow();
+        if (kuduSchema.createDummyPartition) {
+          // Set range partition to EPOCH.MAX - minvalue for DESC case.
+          if (descendingCols.contains(rollupTimestampColumn)) {
+            lowerBound.addTimestamp(rollupTimestampColumn,
+                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE));
+            upperBound.addTimestamp(rollupTimestampColumn,
+                new Timestamp(CalciteKuduTable.EPOCH_FOR_REVERSE_SORT_IN_MILLISECONDS - Long.MIN_VALUE + 1));
+          } else {
+            lowerBound.addTimestamp(rollupTimestampColumn, new Timestamp(Long.MIN_VALUE));
+            upperBound.addTimestamp(rollupTimestampColumn, new Timestamp(Long.MIN_VALUE + 1));
           }
-          createCubeOptions.addRangePartition(lowerBound, upperBound);
-          createCubeOptions.setRangePartitionColumns(rangePartitionCols);
         }
+        createCubeOptions.addRangePartition(lowerBound, upperBound);
+        createCubeOptions.setRangePartitionColumns(Lists.newArrayList(rollupTimestampColumn));
         createCubeOptions.setExtraConfigs(kuduTable.getExtraConfig());
 
         kuduClient.createTable(physicalCubeTableName, cubeSchema, createCubeOptions);

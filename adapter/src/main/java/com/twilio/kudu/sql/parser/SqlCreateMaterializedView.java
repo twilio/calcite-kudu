@@ -18,6 +18,7 @@ import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlWriter;
@@ -35,14 +36,17 @@ public class SqlCreateMaterializedView extends SqlCall {
   public final SqlIdentifier cubeName;
   public final boolean ifNotExists;
   public final SqlSelect query;
+  public final SqlNodeList orderByList;
 
   /** Creates a SqlCreateView. */
-  SqlCreateMaterializedView(SqlParserPos pos, SqlIdentifier cubeName, boolean ifNotExists, SqlSelect query) {
+  SqlCreateMaterializedView(SqlParserPos pos, SqlIdentifier cubeName, boolean ifNotExists, SqlSelect query,
+      SqlNodeList orderByList) {
     super(pos);
     this.operator = new SqlDdlOperator("CREATE MATERIALIZED VIEW", SqlKind.CREATE_MATERIALIZED_VIEW);
     this.cubeName = Objects.requireNonNull(cubeName);
     this.ifNotExists = ifNotExists;
     this.query = Objects.requireNonNull(query);
+    this.orderByList = orderByList;
   }
 
   public List<SqlNode> getOperandList() {
