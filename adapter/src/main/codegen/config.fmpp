@@ -440,6 +440,8 @@ data: {
     includeCompoundIdentifier: true
     includeBraces: true
     includeAdditionalDeclarations: false
+    # https://issues.apache.org/jira/browse/CALCITE-5159 introduced this
+    includeParsingStringLiteralAsArrayLiteral: false
   }
 }
 

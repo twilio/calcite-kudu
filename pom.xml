@@ -57,7 +57,7 @@
         <kudu.version>1.16.0</kudu.version>
         <!-- If https://issues.apache.org/jira/browse/CALCITE-5226 is resolved
              remove the commons-dpcp2 in dependency management -->
-        <calcite.version>1.32.0</calcite.version>
+        <calcite.version>1.34.0</calcite.version>
         <guava.version>30.1.1-jre</guava.version>
         <junit.version>4.13.1</junit.version>
         <slf4j.version>1.7.21</slf4j.version>
@@ -133,7 +133,7 @@
             <dependency>
                 <groupId>commons-codec</groupId>
                 <artifactId>commons-codec</artifactId>
-                <version>1.14</version>
+                <version>1.15</version>
             </dependency>
 
             <dependency>
@@ -141,21 +141,7 @@
                 <artifactId>calcite-core</artifactId>
                 <version>${calcite.version}</version>
             </dependency>
-            <!-- This is a dependency of calcite-core that pulls in log4j1.x
-                 This is just copy and pasta from over 8 years ago and at that time log4j
-                 was assumed for runtime dependency.
-                 It is *NOT* used during compliation or runtime by this library -->
-            <dependency>
-              <groupId>com.google.uzaygezen</groupId>
-              <artifactId>uzaygezen-core</artifactId>
-              <version>0.2</version>
-              <exclusions>
-                <exclusion>
-                    <groupId>log4j</groupId>
-                    <artifactId>log4j</artifactId>
-                </exclusion>
-              </exclusions>
-            </dependency>
+
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
