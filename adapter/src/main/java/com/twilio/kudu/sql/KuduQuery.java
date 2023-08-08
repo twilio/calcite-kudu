@@ -95,12 +95,12 @@ public final class KuduQuery extends TableScan implements KuduRelNode {
     // from being applied to the large table.
     // {@link
     // org.apache.calcite.rel.metadata.RelMdCollation#enumerableJoin0(org.apache.calcite.rel.metadata.RelMetadataQuery)}
-    planner.removeRule(CoreRules.JOIN_COMMUTE);
-    planner.removeRule(CoreRules.JOIN_COMMUTE_OUTER);
+    // planner.removeRule(CoreRules.JOIN_COMMUTE);
+//    planner.removeRule(CoreRules.JOIN_COMMUTE_OUTER);
 
     // After removing the Join Commute Rule, Merge Join is chosen over Hash Join,
     // negating the work down to push the KuduSortRel into the large table.
-    planner.removeRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
+//    planner.removeRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
 
     // This rule does not handle SArg filters correctly, which causes filters to not
     // get pushed
