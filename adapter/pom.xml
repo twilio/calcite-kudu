@@ -95,6 +95,7 @@
                     <!-- the generated source for com.twilio.kudu.sql.parser.ParseException
                          generates unparse-able documentation -->
                     <excludePackageNames>com.twilio.kudu.sql.parser</excludePackageNames>
+                    <doclint>all,-missing</doclint>
 
                     <!-- whats the point of generating javadoc if not everything is documented properly -->
                     <failOnWarnings>true</failOnWarnings>
