@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-FROM alpine:3.12
+FROM alpine:3.18
 WORKDIR /app
 COPY target/kudu-client.jar /app
-RUN apk add --no-cache openjdk11
+RUN apk add --no-cache openjdk17
 ENTRYPOINT tail -f /dev/null

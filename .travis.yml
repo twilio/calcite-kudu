@@ -2,7 +2,7 @@ language: java
 dist: xenial
 os: linux
 jdk:
-- openjdk11
+- openjdk17
 cache:
   directories:
   - "$HOME/.m2/repository/"
