@@ -421,16 +421,16 @@ public class KuduPrepareImpl extends CalcitePrepareImpl {
               if (operator.getName().equalsIgnoreCase("COUNT")) {
                 ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
                     org.apache.kudu.Type.INT64).key(false) // all columns should be non-nullable
-                        .nullable(false).wireType(Common.DataType.INT64);
+                    .nullable(false).wireType(Common.DataType.INT64);
                 cubeColumnSchemas.add(columnSchemaBuilder.build());
               } else {
                 // use originalColumnName to get the column schema
                 ColumnSchema colSchema = kuduTable.getSchema().getColumn(factColumnName);
                 ColumnSchema.ColumnSchemaBuilder columnSchemaBuilder = new ColumnSchema.ColumnSchemaBuilder(columnName,
                     colSchema.getType()).key(false) // all columns should be non-nullable
-                        .nullable(false).desiredBlockSize(colSchema.getDesiredBlockSize())
-                        .encoding(colSchema.getEncoding()).compressionAlgorithm(colSchema.getCompressionAlgorithm())
-                        .typeAttributes(colSchema.getTypeAttributes()).wireType(colSchema.getWireType());
+                    .nullable(false).desiredBlockSize(colSchema.getDesiredBlockSize()).encoding(colSchema.getEncoding())
+                    .compressionAlgorithm(colSchema.getCompressionAlgorithm())
+                    .typeAttributes(colSchema.getTypeAttributes()).wireType(colSchema.getWireType());
                 cubeColumnSchemas.add(columnSchemaBuilder.build());
               }
             }
