@@ -390,7 +390,8 @@ public final class KuduSchema extends AbstractSchema {
     SchemaPlus schema = parentSchema.getSubSchema(name);
     if (schema != null) {
       Iterator<Map.Entry<String, String>> iterator = materializedViewSqls.entrySet().iterator();
-      // Do not use enhanced FOR loop here, as it will lead to a ConcurrentModificationException
+      // Do not use enhanced FOR loop here, as it will lead to a
+      // ConcurrentModificationException
       // down the stack. https://www.baeldung.com/java-concurrentmodificationexception
       while (iterator.hasNext()) {
         var entry = iterator.next();
