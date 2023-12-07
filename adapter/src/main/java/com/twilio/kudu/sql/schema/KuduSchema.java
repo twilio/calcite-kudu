@@ -47,8 +47,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -387,7 +389,12 @@ public final class KuduSchema extends AbstractSchema {
   private void addMaterializedViews() {
     SchemaPlus schema = parentSchema.getSubSchema(name);
     if (schema != null) {
-      for (Map.Entry<String, String> entry : materializedViewSqls.entrySet()) {
+      Iterator<Map.Entry<String, String>> iterator = materializedViewSqls.entrySet().iterator();
+      // Do not use enhanced FOR loop here, as it will lead to a
+      // ConcurrentModificationException
+      // down the stack. https://www.baeldung.com/java-concurrentmodificationexception
+      while (iterator.hasNext()) {
+        var entry = iterator.next();
         // Add the view for this query
         String viewName = "$" + getTableNames().size();
         CalciteSchema calciteSchema = CalciteSchema.from(schema);
