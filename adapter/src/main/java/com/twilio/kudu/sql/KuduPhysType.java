@@ -25,6 +25,7 @@ import java.util.List;
 import org.apache.calcite.adapter.enumerable.EnumUtils;
 import org.apache.calcite.adapter.enumerable.JavaRowFormat;
 import org.apache.calcite.adapter.enumerable.PhysType;
+import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.linq4j.function.Function1;
 import org.apache.calcite.linq4j.function.Predicate1;
 import org.apache.calcite.linq4j.tree.BlockBuilder;
@@ -89,6 +90,11 @@ public final class KuduPhysType implements PhysType {
   @Override
   public Type getJavaFieldType(final int field) {
     return fieldClass(field);
+  }
+
+  @Override
+  public JavaTypeFactory getTypeFactory() {
+    return null;
   }
 
   @Override
@@ -303,6 +309,11 @@ public final class KuduPhysType implements PhysType {
   }
 
   @Override
+  public Expression generateAccessorWithoutNulls(List<Integer> fields) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public Expression generateSelector(final ParameterExpression parameter, final List<Integer> fields) {
     throw new UnsupportedOperationException();
   }
@@ -342,6 +353,11 @@ public final class KuduPhysType implements PhysType {
 
   @Override
   public Expression generateComparator(final RelCollation collation) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public Expression generateMergeJoinComparator(RelCollation relCollation) {
     throw new UnsupportedOperationException();
   }
 

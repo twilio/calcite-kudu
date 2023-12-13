@@ -420,6 +420,12 @@ data: {
     dropStatementParserMethods: [
     ]
 
+    # List of methods for parsing extensions to "TRUNCATE" calls.
+    # Each must accept arguments "(SqlParserPos pos)".
+    # Example: "SqlTruncate".
+    truncateStatementParserMethods: [
+    ]
+
     # Binary operators tokens
     binaryOperatorsTokens: [
     ]

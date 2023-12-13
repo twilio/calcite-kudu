@@ -397,12 +397,14 @@ public final class KuduSchema extends AbstractSchema {
         var entry = iterator.next();
         // Add the view for this query
         String viewName = "$" + getTableNames().size();
-        CalciteSchema calciteSchema = CalciteSchema.from(schema);
+        synchronized (schema) {
+          CalciteSchema calciteSchema = CalciteSchema.from(schema);
 
-        List<String> viewPath = calciteSchema.path(viewName);
+          List<String> viewPath = calciteSchema.path(viewName);
 
-        schema.add(viewName,
-            MaterializedViewTable.create(calciteSchema, entry.getValue(), null, viewPath, entry.getKey(), true));
+          schema.add(viewName,
+              MaterializedViewTable.create(calciteSchema, entry.getValue(), null, viewPath, entry.getKey(), true));
+        }
       }
     }
     // Close the hook use to get us here
