@@ -54,7 +54,7 @@
     </modules>
 
     <properties>
-        <kudu.version>1.17.0</kudu.version>
+        <kudu.version>1.17.1</kudu.version>
         <!-- If https://issues.apache.org/jira/browse/CALCITE-5226 is resolved
              remove the commons-dpcp2 in dependency management -->
         <calcite.version>1.36.0</calcite.version>
